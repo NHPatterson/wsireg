@@ -3,3 +3,5 @@ opencv-python
 czifile
 tifffile
 lxml
+geojson
+pyYAML
