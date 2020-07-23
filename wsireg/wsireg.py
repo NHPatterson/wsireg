@@ -11,6 +11,7 @@ from wsireg.reg_utils import (
 )
 from wsireg.reg_shapes import RegShapes
 
+
 class WsiReg2D(object):
     """
     Class to define a 2D registration graph and execute the registrations and transformations of the graph
@@ -59,6 +60,7 @@ class WsiReg2D(object):
 
 
     """
+
     def __init__(self, project_name: str, output_dir: str, cache_images=True):
 
         if project_name is None:
@@ -124,7 +126,13 @@ class WsiReg2D(object):
         self._modality_names.append(modality_name)
 
     def add_modality(
-        self, modality_name, image_fp, image_res=1, prepro_dict={}
+        self,
+        modality_name,
+        image_fp,
+        image_res=1,
+        channel_names=None,
+        channel_colors=None,
+        prepro_dict={},
     ):
         """
         Add an image modality (node) to the registration graph
@@ -154,6 +162,8 @@ class WsiReg2D(object):
             modality_name: {
                 "image_fp": image_fp,
                 "image_res": image_res,
+                "channel_names": channel_names,
+                "channel_colors": channel_colors,
                 "preprocessing": prepro_dict,
             }
         }
@@ -197,7 +207,13 @@ class WsiReg2D(object):
         self.shape_set_names = shape_set_name
 
     def add_attachment_images(
-        self, attachment_modality, modality_name, image_fp, image_res=1
+        self,
+        attachment_modality,
+        modality_name,
+        image_fp,
+        image_res=1,
+        channel_names=None,
+        channel_colors=None,
     ):
         """
         Images which are unregistered between modalities, but are transformed following the path of one of the graph's
@@ -220,7 +236,13 @@ class WsiReg2D(object):
                     modality_name
                 )
             )
-        self.add_modality(modality_name, image_fp, image_res)
+        self.add_modality(
+            modality_name,
+            image_fp,
+            image_res,
+            channel_names=channel_names,
+            channel_colors=channel_colors,
+        )
         self.attachment_images[modality_name] = attachment_modality
 
     def add_attachment_shapes(
@@ -526,6 +548,50 @@ class WsiReg2D(object):
 
         return transforms
 
+    def _transform_image(
+        self,
+        edge_key,
+        file_writer="sitk",
+        attachment=False,
+        attachment_modality=None,
+    ):
+        im_data = self.modalities[edge_key]
+
+        if attachment is True:
+            final_modality = self.reg_paths[attachment_modality][-1]
+            transformations = self.transformations[attachment_modality]
+        else:
+            final_modality = self.reg_paths[edge_key][-1]
+            transformations = self.transformations[edge_key]
+
+        print("transforming {} to {}".format(edge_key, final_modality))
+
+        output_path = self.output_dir / "{}-{}_to_{}_registered".format(
+            self.project_name, edge_key, final_modality,
+        )
+        if file_writer == "sitk":
+            image = apply_transform_dict(
+                im_data["image_fp"], im_data["image_res"], transformations
+            )
+            sitk.WriteImage(image, str(output_path) + ".tiff", True)
+
+        elif file_writer == "zarr":
+            im_data_zarr = {
+                "zarr_store_dir": str(output_path) + ".zarr",
+                "channel_names": im_data["channel_names"],
+                "channel_colors": im_data["channel_colors"],
+            }
+
+            zarr_image_fp = apply_transform_dict(
+                im_data["image_fp"],
+                im_data["image_res"],
+                transformations,
+                writer="zarr",
+                **im_data_zarr,
+            )
+
+            return zarr_image_fp
+
     def transform_images(self, file_writer="sitk"):
         """
         Transform and write images to disk after registration. Also transforms all attachment images
@@ -533,31 +599,28 @@ class WsiReg2D(object):
         Parameters
         ----------
         file_writer : str
-            output type to use, only sitk now, will expand later
+            output type to use, sitk writes a single resolution tiff, "zarr" writes an ome-zarr multiscale
+            zarr store
         """
+
+        if file_writer == "zarr":
+            zarr_paths = []
+
         if all([reg_edge["registered"] for reg_edge in self.reg_graph_edges]):
             for key in self.reg_paths.keys():
-                im_data = self.modalities[key]
-                final_modality = self.reg_paths[key][-1]
-                print("transforming {} to {}".format(key, final_modality))
 
-                image = apply_transform_dict(
-                    im_data["image_fp"],
-                    im_data["image_res"],
-                    self.transformations[key],
-                )
-                output_path = (
-                    self.output_dir
-                    / "{}-{}_to_{}_registered.tiff".format(
-                        self.project_name, key, final_modality,
+                if file_writer == "zarr":
+                    zarr_paths.append(
+                        self._transform_image(key, file_writer=file_writer)
                     )
-                )
-                if file_writer == "sitk":
-                    sitk.WriteImage(image, str(output_path), True)
+                elif file_writer == "sitk":
+                    self._transform_image(key, file_writer=file_writer)
+
             for (
                 modality,
                 attachment_modality,
             ) in self.attachment_images.items():
+
                 im_data = self.modalities[modality]
                 final_modality = self.reg_paths[attachment_modality][-1]
 
@@ -598,7 +661,10 @@ class WsiReg2D(object):
             )
 
             rs = RegShapes(set_data["shape_files"])
-            rs.transform_shapes(set_data["image_res"], self.transformations[attachment_modality])
+            rs.transform_shapes(
+                set_data["image_res"],
+                self.transformations[attachment_modality],
+            )
 
             output_path = (
                 self.output_dir
@@ -644,6 +710,3 @@ class WsiReg2D(object):
 
 if __name__ == "__main__":
     import argparse
-
-
-

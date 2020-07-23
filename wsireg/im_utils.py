@@ -168,7 +168,7 @@ def read_image(image_filepath, preprocessing):
 
             if (
                 preprocessing['as_uint8'] is True
-                and image.GetPixelID() is not sitk.SitkUint8
+                and image.GetPixelID() is not sitk.sitkUInt8
             ):
                 image = sitk.RescaleIntensity(image)
                 image = sitk.Cast(image, sitk.sitkUInt8)

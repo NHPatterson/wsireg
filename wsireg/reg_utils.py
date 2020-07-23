@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 import tempfile
 import numpy as np
+import zarr
 import SimpleITK as sitk
 from wsireg.parameter_maps.transformations import (
     BASE_RIG_TFORM,
@@ -9,6 +10,44 @@ from wsireg.parameter_maps.transformations import (
 )
 from wsireg.parameter_maps.reg_params import DEFAULT_REG_PARAM_MAPS
 from wsireg.im_utils import read_image, std_prepro
+
+SITK_TO_NP_DTYPE = {
+    0: np.int8,
+    1: np.uint8,
+    2: np.int16,
+    3: np.uint16,
+    4: np.int32,
+    5: np.uint32,
+    6: np.int64,
+    7: np.uint64,
+    8: np.float32,
+    9: np.float64,
+    10: np.complex64,
+    11: np.complex64,
+    12: np.int8,
+    13: np.uint8,
+    14: np.int16,
+    15: np.int16,
+    16: np.int32,
+    17: np.int32,
+    18: np.int64,
+    19: np.int64,
+    20: np.float32,
+    21: np.float64,
+    22: np.uint8,
+    23: np.uint16,
+    24: np.uint32,
+    25: np.uint64,
+}
+
+COLNAME_TO_HEX = {
+    "red": "FF0000",
+    "green": "0000FF",
+    "blue": "00FF00",
+    "magenta": "FF00FF",
+    "yellow": "FFFF00",
+    "cyan": "00FFFFF",
+}
 
 
 def sitk_pmap_to_dict(pmap):
@@ -257,7 +296,9 @@ def register_2d_images(
     return tform_list
 
 
-def transform_2d_image(image, source_image_res, transformation_maps):
+def transform_2d_image(
+    image, source_image_res, transformation_maps, writer="sitk", **zarr_kwargs
+):
     """
     Transform 2D images with multiple models and return the transformed image
     or write the transformed image to disk as a .tif file.
@@ -311,14 +352,33 @@ def transform_2d_image(image, source_image_res, transformation_maps):
 
             tfx.AddTransformParameterMap(tmap)
 
-    pixel_id = image.GetPixelID()
+    xy_final_size = np.array(transformation_maps[-1]["Size"])
 
     tfx.LogToConsoleOn()
     tfx.LogToFileOff()
 
+    if writer == "sitk" or write is None:
+        return transform_image_to_sitk(image, tfx)
+    elif writer == "zarr":
+        return transform_image_to_ome_zarr(
+            image,
+            tfx,
+            xy_final_size,
+            zarr_store_dir=zarr_kwargs["zarr_store_dir"],
+            channel_names=zarr_kwargs["channel_names"],
+            channel_colors=zarr_kwargs["channel_colors"],
+        )
+    else:
+        raise ValueError("writer type {} not recognized".format(writer))
+
+
+def transform_image_to_sitk(image, tfx):
+
     # manage transformation/casting if data is multichannel or RGB
     # data is always returned in the same PixelIDType as it is entered
-    # TODO: optioanlly write transformed channels directly to zarr during this process
+
+    pixel_id = image.GetPixelID()
+
     if pixel_id in list(range(1, 13)) and image.GetDepth() == 0:
         tfx.SetMovingImage(image)
         image = tfx.Execute()
@@ -347,121 +407,158 @@ def transform_2d_image(image, source_image_res, transformation_maps):
     return image
 
 
-#
-# def transform_2d_shape(shape, source_image_res, transformation_maps):
-#     """
-#     Transform 2D shapes with multiple models and return the transformed points
-#
-#     Parameters
-#     ----------
-#     shape : dict
-#         geojson shape dict
-#     source_image_res : float
-#         pixel resolution of image to be transformed
-#     transformation_maps : list
-#         list of SimpleElastix ParameterMaps to used for transformation
-#     Returns
-#     -------
-#     Transformed geojson shape
-#     """
-#     try:
-#         tfx = sitk.SimpleTransformix()
-#     except AttributeError:
-#         tfx = sitk.TransformixImageFilter()
-#
-#     # TODO: add mask cropping here later
-#
-#     #     print("mask cropping")
-#     #     tmap = sitk.ReadParameterFile(transformation_maps[0])
-#     #     x_min = int(float(tmap["MinimumX"][0]))
-#     #     x_max = int(float(tmap["MaximumX"][0]))
-#     #     y_min = int(float(tmap["MinimumY"][0]))
-#     #     y_max = int(float(tmap["MaximumY"][0]))
-#     #     image = image[x_min:x_max, y_min:y_max]
-#     #     origin = np.repeat(0, len(image.GetSize()))
-#     #     image.SetOrigin(tuple([int(i) for i in origin]))
-#
-#     # else:
-#
-#     for idx, tmap in enumerate(transformation_maps):
-#         if isinstance(tmap, str):
-#             tmap = sitk.ReadParameterFile(tmap)
-#
-#         if idx == 0:
-#             tmap["InitialTransformParametersFileName"] = (
-#                 "NoInitialTransform",
-#             )
-#             tfx.SetTransformParameterMap(tmap)
-#         else:
-#             tmap["InitialTransformParametersFileName"] = (
-#                 "NoInitialTransform",
-#             )
-#
-#             tfx.AddTransformParameterMap(tmap)
-#
-#     with tempfile.TemporaryDirectory() as dirpath:
-#         fp = Path(dirpath) /  "elxpts.pts"
-#
-#         pts_f = open(str(fp), "w")
-#         pts_f.write("point\n")
-#         pts_f.write(str(npts) + "\n")
-#         if self.image_spacing[0] != 1:
-#
-#             for index, row in self.ptset_df.iterrows():
-#                 pts_f.write(
-#                     "{} {}\n".format(row["x_"] * xscale, row["y_"] * yscale)
-#                 )
-#
-#         else:
-#             for index, row in self.ptset_df.iterrows():
-#                 pts_f.write("{} {}\n".format(row["x_"], row["y_"]))
-#         pts_f.close()
-#
-#         tfx = sitk.TransformixImageFilter()
-#         tfx.SetTransformParameterMap(tform)
-#         tfx.SetFixedPointSetFileName(fp)
-#         tfx.SetOutputDirectory(dirpath)
-#         tfx.LogToFileOff()
-#         tfx.Execute()
-#
-#         output_dir = dirpath
-#         output_pts = pd.read_table(
-#             os.path.join(output_dir, "outputpoints.txt"),
-#             header=None,
-#             names=[
-#                 "point",
-#                 "index",
-#                 "InputIndex",
-#                 "InputPoint",
-#                 "OutputIndex",
-#                 "OutputPoint",
-#                 "Deformation",
-#             ],
-#         )
-#         self.output_pts = output_pts
-#         output_pts = output_pts["OutputPoint"].str.split(" ", expand=True)
-#         output_pts = output_pts.drop([0, 1, 2, 3, 6], axis=1)
-#         output_pts.columns = ["x_tformed", "y_tformed"]
-#
-#         self.ptset_df["x_"] = output_pts["x_tformed"]
-#         self.ptset_df["y_"] = output_pts["y_tformed"]
-#
-#         # reset points specified in physical coords to index coords
-#         self.ptset_df["x_"] = self.ptset_df["x_"].astype("float32") * (1 / xscale)
-#         self.ptset_df["y_"] = self.ptset_df["y_"].astype("float32") * (1 / xscale)
-#     tfx.LogToConsoleOn()
-#     tfx.LogToFileOff()
-#
-#     tfx.SetFixedPointSetFileName()
-#     pts = tfx.Execute()
-#
-#     return image
-#
-#
+def calc_pyramid_levels(xy_final_shape):
+
+    res_shape = xy_final_shape[::-1]
+    res_shapes = [res_shape]
+
+    while all(res_shape >= 256):
+        res_shape = res_shape // 2
+        res_shapes.append(tuple(res_shape))
+
+    return res_shapes[:-1]
+
+
+def add_ome_axes_single_plane(image_np):
+    return image_np.reshape((1,) * (3) + image_np.shape)
+
+
+def generate_channels(channel_names, channel_colors, pixel_id_np):
+    channel_info = []
+    for channel_name, channel_color in zip(channel_names, channel_colors):
+        channel_info.append(
+            {
+                "label": channel_name,
+                "color": channel_color,
+                "active": True,
+                "window": {"start": 0, "end": int(np.iinfo(pixel_id_np).max)},
+            }
+        )
+    return channel_info
+
+
+def transform_image_to_ome_zarr(
+    image,
+    tfx,
+    xy_final_shape,
+    zarr_store_dir="myzarr",
+    channel_names=None,
+    channel_colors=None,
+):
+
+    pixel_id = image.GetPixelID()
+    pixel_id_np = SITK_TO_NP_DTYPE.get(pixel_id)
+    zarr_dtype = "{}{}".format(
+        np.dtype(pixel_id_np).kind, np.dtype(pixel_id_np).itemsize
+    )
+
+    store = zarr.DirectoryStore(zarr_store_dir)
+    grp = zarr.group(store)
+    pyr_levels = calc_pyramid_levels(xy_final_shape)
+
+    if pixel_id < 12 and image.GetDepth() == 0:
+        n_ch = 1
+    else:
+        n_ch = int(image.GetDepth())
+
+    if pixel_id > 13:
+        n_ch = int(image.GetNumberOfComponentsPerPixel())
+
+    pyr_shapes = [(1, n_ch, 1, int(pl[0]), int(pl[1])) for pl in pyr_levels]
+
+    paths = []
+    for path, pyr_shape in enumerate(pyr_levels):
+        grp.create_dataset(
+            str(path),
+            shape=pyr_shapes[path],
+            dtype=zarr_dtype,
+            chunks=(1, 1, 1, 512, 512),
+        )
+        paths.append({"path": str(path)})
+
+    multiscales = [{"version": "0.1", "datasets": paths,}]
+    grp.attrs["multiscales"] = multiscales
+
+    if pixel_id in list(range(1, 13)) and image.GetDepth() == 0:
+        tfx.SetMovingImage(image)
+        tformed_im = tfx.Execute()
+        tformed_im = sitk.Cast(tformed_im, pixel_id)
+        for idx, path in enumerate(paths):
+            if idx > 0:
+                tformed_im = sitk.Shrink(tformed_im, (2, 2))
+
+            grp[str(idx)][:] = add_ome_axes_single_plane(
+                sitk.GetArrayFromImage(tformed_im)
+            )
+
+    elif pixel_id in list(range(1, 13)) and image.GetDepth() > 0:
+        for chan in range(image.GetDepth()):
+            tfx.SetMovingImage(image[:, :, chan])
+            tformed_im = sitk.Cast(tfx.Execute(), pixel_id)
+
+            for idx, path in enumerate(paths):
+                if idx > 0:
+                    tformed_im = sitk.Shrink(tformed_im, (2, 2))
+
+                grp[str(idx)][:, chan, :, :, :] = add_ome_axes_single_plane(
+                    sitk.GetArrayFromImage(tformed_im)
+                )
+
+            del tformed_im
+
+    elif pixel_id > 12:
+        for vec_idx in range(image.GetNumberOfComponentsPerPixel()):
+            tformed_im = sitk.VectorIndexSelectionCast(image, vec_idx)
+            pixel_id_nonvec = tformed_im.GetPixelID()
+            tfx.SetMovingImage(tformed_im)
+
+            tformed_im = sitk.Cast(tfx.Execute(), pixel_id_nonvec)
+
+            for idx, path in enumerate(paths):
+                if idx > 0:
+                    tformed_im = sitk.Shrink(tformed_im, (2, 2))
+
+                grp[str(idx)][:, vec_idx, :, :, :] = add_ome_axes_single_plane(
+                    sitk.GetArrayFromImage(tformed_im)
+                )
+            del tformed_im
+
+    if channel_names is None or n_ch != len(channel_names):
+        channel_names = ["C{}".format(idx) for idx in range(n_ch)]
+
+    n_colors = n_ch // len(COLNAME_TO_HEX) + 1
+    color_palette = [*COLNAME_TO_HEX] * n_colors
+
+    if channel_colors is None:
+        channel_colors = [color_palette[idx] for idx in range(n_ch)]
+    elif n_ch != len(channel_colors) and n_ch != 1:
+        channel_colors = [color_palette[idx] for idx in range(n_ch)]
+    else:
+        channel_colors = ["FFFFFF"]
+
+    channel_info = generate_channels(
+        channel_names, channel_colors, pixel_id_np
+    )
+
+    image_data = {
+        'id': 1,
+        'channels': channel_info,
+        'rdefs': {'model': 'color',},
+    }
+
+    grp.attrs["omero"] = image_data
+
+    return zarr_store_dir
 
 
 def apply_transform_dict(
-    image_fp, image_res, tform_dict, prepro_dict=None, is_shape_mask=False
+    image_fp,
+    image_res,
+    tform_dict,
+    prepro_dict=None,
+    is_shape_mask=False,
+    writer="sitk",
+    **im_tform_kwargs,
 ):
     """
     apply a complex series of transformations in a python dictionary to an image
@@ -500,8 +597,20 @@ def apply_transform_dict(
                 image = transform_2d_image(image, image_res, [tform])
 
         tform_dict.pop("initial", None)
+
     for k, v in tform_dict.items():
-        image = transform_2d_image(image, image_res, v)
+        if writer == "zarr" and k == list(tform_dict.keys())[-1]:
+            image = transform_2d_image(
+                image,
+                image_res,
+                v,
+                writer="zarr",
+                zarr_store_dir=im_tform_kwargs["zarr_store_dir"],
+                channel_names=im_tform_kwargs["channel_names"],
+                channel_colors=im_tform_kwargs["channel_colors"],
+            )
+        else:
+            image = transform_2d_image(image, image_res, v)
 
     return image
 
@@ -658,11 +767,6 @@ class RegImage:
         if prepro_dict is None:
             self.image = read_image(self.image_filepath, preprocessing=None)
 
-            if self.image.GetDepth() > 0:
-                self.image.SetSpacing((self.image_res, self.image_res, 1))
-            else:
-                self.image.SetSpacing((self.image_res, self.image_res))
-
         else:
             for k, v in prepro_dict.items():
                 self.preprocessing[k] = v
@@ -676,6 +780,9 @@ class RegImage:
                     "preprocessing did not result in a single image plane"
                 )
 
+        if self.image.GetDepth() > 0:
+            self.image.SetSpacing((self.image_res, self.image_res, 1))
+        else:
             self.image.SetSpacing((self.image_res, self.image_res))
 
     def preprocess_reg_image(self, image_fp, preprocessing):
