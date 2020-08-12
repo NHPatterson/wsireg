@@ -10,6 +10,7 @@ from wsireg.reg_utils import (
     json_to_pmap_dict,
 )
 from wsireg.reg_shapes import RegShapes
+from wsireg.im_utils import sitk_to_ometiff
 
 
 class WsiReg2D(object):
@@ -406,7 +407,7 @@ class WsiReg2D(object):
     def _prepare_modality(self, modality_name, reg_edge, src_or_tgt):
         mod_data = self.modalities[modality_name].copy()
 
-        override_preprocessing = reg_edge["override_prepro"][src_or_tgt]
+        override_preprocessing = reg_edge.get("override_prepro")[src_or_tgt]
 
         if override_preprocessing is not None:
             mod_data["preprocessing"] = override_preprocessing
@@ -448,6 +449,13 @@ class WsiReg2D(object):
 
         if cache_transform_fp.is_file() is False:
             pmap_dict_to_json(reg_image.transforms, str(cache_transform_fp))
+
+    def _find_nonreg_modalities(self):
+        registered_modalities = [
+            edge.get("modalities").get("source")
+            for edge in self.reg_graph_edges
+        ]
+        return list(set(self.modality_names).difference(registered_modalities))
 
     def register_images(self, parallel=False, compute_inverse=False):
         """
@@ -504,6 +512,15 @@ class WsiReg2D(object):
 
             output_path.mkdir(parents=False, exist_ok=True)
 
+            output_path_tform = (
+                self.output_dir
+                / "{}-{}_to_{}_transformations.json".format(
+                    self.project_name,
+                    reg_edge["modalities"]["source"],
+                    reg_edge["modalities"]["target"],
+                )
+            )
+
             reg_tforms = register_2d_images(
                 src_reg_image,
                 tgt_reg_image,
@@ -519,6 +536,7 @@ class WsiReg2D(object):
                 'registration': reg_tforms,
             }
             reg_edge["registered"] = True
+            pmap_dict_to_json(reg_edge["transforms"], str(output_path_tform))
 
         self.transformations = self.reg_graph_edges
 
@@ -548,27 +566,26 @@ class WsiReg2D(object):
 
         return transforms
 
-    def _transform_image(
-        self,
-        edge_key,
-        file_writer="sitk",
-        attachment=False,
-        attachment_modality=None,
-    ):
-        im_data = self.modalities[edge_key]
-
-        if attachment is True:
-            final_modality = self.reg_paths[attachment_modality][-1]
-            transformations = self.transformations[attachment_modality]
-        else:
-            final_modality = self.reg_paths[edge_key][-1]
-            transformations = self.transformations[edge_key]
-
-        print("transforming {} to {}".format(edge_key, final_modality))
-
-        output_path = self.output_dir / "{}-{}_to_{}_registered".format(
-            self.project_name, edge_key, final_modality,
+    def _transform_nonreg_image(self, modality_key, file_writer):
+        print(
+            "transforming non-registered modality : {} ".format(modality_key)
         )
+        output_path = self.output_dir / "{}-{}_registered".format(
+            self.project_name, modality_key
+        )
+        im_data = self.modalities[modality_key]
+
+        if (
+            im_data.get("preprocessing").get("rot_cc") is not None
+            or im_data.get("preprocessing").get("flip") is not None
+        ):
+            transformations = {
+                "initial": self._check_cache_modality(modality_key)[1][0],
+                "registered": None,
+            }
+        else:
+            transformations = None
+
         if file_writer == "sitk":
             image = apply_transform_dict(
                 im_data["image_fp"], im_data["image_res"], transformations
@@ -592,7 +609,64 @@ class WsiReg2D(object):
 
             return zarr_image_fp
 
-    def transform_images(self, file_writer="sitk"):
+    def _transform_image(
+        self,
+        edge_key,
+        file_writer="sitk",
+        attachment=False,
+        attachment_modality=None,
+    ):
+        im_data = self.modalities[edge_key]
+
+        if attachment is True:
+            final_modality = self.reg_paths[attachment_modality][-1]
+            transformations = self.transformations[attachment_modality]
+        else:
+            final_modality = self.reg_paths[edge_key][-1]
+            transformations = self.transformations[edge_key]
+
+        print("transforming {} to {}".format(edge_key, final_modality))
+
+        output_path = self.output_dir / "{}-{}_to_{}_registered".format(
+            self.project_name, edge_key, final_modality,
+        )
+        if file_writer == "sitk" or file_writer == "ometiff":
+            image = apply_transform_dict(
+                im_data["image_fp"], im_data["image_res"], transformations
+            )
+            if file_writer == "sitk":
+                sitk.WriteImage(image, str(output_path) + ".tiff", True)
+            elif file_writer == "ometiff":
+                image_res = (image.GetSpacing()[0], image.GetSpacing()[1])
+                image_name = "{}-{}_registered".format(
+                    self.project_name, edge_key
+                )
+                sitk_to_ometiff(
+                    image,
+                    str(output_path) + "ome.tiff",
+                    image_name=image_name,
+                    channel_names=im_data["channel_names"],
+                    image_res=image_res,
+                )
+
+        elif file_writer == "zarr":
+            im_data_zarr = {
+                "zarr_store_dir": str(output_path) + ".zarr",
+                "channel_names": im_data["channel_names"],
+                "channel_colors": im_data["channel_colors"],
+            }
+
+            zarr_image_fp = apply_transform_dict(
+                im_data["image_fp"],
+                im_data["image_res"],
+                transformations,
+                writer="zarr",
+                **im_data_zarr,
+            )
+
+            return zarr_image_fp
+
+    def transform_images(self, file_writer="sitk", transform_non_reg=True):
         """
         Transform and write images to disk after registration. Also transforms all attachment images
 
@@ -606,14 +680,16 @@ class WsiReg2D(object):
         if file_writer == "zarr":
             zarr_paths = []
 
-        if all([reg_edge["registered"] for reg_edge in self.reg_graph_edges]):
+        if all(
+            [reg_edge.get("registered") for reg_edge in self.reg_graph_edges]
+        ):
             for key in self.reg_paths.keys():
 
                 if file_writer == "zarr":
                     zarr_paths.append(
                         self._transform_image(key, file_writer=file_writer)
                     )
-                elif file_writer == "sitk":
+                elif file_writer == "sitk" or file_writer == "ometiff":
                     self._transform_image(key, file_writer=file_writer)
 
             for (
@@ -621,28 +697,36 @@ class WsiReg2D(object):
                 attachment_modality,
             ) in self.attachment_images.items():
 
-                im_data = self.modalities[modality]
-                final_modality = self.reg_paths[attachment_modality][-1]
-
-                print("transforming {} to {}".format(modality, final_modality))
-
-                image = apply_transform_dict(
-                    im_data["image_fp"],
-                    im_data["image_res"],
-                    self.transformations[attachment_modality],
-                )
-                output_path = (
-                    self.output_dir
-                    / "{}-{}_to_{}_registered.tiff".format(
-                        self.project_name, modality, final_modality,
+                if file_writer == "zarr":
+                    zarr_paths.append(
+                        self._transform_image(
+                            modality,
+                            file_writer=file_writer,
+                            attachment=True,
+                            attachment_modality=attachment_modality,
+                        )
                     )
+                elif file_writer == "sitk" or file_writer == "ometiff":
+                    self._transform_image(
+                        modality,
+                        file_writer=file_writer,
+                        attachment=True,
+                        attachment_modality=attachment_modality,
+                    )
+            else:
+                print(
+                    "warning: not all edges have been registered, skipping transformation of registered images"
                 )
-                if file_writer == "sitk":
-                    sitk.WriteImage(image, str(output_path), True)
-        else:
-            raise AttributeError(
-                "not all edges of the graph have been registered"
-            )
+
+        if transform_non_reg is True:
+            # preprocess and save unregistered nodes
+            nonreg_keys = self._find_nonreg_modalities()
+
+            for key in nonreg_keys:
+                zarr_paths.append(
+                    self._transform_nonreg_image(key, file_writer=file_writer)
+                )
+        return zarr_paths
 
     def transform_shapes(self):
         """
@@ -708,5 +792,4 @@ class WsiReg2D(object):
                 json.dump(self.transformations[key], fp, indent=4)
 
 
-if __name__ == "__main__":
-    import argparse
+# TODO: add command line control & config files

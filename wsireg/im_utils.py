@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import cv2
 import SimpleITK as sitk
-from tifffile import create_output, TiffFile
+from tifffile import create_output, TiffFile, xml2dict, TiffWriter
 from czifile import CziFile
 
 
@@ -148,8 +148,17 @@ def read_image(image_filepath, preprocessing):
 
     # find out other WSI formats read by tifffile
     elif fp_ext == '.scn':
+        tf = TiffFile(image_filepath)
+        scn_meta = xml2dict(tf.scn_metadata)
+        image_meta = scn_meta.get("scn").get("collection").get("image")
+        wsi_series_idx = np.argmax(
+            [
+                im.get("scanSettings").get("objectiveSettings").get("objective")
+                for im in image_meta
+            ]
+        )
 
-        image = TiffFile(image_filepath).series[3].asarray()
+        image = tf.series[wsi_series_idx].asarray()
         image = sitk.GetImageFromArray(image, isVector=True)
         if preprocessing is not None:
             image = sitk_vect_to_gs(image)
@@ -228,7 +237,7 @@ def sitk_inv_int(image):
     Parameters
     ----------
     image
-        SimpleITK image
+        SimpleITK image s
 
     Returns
     -------
@@ -264,3 +273,53 @@ def std_prepro():
         'contrast_enhance': contrast_enhance,
     }
     return STD_PREPRO
+
+def sitk_to_ometiff(
+    sitk_image, output_name, image_name=None, channel_names=None, image_res=None
+):
+
+    if image_res is None:
+        image_res = (None, None)
+
+    # assume multicomponent RGB/A images
+    if (
+        sitk_image.GetNumberOfComponentsPerPixel() >= 3
+        and sitk_image.GetNumberOfComponentsPerPixel() < 5
+    ):
+        photometric_tag = "rgb"
+        channel_names = None
+        axes = "YXS"
+    else:
+        photometric_tag = "minisblack"
+        if channel_names is None or len(channel_names) != sitk_image.GetDepth():
+            channel_names = [
+                "Ch{}".format(str(idx).zfill(3)) for idx in range(sitk_image.GetDepth())
+            ]
+        axes = "CYX"
+
+    sitk_image = sitk.GetArrayFromImage(sitk_image)
+
+    if image_name is None:
+        image_name = "default"
+
+    with TiffWriter(output_name) as tif:
+        tif.save(
+            sitk_image,
+            compress=9,
+            tile=(1024, 1024),
+            photometric=photometric_tag,
+            metadata={
+                "axes": axes,
+                "SignificantBits": sitk_image.dtype.itemsize * 8,
+                "Image": {
+                    "Name": image_name,
+                    "Pixels": {
+                        "PhysicalSizeX": image_res[0],
+                        "PhysicalSizeY": image_res[1],
+                        "PhysicalSizeXUnit": "µm",
+                        "PhysicalSizeYUnit": "µm",
+                        "Channel": {"Name": channel_names},
+                    },
+                },
+            },
+        )

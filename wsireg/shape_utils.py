@@ -16,7 +16,6 @@ GJ_SHAPE_TYPE = {
     "linestring": geojson.LineString,
 }
 
-
 def read_zen_shapes(zen_fp):
     """Read Zeiss Zen Blue .cz ROIs files to wsimap shapely format.
 
