@@ -2,50 +2,94 @@
 
 # required
 project_name : basic
-output_dir : /outputdir/
+output_dir : /data/
 
 # defaults to true
 cache_images : true
 
-test_modality1:
-    # required
-    image_filepath : /data/test_filepath.tif
-    # required
-    image_res : 0.65
+# add image modalities, must have unique names
+modalities:
+    test_modality1:
+        # required
+        image_filepath : /data/test_filepath1.tif
+        # required
+        image_res : 0.65
 
-    # defaults to image_type : FL
-    prepro_dict:
-        image_type: FL
-        ch_indices : None
-        as_uint8 : true
-        contrast_enhance : None
+        # defaults to image_type : FL
+        prepro_dict:
+            image_type: FL
+            ch_indices : None
+            as_uint8 : true
+            contrast_enhance : None
+        channel_names:
+            - test name 1
+            - test name 2
+        channel_colors:
+            - test color 1
+            - test color 2
 
-test_modality2:
-    image_filepath : /data/test_filepath.tif
-    image_res : 0.65
-    prepro_dict :
-        image_type : BF
-        ch_indices : None
-        as_uint8 : None
-        contrast_enhance : None
+    test_modality2:
+        image_filepath : /data/test_filepath2.tif
+        image_res : 0.65
+        prepro_dict :
+            image_type : BF
+            ch_indices : None
+            as_uint8 : None
+            contrast_enhance : None
+        channel_names:
+            - test name 1
+            - test name 2
+        channel_colors:
+            - test color 1
+            - test color 2
 
-reg_path1:
-    # required
-    src_modality_name : test_modality1
+# add registration paths, should be unique names
+reg_paths:
+    reg_path1:
+        # required
+        src_modality_name : test_modality1
 
-    # required
-    tgt_modality_name : test_modality2
+        # required
+        tgt_modality_name : test_modality2
 
-    # defaults to None
-    thru_modality : None
+        # defaults to None
+        thru_modality : None
 
-    # defaults to rigid (should be set!)
-    reg_params :
-        - rigid
-        - nl
+        # defaults to rigid (should be set!)
+        reg_params :
+            - rigid
+            - nl
 
-    # defaults to None
-    override_prepro : None
+        # defaults to None
+        override_prepro : None
+
+# add image that will be transformed in the graph but not registered in it
+attachment_images:
+
+    attachment_modality1:
+        #required
+        attachment_modality: test_modality1
+        # required
+        image_filepath : /data/test_filepath.tif
+        # required
+        image_res : 0.65
+        channel_names:
+            - test name 1
+            - test name 2
+        channel_colors:
+            - test color 1
+            - test color 2
+
+# add associated shape data from file
+attachment_shapes:
+
+    test_shapes1:
+        #required
+        attachment_modality: test_modality1
+        # required
+        shape_files :
+            - /data/test_shapes1.json
+            - /data/test_shapes2.json
 
 
 

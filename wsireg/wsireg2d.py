@@ -11,6 +11,7 @@ from wsireg.reg_utils import (
 )
 from wsireg.reg_shapes import RegShapes
 from wsireg.im_utils import sitk_to_ometiff
+from wsireg.config_utils import parse_check_reg_config
 
 
 class WsiReg2D(object):
@@ -69,6 +70,8 @@ class WsiReg2D(object):
         else:
             self.project_name = project_name
 
+        if output_dir is None:
+            output_dir = "./"
         self.output_dir = Path(output_dir)
         self.image_cache = self.output_dir / ".imcache_{}".format(project_name)
         self.cache_images = cache_images
@@ -88,7 +91,6 @@ class WsiReg2D(object):
         self.n_registrations = None
 
         self.attachment_images = {}
-        self.attachment_shapes = {}
 
         self._shape_sets = {}
         self._shape_set_names = []
@@ -172,7 +174,7 @@ class WsiReg2D(object):
         self.modality_names = modality_name
 
     def add_shape_set(
-        self, shape_set_name, shape_files, image_res, attachment_modality
+        self, attachment_modality, shape_set_name, shape_files, image_res
     ):
         """
         Add a shape set to the graph
@@ -197,7 +199,7 @@ class WsiReg2D(object):
                 )
             )
 
-        self.shape_set = {
+        self.shape_sets = {
             shape_set_name: {
                 "shape_files": shape_files,
                 "image_res": image_res,
@@ -231,10 +233,10 @@ class WsiReg2D(object):
         image_res : float
             spatial resolution of attachment image data's in units per px (i.e. 0.9 um / px)
         """
-        if modality_name in self.modality_names:
+        if attachment_modality not in self.modality_names:
             raise ValueError(
                 'attachment modality named \"{}\" not found in modality_names'.format(
-                    modality_name
+                    attachment_modality
                 )
             )
         self.add_modality(
@@ -249,16 +251,16 @@ class WsiReg2D(object):
     def add_attachment_shapes(
         self, attachment_modality, shape_set_name, shape_files
     ):
-        if attachment_modality in self.modality_names:
+        if attachment_modality not in self.modality_names:
             raise ValueError(
-                'attachment modality for shapes \"{}\" not found in modality_names'.format(
-                    shape_set_name
+                'attachment modality \"{}\" for shapes \"{}\" not found in modality_names {}'.format(
+                    attachment_modality, shape_set_name, self.modality_names
                 )
             )
 
         image_res = self.modalities[attachment_modality]["image_res"]
         self.add_shape_set(
-            shape_set_name, shape_files, image_res, attachment_modality
+            attachment_modality, shape_set_name, shape_files, image_res
         )
 
     @property
@@ -679,6 +681,8 @@ class WsiReg2D(object):
 
         if file_writer == "zarr":
             zarr_paths = []
+        else:
+            zarr_paths = None
 
         if all(
             [reg_edge.get("registered") for reg_edge in self.reg_graph_edges]
@@ -713,10 +717,7 @@ class WsiReg2D(object):
                         attachment=True,
                         attachment_modality=attachment_modality,
                     )
-            else:
-                print(
-                    "warning: not all edges have been registered, skipping transformation of registered images"
-                )
+
 
         if transform_non_reg is True:
             # preprocess and save unregistered nodes
@@ -726,6 +727,7 @@ class WsiReg2D(object):
                 zarr_paths.append(
                     self._transform_nonreg_image(key, file_writer=file_writer)
                 )
+
         return zarr_paths
 
     def transform_shapes(self):
@@ -791,5 +793,99 @@ class WsiReg2D(object):
             with open(output_path, 'w') as fp:
                 json.dump(self.transformations[key], fp, indent=4)
 
+    def add_data_from_config(self, config_filepath):
 
-# TODO: add command line control & config files
+        reg_config = parse_check_reg_config(config_filepath)
+
+        if reg_config.get("modalities") is not None:
+            for key, val in reg_config["modalities"].items():
+                self.add_modality(
+                    key,
+                    val.get("image_filepath"),
+                    val.get("image_res"),
+                    channel_names=val.get("channel_names"),
+                    channel_colors=val.get("channel_colors"),
+                    prepro_dict=val.get("prepro_dict"),
+                )
+        else:
+            print("warning: config file did not contain any image modalities")
+
+        if reg_config.get("reg_paths") is not None:
+
+            for key, val in reg_config["reg_paths"].items():
+                self.add_reg_path(
+                    val.get("src_modality_name"),
+                    val.get("tgt_modality_name"),
+                    val.get("thru_modality"),
+                    reg_params=val.get("reg_params"),
+                    override_prepro=val.get("override_prepro"),
+                )
+        else:
+            print(
+                "warning: config file did not contain any registration paths"
+            )
+        if reg_config.get("attachment_images") is not None:
+
+            for key, val in reg_config["attachment_images"].items():
+                self.add_attachment_images(
+                    val.get("attachment_modality"),
+                    key,
+                    val.get("image_filepath"),
+                    val.get("image_res"),
+                    channel_names=val.get("channel_names"),
+                    channel_colors=val.get("channel_colors"),
+                )
+
+        if reg_config.get("attachment_shapes") is not None:
+
+            for key, val in reg_config["attachment_shapes"].items():
+                print(val.get("attachment_modality"))
+                self.add_attachment_shapes(
+                    val.get("attachment_modality"), key, val.get("shape_files")
+                )
+
+
+if __name__ == "__main__":
+    import argparse
+
+    def config_to_WsiReg2D(config_filepath):
+        reg_config = parse_check_reg_config(config_filepath)
+
+        reg_graph = WsiReg2D(
+            reg_config.get("project_name"),
+            reg_config.get("output_dir"),
+            reg_config.get("cache_images"),
+        )
+        return reg_graph
+
+    parser = argparse.ArgumentParser(
+        description='Load Whole Slide Image 2D Registration Graph from configuration file'
+    )
+
+    parser.add_argument(
+        "config_filepath",
+        metavar="C",
+        type=str,
+        nargs=1,
+        help="full filepath for .yaml configuration file",
+    )
+    parser.add_argument(
+        "--fw",
+        type=str,
+        nargs=1,
+        help="how to write output registered images: ometiff, zarr, sitk (default: ometiff)",
+    )
+    args = parser.parse_args()
+    config_filepath = args.config_filepath[0]
+    file_writer = args.fw[0]
+    reg_graph = WsiReg2D("test","C:/biomic")
+
+    reg_graph = config_to_WsiReg2D(config_filepath)
+    reg_graph.add_data_from_config(config_filepath)
+
+    reg_graph.register_images()
+    reg_graph.save_transformations()
+    reg_graph.transform_images(file_writer=file_writer)
+
+    if reg_graph.shape_sets:
+        reg_graph.transform_shapes()
