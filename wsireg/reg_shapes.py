@@ -1,5 +1,8 @@
 import geojson
-from wsireg.shape_utils import shape_reader, apply_transformation_dict_shapes
+from wsireg.shape_utils import (
+    shape_reader,
+    apply_transformation_dict_shapes,
+)
 
 
 class RegShapes:

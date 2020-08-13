@@ -5,7 +5,11 @@ import cv2
 import numpy as np
 from lxml import etree
 import geojson
-from wsireg.reg_utils import prepare_tform_dict, pmap_dict_to_sitk, apply_transform_dict
+from wsireg.reg_utils import (
+    prepare_tform_dict,
+    pmap_dict_to_sitk,
+    apply_transform_dict,
+)
 
 GJ_SHAPE_TYPE = {
     "polygon": geojson.Polygon,
@@ -15,6 +19,7 @@ GJ_SHAPE_TYPE = {
     "multilinestring": geojson.MultiLineString,
     "linestring": geojson.LineString,
 }
+
 
 def read_zen_shapes(zen_fp):
     """Read Zeiss Zen Blue .cz ROIs files to wsimap shapely format.
@@ -412,9 +417,11 @@ def apply_transformation_dict_shapes(shapes, image_res, tform_dict):
 
     tf_shapes = shapes.copy()
 
-    for k,v in mask_dict.items():
+    for k, v in mask_dict.items():
         print("transforming shapes: {}".format(k))
-        tformed_mask = apply_transform_dict(v, image_res, tform_dict, is_shape_mask=True)
-        tf_shapes = index_mask_to_shapes(tformed_mask,k, tf_shapes)
+        tformed_mask = apply_transform_dict(
+            v, image_res, tform_dict, is_shape_mask=True
+        )
+        tf_shapes = index_mask_to_shapes(tformed_mask, k, tf_shapes)
 
     return tf_shapes

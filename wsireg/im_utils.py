@@ -153,7 +153,9 @@ def read_image(image_filepath, preprocessing):
         image_meta = scn_meta.get("scn").get("collection").get("image")
         wsi_series_idx = np.argmax(
             [
-                im.get("scanSettings").get("objectiveSettings").get("objective")
+                im.get("scanSettings")
+                .get("objectiveSettings")
+                .get("objective")
                 for im in image_meta
             ]
         )
@@ -274,8 +276,13 @@ def std_prepro():
     }
     return STD_PREPRO
 
+
 def sitk_to_ometiff(
-    sitk_image, output_name, image_name=None, channel_names=None, image_res=None
+    sitk_image,
+    output_name,
+    image_name=None,
+    channel_names=None,
+    image_res=None,
 ):
 
     if image_res is None:
@@ -291,9 +298,13 @@ def sitk_to_ometiff(
         axes = "YXS"
     else:
         photometric_tag = "minisblack"
-        if channel_names is None or len(channel_names) != sitk_image.GetDepth():
+        if (
+            channel_names is None
+            or len(channel_names) != sitk_image.GetDepth()
+        ):
             channel_names = [
-                "Ch{}".format(str(idx).zfill(3)) for idx in range(sitk_image.GetDepth())
+                "Ch{}".format(str(idx).zfill(3))
+                for idx in range(sitk_image.GetDepth())
             ]
         axes = "CYX"
 

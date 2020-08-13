@@ -5,7 +5,7 @@
 import pytest
 
 
-from wsireg import wsireg
+from wsireg import wsireg2d
 
 
 # @pytest.fixture
