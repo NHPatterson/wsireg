@@ -90,7 +90,7 @@ DEFAULT_REG_PARAM_MAPS = {
         "Resampler": ['DefaultResampler'],
         "ResultImageFormat": ['mha'],
         "ResultImagePixelType": ['short'],
-        "Transform": ['AdvancedAffineTransform'],
+        "Transform": ['AffineTransform'],
         "UseDirectionCosines": ['true'],
         "WriteResultImage": ['false'],
         "WriteTransformParametersEachResolution": ['true'],
