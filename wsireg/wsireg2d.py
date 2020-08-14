@@ -878,7 +878,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     config_filepath = args.config_filepath[0]
     file_writer = args.fw[0]
-    reg_graph = WsiReg2D("test","C:/biomic")
 
     reg_graph = config_to_WsiReg2D(config_filepath)
     reg_graph.add_data_from_config(config_filepath)
