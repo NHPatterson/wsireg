@@ -507,6 +507,9 @@ class WsiReg2D(object):
                         self._cache_images(src_name, src_reg_image)
                     if reg_edge.get("override_prepro").get("target") is None:
                         self._cache_images(tgt_name, tgt_reg_image)
+                else:
+                    self._cache_images(src_name, src_reg_image)
+                    self._cache_images(tgt_name, tgt_reg_image)
 
             reg_params = reg_edge["params"]
 
