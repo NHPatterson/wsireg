@@ -408,6 +408,7 @@ class WsiReg2D(object):
 
     def _prepare_modality(self, modality_name, reg_edge, src_or_tgt):
         mod_data = self.modalities[modality_name].copy()
+
         if reg_edge.get("override_prepro") is not None:
             override_preprocessing = reg_edge.get("override_prepro")[src_or_tgt]
         else:
@@ -501,10 +502,11 @@ class WsiReg2D(object):
             )
 
             if self.cache_images is True:
-                if reg_edge["override_prepro"]["source"] is None:
-                    self._cache_images(src_name, src_reg_image)
-                if reg_edge["override_prepro"]["target"] is None:
-                    self._cache_images(tgt_name, tgt_reg_image)
+                if reg_edge.get("override_prepro") is not None:
+                    if reg_edge.get("override_prepro").get("source") is None:
+                        self._cache_images(src_name, src_reg_image)
+                    if reg_edge.get("override_prepro").get("target") is None:
+                        self._cache_images(tgt_name, tgt_reg_image)
 
             reg_params = reg_edge["params"]
 
