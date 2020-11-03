@@ -10,6 +10,7 @@ from wsireg.reg_utils import (
     pmap_dict_to_sitk,
     apply_transform_dict,
 )
+from copy import deepcopy
 
 GJ_SHAPE_TYPE = {
     "polygon": geojson.Polygon,
@@ -331,14 +332,14 @@ def get_int_dtype(value):
     if value <= np.iinfo(np.uint16).max:
         return np.uint16
     if value <= np.iinfo(np.uint32).max:
-        return np.uint32
+        return np.int32
     else:
         raise ValueError("Too many shapes")
 
 
 def get_all_shape_coords(shapes):
-    return np.concatenate(
-        np.asarray([sh["geometry"]["coordinates"][0] for sh in shapes]), axis=0
+    return np.vstack(
+        [np.squeeze(sh["geometry"]["coordinates"][0]) for sh in shapes]
     )
 
 
@@ -350,17 +351,21 @@ def shapes_to_mask_dict(shapes):
 
     all_coords = get_all_shape_coords(shapes)
 
-    x_max = np.max(all_coords[:, 0])
-    y_max = np.max(all_coords[:, 1])
+    x_max = np.max(all_coords[:, 0]) + 250
+    y_max = np.max(all_coords[:, 1]) + 250
 
     mask_dict = {}
 
     for shape_name in np.unique(shape_names):
-        mask_dict[shape_name] = np.zeros((y_max, x_max), dtype=mat_dtype)
+        mask_dict[shape_name] = np.zeros(
+            (y_max.astype(np.uint64), x_max.astype(np.uint64)), dtype=mat_dtype
+        )
 
     for idx, shape in enumerate(shapes):
         shape_name = shape["properties"]["classification"]["name"]
-        shape_coords = np.array(shape["geometry"]["coordinates"])
+
+        shape_coords = np.squeeze(np.array(shape["geometry"]["coordinates"]))
+        shape_coords = np.round([shape_coords]).astype(np.int32)
 
         mask_dict[shape_name] = cv2.fillPoly(
             mask_dict[shape_name], shape_coords, idx + 1
@@ -388,34 +393,50 @@ def approx_polygon_contour(mask, percent_arc_length=0.01):
     contours, hierarchy = cv2.findContours(
         mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
     )
+
+    if len(contours) > 1:
+        contours = [contours[np.argmax([cnt.shape[0] for cnt in contours])]]
+
     epsilon = percent_arc_length * cv2.arcLength(contours[0], True)
     approx = cv2.approxPolyDP(contours[0], epsilon, True)
     return np.squeeze(approx).astype(np.uint32)
 
 
-def index_mask_to_shapes(index_mask, shape_name, shapes):
+def index_mask_to_shapes(index_mask, shape_name, tf_shapes):
+    labstats = sitk.LabelShapeStatisticsImageFilter()
+    labstats.SetBackgroundValue(0)
+    labstats.Execute(index_mask)
 
     index_mask = sitk.GetArrayFromImage(index_mask)
-    tf_shapes = shapes.copy()
+    updated_shapes = deepcopy(tf_shapes)
 
-    for idx, shape in enumerate(shapes):
+    for idx, shape in enumerate(tf_shapes):
         if shape["properties"]["classification"]["name"] == shape_name:
-            sub_mask = index_mask
+            label_bb = labstats.GetBoundingBox(idx + 1)
+            x_min = label_bb[0]
+            x_len = label_bb[2]
+            y_min = label_bb[1]
+            y_len = label_bb[3]
+
+            sub_mask = index_mask[y_min : y_min + y_len, x_min : x_min + x_len]
+
             sub_mask[sub_mask == idx + 1] = 255
 
             yx_coords = approx_polygon_contour(sub_mask, 0.001)
             xy_coords = yx_coords
             xy_coords = np.append(xy_coords, xy_coords[:1, :], axis=0)
+            xy_coords = xy_coords + [x_min, y_min]
+            updated_shapes[idx]["geometry"]["coordinates"] = [
+                xy_coords.tolist()
+            ]
 
-            tf_shapes[idx]["geometry"]["coordinates"] = [xy_coords.tolist()]
-
-    return tf_shapes
+    return updated_shapes
 
 
 def apply_transformation_dict_shapes(shapes, image_res, tform_dict):
     mask_dict = shapes_to_mask_dict(shapes)
 
-    tf_shapes = shapes.copy()
+    tf_shapes = deepcopy(shapes)
 
     for k, v in mask_dict.items():
         print("transforming shapes: {}".format(k))
@@ -425,3 +446,10 @@ def apply_transformation_dict_shapes(shapes, image_res, tform_dict):
         tf_shapes = index_mask_to_shapes(tformed_mask, k, tf_shapes)
 
     return tf_shapes
+
+
+def scale_shape_coordinates(poly, scale_factor):
+    poly_coords = np.asarray(poly["geometry"]["coordinates"][0])
+    poly_coords = poly_coords * scale_factor
+    poly.get("geometry").update({"coordinates":[poly_coords.tolist()]})
+    return poly
