@@ -2,6 +2,7 @@ import geojson
 from wsireg.shape_utils import (
     shape_reader,
     apply_transformation_dict_shapes,
+    scale_shape_coordinates,
 )
 
 
@@ -46,9 +47,16 @@ class RegShapes:
             for sh in self.shape_data
         ]
 
+    def scale_shapes(self, scale_factor):
+
+        self.shape_data = [
+            scale_shape_coordinates(shape, scale_factor)
+            for shape in self.shape_data
+        ]
+
     def transform_shapes(self, image_res, tform_dict):
 
-        self.transformed_shapes = apply_transformation_dict_shapes(
+        self.transformed_shape_data = apply_transformation_dict_shapes(
             self.shape_data, image_res, tform_dict
         )
 
