@@ -9,7 +9,7 @@ from wsireg.parameter_maps.transformations import (
     BASE_AFF_TFORM,
 )
 from wsireg.parameter_maps.reg_params import DEFAULT_REG_PARAM_MAPS
-from wsireg.im_utils import read_image, std_prepro
+from wsireg.im_utils import read_image, std_prepro, contrast_enhance, sitk_inv_int
 
 SITK_TO_NP_DTYPE = {
     0: np.int8,
@@ -180,6 +180,7 @@ def register_2d_images(
     reg_output_fp,
     histogram_match=False,
     compute_inverse=True,
+    return_image=False,
 ):
     """
     Register 2D images with multiple models and return a list of elastix
@@ -228,10 +229,18 @@ def register_2d_images(
     selx.SetMovingImage(source_image.image)
     selx.SetFixedImage(target_image.image)
 
+    if source_image.mask is not None:
+        selx.SetMovingMask(source_image.mask)
+
+    if target_image.mask is not None:
+        selx.SetFixedMask(target_image.mask)
+
     for idx, reg_param in enumerate(reg_params):
         if idx == 0:
             pmap = parameter_load(reg_param)
             pmap["WriteResultImage"] = ("false",)
+            if target_image.mask is not None:
+                pmap["AutomaticTransformInitialization"] = ("false",)
             selx.SetParameterMap(pmap)
         else:
             pmap = parameter_load(reg_param)
@@ -242,7 +251,10 @@ def register_2d_images(
     selx.LogToFileOn()
 
     # execute registration:
-    selx.Execute()
+    if return_image is False:
+        selx.Execute()
+    else:
+        image = selx.Execute()
 
     tform_list = list(selx.GetTransformParameterMap())
 
@@ -294,7 +306,11 @@ def register_2d_images(
     else:
         print("no inversions to compute")
 
-    return tform_list
+    if return_image is False:
+        return tform_list
+    else:
+        image = sitk.Cast(image, source_image.image.GetPixelID())
+        return tform_list, image
 
 
 def transform_2d_image(
@@ -571,7 +587,7 @@ def transform_image_to_ome_zarr(
 def apply_transform_dict(
     image_fp,
     image_res,
-    tform_dict,
+    tform_dict_in,
     prepro_dict=None,
     is_shape_mask=False,
     writer="sitk",
@@ -596,14 +612,20 @@ def apply_transform_dict(
     -------
     SimpleITK.Image that has been transformed
     """
+
     if is_shape_mask is False:
-        image = RegImage(image_fp, image_res, prepro_dict=prepro_dict).image
+        if isinstance(image_fp, sitk.Image):
+            image = image_fp
+        else:
+            image = RegImage(
+                image_fp, image_res, prepro_dict=prepro_dict
+            ).image
     else:
         image = sitk.GetImageFromArray(image_fp)
         del image_fp
         image.SetSpacing((image_res, image_res))
 
-    if tform_dict is None:
+    if tform_dict_in is None:
         if writer == "zarr":
             image = transform_2d_image(
                 image,
@@ -617,6 +639,7 @@ def apply_transform_dict(
             image = transform_2d_image(image, None)
 
     else:
+        tform_dict = tform_dict_in.copy()
 
         if tform_dict.get("registered") is None and tform_dict.get(0) is None:
             tform_dict["registered"] = tform_dict["initial"]
@@ -653,6 +676,107 @@ def apply_transform_dict(
                     channel_colors=im_tform_kwargs["channel_colors"],
                 )
             else:
+                print(v)
+                image = transform_2d_image(image, v)
+
+    return image
+
+
+def apply_transform_dict_mod(
+    image_fp,
+    image_res,
+    tform_dict_in,
+    prepro_dict=None,
+    is_shape_mask=False,
+    writer="sitk",
+    **im_tform_kwargs,
+):
+    """
+    apply a complex series of transformations in a python dictionary to an image
+    Parameters
+    ----------
+    image_fp : str
+        file path to the image to be transformed, it will be read in it's entirety
+    image_res : float
+        pixel resolution of image to be transformed
+    tform_dict : dict of lists
+        dict of SimpleElastix transformations stored in lists, may contain an "initial" transforms (preprocessing transforms)
+        these will be applied first, then the key order of the dict will determine the rest of the transformations
+    prepro_dict : dict
+        preprocessing to perform on image before transformation, default None reads full image
+    is_shape_mask : bool
+        whether the image being transformed is a shape mask (determines import)
+    Returns
+    -------
+    SimpleITK.Image that has been transformed
+    """
+
+    if is_shape_mask is False:
+        if isinstance(image_fp, sitk.Image):
+            image = image_fp
+        else:
+            image = RegImage(
+                image_fp, image_res, prepro_dict=prepro_dict
+            ).image
+    else:
+        image = sitk.GetImageFromArray(image_fp)
+        del image_fp
+        image.SetSpacing((image_res, image_res))
+
+    if tform_dict_in is None:
+        if writer == "zarr":
+            image = transform_2d_image(
+                image,
+                None,
+                writer="zarr",
+                zarr_store_dir=im_tform_kwargs["zarr_store_dir"],
+                channel_names=im_tform_kwargs["channel_names"],
+                channel_colors=im_tform_kwargs["channel_colors"],
+            )
+        else:
+            image = transform_2d_image(image, None)
+
+    else:
+
+        tform_dict["registered"] = tform_dict.pop("registration")
+
+        if tform_dict.get("registered") is None and tform_dict.get(0) is None:
+            tform_dict["registered"] = tform_dict["initial"]
+            tform_dict.pop("initial", None)
+
+            if isinstance(tform_dict.get("registered"), list) is False:
+                tform_dict["registered"] = [tform_dict["registered"]]
+
+            for idx in range(len(tform_dict["registered"])):
+                tform_dict[idx] = [tform_dict["registered"][idx]]
+
+            tform_dict.pop("registered", None)
+        else:
+            tform_dict = prepare_tform_dict(tform_dict, shape_tform=False)
+
+        if tform_dict.get("initial") is not None:
+            for initial_tform in tform_dict.get("initial"):
+                if isinstance(initial_tform, list) is False:
+                    initial_tform = [initial_tform]
+
+                for tform in initial_tform:
+                    image = transform_2d_image(image, [tform])
+
+        tform_dict.pop("initial", None)
+
+        for k, v in tform_dict.items():
+
+            if writer == "zarr" and k == list(tform_dict.keys())[-1]:
+                image = transform_2d_image(
+                    image,
+                    v,
+                    writer="zarr",
+                    zarr_store_dir=im_tform_kwargs["zarr_store_dir"],
+                    channel_names=im_tform_kwargs["channel_names"],
+                    channel_colors=im_tform_kwargs["channel_colors"],
+                )
+            else:
+                print(v)
                 image = transform_2d_image(image, v)
 
     return image
@@ -797,38 +921,61 @@ class RegImage:
             "as_uint8": False,
         },
         transforms=None,
+        mask=None,
     ):
 
         self.image_filepath = Path(image_fp)
         self.image_res = image_res
         self.preprocessing = std_prepro()
-        if transforms is None:
-            self.transforms = []
-        else:
-            self.transforms = transforms
+        self.transforms = []
+        self.mask = mask
 
         if prepro_dict is None:
             self.image = read_image(self.image_filepath, preprocessing=None)
 
+            if self.image.GetDepth() > 0:
+                self.image.SetSpacing((self.image_res, self.image_res, 1))
+            else:
+                self.image.SetSpacing((self.image_res, self.image_res))
+
+            if self.mask is not None:
+                self.mask = read_image(self.mask, preprocessing=None)
+                self.mask.SetSpacing((self.image_res, self.image_res))
+
         else:
+
             for k, v in prepro_dict.items():
                 self.preprocessing[k] = v
 
-            self.image = self.preprocess_reg_image(
+            (
+                self.image,
+                spatial_preprocessing,
+            ) = self.preprocess_reg_image_intensity(
                 str(self.image_filepath), self.preprocessing
             )
+
+            if self.mask is not None:
+                self.mask = read_image(str(self.mask), preprocessing=None)
+                self.mask.SetSpacing((self.image_res, self.image_res))
 
             if self.image.GetDepth() >= 1:
                 raise ValueError(
                     "preprocessing did not result in a single image plane"
                 )
 
-        if self.image.GetDepth() > 0:
-            self.image.SetSpacing((self.image_res, self.image_res, 1))
-        else:
-            self.image.SetSpacing((self.image_res, self.image_res))
+            if len(spatial_preprocessing) > 0 or transforms is not None:
+                self.preprocess_reg_image_spatial(
+                    spatial_preprocessing, transforms
+                )
 
-    def preprocess_reg_image(self, image_fp, preprocessing):
+        if self.image.GetDepth() > 0:
+            self.image.SetOrigin((0, 0, 0))
+        else:
+            self.image.SetOrigin((0, 0))
+        if self.mask is not None:
+            self.mask.SetOrigin((0, 0))
+
+    def preprocess_reg_image_intensity(self, image_fp, preprocessing):
 
         image = read_image(image_fp, preprocessing)
 
@@ -850,10 +997,25 @@ class RegImage:
             preprocessing.pop("max_int_proj", None)
             preprocessing.pop("contrast_enhance", None)
 
+        if preprocessing.get("contrast_enhance_opt") is True:
+            preprocessing.update({"contrast_enhance":contrast_enhance})
+        else:
+            preprocessing.pop("contrast_enhance", None)
+
+        if preprocessing.get("inv_int_opt") is True:
+            preprocessing.update({"inv_int":sitk_inv_int})
+        else:
+            preprocessing.pop("inv_int", None)
+
+        preprocessing.pop("contrast_enhance_opt", None)
+        preprocessing.pop("inv_int_opt", None)
+
         # remove type and set downsample to last
         preprocessing.pop("image_type", None)
 
-        downsampling = preprocessing["downsample"]
+        spatial_preprocessing.update(
+            {"downsample": preprocessing.get("downsample")}
+        )
         preprocessing.pop("downsample", None)
 
         # iterate through intensity transformations preprocessing dictionary
@@ -864,35 +1026,75 @@ class RegImage:
 
         image.SetSpacing((self.image_res, self.image_res))
 
+        return image, spatial_preprocessing
+
+    def preprocess_reg_image_spatial(
+        self, spatial_preprocessing, imported_transforms=None
+    ):
         # spatial preprocessing:
-        # Masking -> rotation -> flipping
+        # imported transforms -> Masking -> rotation -> flipping
+        if imported_transforms is not None:
+            self.image = apply_transform_dict(
+                self.image, self.image_res, imported_transforms
+            )
+            if self.mask is not None:
+                self.mask = apply_transform_dict(
+                    self.mask, self.image_res, imported_transforms
+                )
+            self.transforms.append(imported_transforms)
 
         if "mask_bbox" in spatial_preprocessing:
             bbox = spatial_preprocessing["mask_bbox"]
-            image = image[bbox[0] : bbox[0] + bbox[2], bbox[1] : bbox[3]]
+            self.image = self.image[
+                bbox[0] : bbox[0] + bbox[2], bbox[1] : bbox[3]
+            ]
+            if self.mask is not None:
+                self.mask = self.mask[
+                    bbox[0] : bbox[0] + bbox[2], bbox[1] : bbox[3]
+                ]
             self.transforms.append({"mask_bbox": bbox})
 
-        if "rot_cc" in spatial_preprocessing:
+        if spatial_preprocessing.get("rot_cc") is not None:
             rotangle = spatial_preprocessing["rot_cc"]
-            image.SetSpacing((self.image_res, self.image_res))
-            rot_tform = gen_rigid_tform_rot(image, self.image_res, rotangle)
-            image = transform_2d_image(image, [rot_tform])
-            self.transforms.append(rot_tform)
+            if rotangle is not None and rotangle != 0:
+                print(f"rotating counter-clockwise {rotangle}")
+                # self.image.SetSpacing((self.image_res, self.image_res))
+                rot_tform = gen_rigid_tform_rot(
+                    self.image, self.image_res, rotangle
+                )
+                self.image = transform_2d_image(self.image, [rot_tform])
 
-        if "flip" in spatial_preprocessing:
+                if self.mask is not None:
+                    self.mask = transform_2d_image(self.mask, [rot_tform])
+
+                self.transforms.append(rot_tform)
+
+        if spatial_preprocessing.get("flip") is not None:
             flip_direction = spatial_preprocessing["flip"]
-            flip_tform = gen_aff_tform_flip(
-                image, self.image_res, flip_direction
-            )
-            image.SetSpacing((self.image_res, self.image_res))
-            image = transform_2d_image(image, [flip_tform])
+            if flip_direction != "None" and flip_direction is not None:
+                print(f"flipping image {flip_direction}")
 
-            self.transforms.append(flip_tform)
+                flip_tform = gen_aff_tform_flip(
+                    self.image, self.image_res, flip_direction
+                )
+                # image.SetSpacing((self.image_res, self.image_res))
+                self.image = transform_2d_image(self.image, [flip_tform])
 
+                if self.mask is not None:
+                    self.mask = transform_2d_image(self.mask, [flip_tform])
+
+                self.transforms.append(flip_tform)
+
+        downsampling = spatial_preprocessing.get("downsample")
         # downsample single plane preprocessing
         if downsampling is not None and downsampling > 1:
             print("performing downsampling by factor: {}".format(downsampling))
-            image.SetSpacing((self.image_res, self.image_res))
-            image = sitk.Shrink(image, (downsampling, downsampling))
+            self.image.SetSpacing((self.image_res, self.image_res))
+            self.image = sitk.Shrink(self.image, (downsampling, downsampling))
 
-        return image
+            if self.mask is not None:
+
+                self.mask.SetSpacing((self.image_res, self.image_res))
+                self.mask = sitk.Shrink(
+                    self.mask, (downsampling, downsampling)
+                )
