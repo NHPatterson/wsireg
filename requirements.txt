@@ -6,3 +6,5 @@ imagecodecs
 lxml
 geojson
 pyYAML
+zarr
+dask

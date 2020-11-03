@@ -5,8 +5,135 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import cv2
 import SimpleITK as sitk
-from tifffile import create_output, TiffFile, xml2dict, TiffWriter
+from tifffile import create_output, TiffFile, xml2dict, TiffWriter, imread
 from czifile import CziFile
+import zarr
+import dask.array as da
+
+TIFFFILE_EXTS = [".scn", ".tif", ".tiff", ".ndpi"]
+
+
+def tifffile_zarr_backend(image_filepath, largest_series, preprocessing):
+
+    print("using zarr backend")
+    zarr_series = imread(image_filepath, aszarr=True, series=largest_series)
+    zarr_store = zarr.open(zarr_series)
+
+    if isinstance(zarr_store, zarr.hierarchy.Group):
+        zarr_im = zarr_store[0]
+    elif isinstance(zarr_store, zarr.core.Array):
+        zarr_im = zarr_store
+
+    if guess_rgb(zarr_im.shape):
+        if preprocessing is not None:
+            image = grayscale(zarr_im)
+            image = sitk.GetImageFromArray(image)
+        else:
+            image = zarr_im[:]
+            image = sitk.GetImageFromArray(image, isVector=True)
+
+    elif len(zarr_im.shape) == 2:
+        image = sitk.GetImageFromArray(zarr_im[:])
+
+    else:
+        if preprocessing is not None:
+            if (
+                preprocessing.get("ch_indices") is not None
+                and len(zarr_im.shape) > 2
+            ):
+                chs = tuple(preprocessing.get('ch_indices'))
+                zarr_im = np.squeeze(zarr_im[:])
+                zarr_im = zarr_im[chs, :, :]
+
+        image = sitk.GetImageFromArray(np.squeeze(zarr_im[:]))
+
+    return image
+
+
+def tifffile_dask_backend(image_filepath, largest_series, preprocessing):
+    print("using dask backend")
+    zarr_series = imread(image_filepath, aszarr=True, series=largest_series)
+    zarr_store = zarr.open(zarr_series)
+
+    if isinstance(zarr_store, zarr.hierarchy.Group):
+        dask_im = da.squeeze(da.from_zarr(zarr_store[0]))
+    elif isinstance(zarr_store, zarr.core.Array):
+        dask_im = da.squeeze(da.from_zarr(zarr_store))
+
+    if guess_rgb(dask_im.shape):
+        if preprocessing is not None:
+            image = grayscale(dask_im).compute()
+            image = sitk.GetImageFromArray(image)
+        else:
+            image = dask_im.compute()
+            image = sitk.GetImageFromArray(image, isVector=True)
+
+    elif len(dask_im.shape) == 2:
+        image = sitk.GetImageFromArray(dask_im.compute())
+
+    else:
+        if preprocessing is not None:
+            if (
+                preprocessing.get("ch_indices") is not None
+                and len(dask_im.shape) > 2
+            ):
+                chs = np.asarray(preprocessing.get('ch_indices'))
+                dask_im = dask_im[chs, :, :]
+
+        image = sitk.GetImageFromArray(np.squeeze(dask_im.compute()))
+
+    return image
+
+
+def sitk_backend(image_filepath, preprocessing):
+    print("using sitk backend")
+    image = sitk.ReadImage(image_filepath)
+
+    if image.GetNumberOfComponentsPerPixel() >= 3:
+        if preprocessing is not None:
+            image = sitk_vect_to_gs(image)
+
+    elif image.GetDepth() == 0:
+        return image
+    else:
+        if preprocessing is not None:
+            if (
+                preprocessing.get("ch_indices") is not None
+                and image.GetDepth() > 0
+            ):
+                chs = np.asarray(preprocessing.get('ch_indices'))
+                image = image[:, :, chs]
+
+    return image
+
+
+def guess_rgb(shape):
+    """from: napari's internal im utils
+    Guess if the passed shape comes from rgb data.
+    If last dim is 3 or 4 assume the data is rgb, including rgba.
+    Parameters
+    ----------
+    shape : list of int
+        Shape of the data that should be checked.
+    Returns
+    -------
+    bool
+        If data is rgb or not.
+    """
+    ndim = len(shape)
+    last_dim = shape[-1]
+
+    return ndim > 2 and last_dim < 5
+
+
+def grayscale(rgb):
+    result = (
+        (rgb[..., 0] * 0.2125)
+        + (rgb[..., 1] * 0.7154)
+        + (rgb[..., 2] * 0.0721)
+    )
+
+    return result.astype(np.uint8)
 
 
 class CziRegImageReader(CziFile):
@@ -126,7 +253,8 @@ def read_image(image_filepath, preprocessing):
     -------
         SimpleITK image of image data from czi, scn or other image formats read by SimpleITK
     """
-    fp_ext = Path(image_filepath).suffix
+
+    fp_ext = Path(image_filepath).suffix.lower()
 
     if fp_ext == '.czi':
         czi = CziRegImageReader(image_filepath)
@@ -147,42 +275,42 @@ def read_image(image_filepath, preprocessing):
         image = sitk.GetImageFromArray(image)
 
     # find out other WSI formats read by tifffile
-    elif fp_ext == '.scn':
-        tf = TiffFile(image_filepath)
-        scn_meta = xml2dict(tf.scn_metadata)
-        image_meta = scn_meta.get("scn").get("collection").get("image")
-        wsi_series_idx = np.argmax(
-            [
-                im.get("scanSettings")
-                .get("objectiveSettings")
-                .get("objective")
-                for im in image_meta
-            ]
-        )
+    elif fp_ext in TIFFFILE_EXTS:
+        tf_im = TiffFile(image_filepath)
+        if fp_ext == ".scn":
+            scn_meta = xml2dict(tf_im.scn_metadata)
+            image_meta = scn_meta.get("scn").get("collection").get("image")
+            largest_series = np.argmax(
+                [
+                    im.get("scanSettings")
+                    .get("objectiveSettings")
+                    .get("objective")
+                    for im in image_meta
+                ]
+            )
+        else:
+            largest_series = np.argmax(
+                [np.prod(np.asarray(series.shape)) for series in tf_im.series]
+            )
 
-        image = tf.series[wsi_series_idx].asarray()
-        image = sitk.GetImageFromArray(image, isVector=True)
-        if preprocessing is not None:
-            image = sitk_vect_to_gs(image)
+        try:
+            image = tifffile_dask_backend(
+                image_filepath, largest_series, preprocessing
+            )
+        except ValueError:
+            image = tifffile_zarr_backend(
+                image_filepath, largest_series, preprocessing
+            )
 
-    else:
-        image = sitk.ReadImage(str(image_filepath))
         if (
             preprocessing is not None
-            and image.GetNumberOfComponentsPerPixel() > 2
+            and preprocessing.get('as_uint8') is True
+            and image.GetPixelID() != sitk.sitkUInt8
         ):
-            image = sitk_vect_to_gs(image)
-
-        if preprocessing is not None:
-            if preprocessing['ch_indices'] is not None:
-                image = image[:, :, preprocessing['ch_indices']]
-
-            if (
-                preprocessing['as_uint8'] is True
-                and image.GetPixelID() is not sitk.sitkUInt8
-            ):
-                image = sitk.RescaleIntensity(image)
-                image = sitk.Cast(image, sitk.sitkUInt8)
+            image = sitk.RescaleIntensity(image)
+            image = sitk.Cast(image, sitk.sitkUInt8)
+    else:
+        image = sitk_backend(image_filepath, preprocessing)
 
     return image
 
@@ -268,11 +396,10 @@ def std_prepro():
     STD_PREPRO = {
         'image_type': 'FL',
         'ch_indices': None,
-        'as_uint8': None,
+        'as_uint8': False,
         'downsample': 1,
         'max_int_proj': sitk_max_int_proj,
         'inv_int': sitk_inv_int,
-        'contrast_enhance': contrast_enhance,
     }
     return STD_PREPRO
 
