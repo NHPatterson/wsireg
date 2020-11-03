@@ -136,6 +136,7 @@ class WsiReg2D(object):
         channel_names=None,
         channel_colors=None,
         prepro_dict={},
+        mask=None,
     ):
         """
         Add an image modality (node) to the registration graph
@@ -168,6 +169,7 @@ class WsiReg2D(object):
                 "channel_names": channel_names,
                 "channel_colors": channel_colors,
                 "preprocessing": prepro_dict,
+                "mask": mask,
             }
         }
 
@@ -410,7 +412,9 @@ class WsiReg2D(object):
         mod_data = self.modalities[modality_name].copy()
 
         if reg_edge.get("override_prepro") is not None:
-            override_preprocessing = reg_edge.get("override_prepro")[src_or_tgt]
+            override_preprocessing = reg_edge.get("override_prepro")[
+                src_or_tgt
+            ]
         else:
             override_preprocessing = None
 
@@ -422,6 +426,7 @@ class WsiReg2D(object):
                 mod_data["image_res"],
                 mod_data["preprocessing"],
                 None,
+                mod_data["mask"],
             )
         else:
 
@@ -439,6 +444,7 @@ class WsiReg2D(object):
                 mod_data["image_res"],
                 mod_data["preprocessing"],
                 mod_data["transforms"],
+                mod_data["mask"],
             )
 
     def _cache_images(self, modality_name, reg_image):
@@ -451,6 +457,13 @@ class WsiReg2D(object):
 
         if cache_im_fp.is_file() is False:
             sitk.WriteImage(reg_image.image, str(cache_im_fp), True)
+
+        if reg_image.mask is not None:
+            cache_mask_im_fp = self.image_cache / "{}_prepro_mask.tiff".format(
+                modality_name
+            )
+            if cache_mask_im_fp.is_file() is False:
+                sitk.WriteImage(reg_image.mask, str(cache_mask_im_fp), True)
 
         if cache_transform_fp.is_file() is False:
             pmap_dict_to_json(reg_image.transforms, str(cache_transform_fp))
@@ -484,6 +497,7 @@ class WsiReg2D(object):
                 src_res,
                 src_prepro,
                 src_transforms,
+                src_mask,
             ) = self._prepare_modality(src_name, reg_edge, "source")
 
             (
@@ -491,14 +505,23 @@ class WsiReg2D(object):
                 tgt_res,
                 tgt_prepro,
                 tgt_transforms,
+                tgt_mask,
             ) = self._prepare_modality(tgt_name, reg_edge, "target")
 
             src_reg_image = RegImage(
-                src_reg_image_fp, src_res, src_prepro, src_transforms
+                src_reg_image_fp,
+                src_res,
+                src_prepro,
+                src_transforms,
+                mask=src_mask,
             )
 
             tgt_reg_image = RegImage(
-                tgt_reg_image_fp, tgt_res, tgt_prepro, tgt_transforms
+                tgt_reg_image_fp,
+                tgt_res,
+                tgt_prepro,
+                tgt_transforms,
+                mask=tgt_mask,
             )
 
             if self.cache_images is True:
@@ -544,6 +567,11 @@ class WsiReg2D(object):
                 'initial': src_reg_image.transforms,
                 'registration': reg_tforms,
             }
+            reg_edge["transforms"] = {
+                'initial': src_reg_image.transforms,
+                'registration': reg_tforms,
+            }
+
             reg_edge["registered"] = True
             pmap_dict_to_json(reg_edge["transforms"], str(output_path_tform))
 
@@ -689,7 +717,7 @@ class WsiReg2D(object):
         if file_writer == "zarr":
             zarr_paths = []
         else:
-            zarr_paths = None
+            zarr_paths = []
 
         if all(
             [reg_edge.get("registered") for reg_edge in self.reg_graph_edges]
@@ -724,7 +752,6 @@ class WsiReg2D(object):
                         attachment=True,
                         attachment_modality=attachment_modality,
                     )
-
 
         if transform_non_reg is True:
             # preprocess and save unregistered nodes
@@ -806,13 +833,15 @@ class WsiReg2D(object):
 
         if reg_config.get("modalities") is not None:
             for key, val in reg_config["modalities"].items():
+
                 self.add_modality(
                     key,
                     val.get("image_filepath"),
-                    val.get("image_res"),
+                    image_res=val.get("image_res"),
                     channel_names=val.get("channel_names"),
                     channel_colors=val.get("channel_colors"),
-                    prepro_dict=val.get("prepro_dict"),
+                    prepro_dict=val.get("preprocessing"),
+                    mask=val.get("mask"),
                 )
         else:
             print("warning: config file did not contain any image modalities")
@@ -882,6 +911,7 @@ if __name__ == "__main__":
         nargs=1,
         help="how to write output registered images: ometiff, zarr, sitk (default: ometiff)",
     )
+
     args = parser.parse_args()
     config_filepath = args.config_filepath[0]
     file_writer = args.fw[0]
