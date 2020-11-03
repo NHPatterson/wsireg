@@ -9,7 +9,12 @@ from wsireg.parameter_maps.transformations import (
     BASE_AFF_TFORM,
 )
 from wsireg.parameter_maps.reg_params import DEFAULT_REG_PARAM_MAPS
-from wsireg.im_utils import read_image, std_prepro, contrast_enhance, sitk_inv_int
+from wsireg.im_utils import (
+    read_image,
+    std_prepro,
+    contrast_enhance,
+    sitk_inv_int,
+)
 
 SITK_TO_NP_DTYPE = {
     0: np.int8,
@@ -285,7 +290,8 @@ def register_2d_images(
                         "NoInitialTransform"
                     ]
                     sitk.WriteParameterFile(
-                        tform_out, str(temp_tform_path),
+                        tform_out,
+                        str(temp_tform_path),
                     )
                     selx.SetInitialTransformParameterFileName(
                         str(temp_tform_path)
@@ -498,7 +504,12 @@ def transform_image_to_ome_zarr(
         )
         paths.append({"path": str(path)})
 
-    multiscales = [{"version": "0.1", "datasets": paths,}]
+    multiscales = [
+        {
+            "version": "0.1",
+            "datasets": paths,
+        }
+    ]
     grp.attrs["multiscales"] = multiscales
 
     if pixel_id in list(range(1, 13)) and image.GetDepth() == 0:
@@ -576,7 +587,9 @@ def transform_image_to_ome_zarr(
     image_data = {
         'id': 1,
         'channels': channel_info,
-        'rdefs': {'model': 'color',},
+        'rdefs': {
+            'model': 'color',
+        },
     }
 
     grp.attrs["omero"] = image_data
@@ -682,104 +695,105 @@ def apply_transform_dict(
     return image
 
 
-def apply_transform_dict_mod(
-    image_fp,
-    image_res,
-    tform_dict_in,
-    prepro_dict=None,
-    is_shape_mask=False,
-    writer="sitk",
-    **im_tform_kwargs,
-):
-    """
-    apply a complex series of transformations in a python dictionary to an image
-    Parameters
-    ----------
-    image_fp : str
-        file path to the image to be transformed, it will be read in it's entirety
-    image_res : float
-        pixel resolution of image to be transformed
-    tform_dict : dict of lists
-        dict of SimpleElastix transformations stored in lists, may contain an "initial" transforms (preprocessing transforms)
-        these will be applied first, then the key order of the dict will determine the rest of the transformations
-    prepro_dict : dict
-        preprocessing to perform on image before transformation, default None reads full image
-    is_shape_mask : bool
-        whether the image being transformed is a shape mask (determines import)
-    Returns
-    -------
-    SimpleITK.Image that has been transformed
-    """
-
-    if is_shape_mask is False:
-        if isinstance(image_fp, sitk.Image):
-            image = image_fp
-        else:
-            image = RegImage(
-                image_fp, image_res, prepro_dict=prepro_dict
-            ).image
-    else:
-        image = sitk.GetImageFromArray(image_fp)
-        del image_fp
-        image.SetSpacing((image_res, image_res))
-
-    if tform_dict_in is None:
-        if writer == "zarr":
-            image = transform_2d_image(
-                image,
-                None,
-                writer="zarr",
-                zarr_store_dir=im_tform_kwargs["zarr_store_dir"],
-                channel_names=im_tform_kwargs["channel_names"],
-                channel_colors=im_tform_kwargs["channel_colors"],
-            )
-        else:
-            image = transform_2d_image(image, None)
-
-    else:
-
-        tform_dict["registered"] = tform_dict.pop("registration")
-
-        if tform_dict.get("registered") is None and tform_dict.get(0) is None:
-            tform_dict["registered"] = tform_dict["initial"]
-            tform_dict.pop("initial", None)
-
-            if isinstance(tform_dict.get("registered"), list) is False:
-                tform_dict["registered"] = [tform_dict["registered"]]
-
-            for idx in range(len(tform_dict["registered"])):
-                tform_dict[idx] = [tform_dict["registered"][idx]]
-
-            tform_dict.pop("registered", None)
-        else:
-            tform_dict = prepare_tform_dict(tform_dict, shape_tform=False)
-
-        if tform_dict.get("initial") is not None:
-            for initial_tform in tform_dict.get("initial"):
-                if isinstance(initial_tform, list) is False:
-                    initial_tform = [initial_tform]
-
-                for tform in initial_tform:
-                    image = transform_2d_image(image, [tform])
-
-        tform_dict.pop("initial", None)
-
-        for k, v in tform_dict.items():
-
-            if writer == "zarr" and k == list(tform_dict.keys())[-1]:
-                image = transform_2d_image(
-                    image,
-                    v,
-                    writer="zarr",
-                    zarr_store_dir=im_tform_kwargs["zarr_store_dir"],
-                    channel_names=im_tform_kwargs["channel_names"],
-                    channel_colors=im_tform_kwargs["channel_colors"],
-                )
-            else:
-                print(v)
-                image = transform_2d_image(image, v)
-
-    return image
+#
+# def apply_transform_dict_mod(
+#     image_fp,
+#     image_res,
+#     tform_dict_in,
+#     prepro_dict=None,
+#     is_shape_mask=False,
+#     writer="sitk",
+#     **im_tform_kwargs,
+# ):
+#     """
+#     apply a complex series of transformations in a python dictionary to an image
+#     Parameters
+#     ----------
+#     image_fp : str
+#         file path to the image to be transformed, it will be read in it's entirety
+#     image_res : float
+#         pixel resolution of image to be transformed
+#     tform_dict : dict of lists
+#         dict of SimpleElastix transformations stored in lists, may contain an "initial" transforms (preprocessing transforms)
+#         these will be applied first, then the key order of the dict will determine the rest of the transformations
+#     prepro_dict : dict
+#         preprocessing to perform on image before transformation, default None reads full image
+#     is_shape_mask : bool
+#         whether the image being transformed is a shape mask (determines import)
+#     Returns
+#     -------
+#     SimpleITK.Image that has been transformed
+#     """
+#
+#     if is_shape_mask is False:
+#         if isinstance(image_fp, sitk.Image):
+#             image = image_fp
+#         else:
+#             image = RegImage(
+#                 image_fp, image_res, prepro_dict=prepro_dict
+#             ).image
+#     else:
+#         image = sitk.GetImageFromArray(image_fp)
+#         del image_fp
+#         image.SetSpacing((image_res, image_res))
+#
+#     if tform_dict_in is None:
+#         if writer == "zarr":
+#             image = transform_2d_image(
+#                 image,
+#                 None,
+#                 writer="zarr",
+#                 zarr_store_dir=im_tform_kwargs["zarr_store_dir"],
+#                 channel_names=im_tform_kwargs["channel_names"],
+#                 channel_colors=im_tform_kwargs["channel_colors"],
+#             )
+#         else:
+#             image = transform_2d_image(image, None)
+#
+#     else:
+#
+#         tform_dict["registered"] = tform_dict.pop("registration")
+#
+#         if tform_dict.get("registered") is None and tform_dict.get(0) is None:
+#             tform_dict["registered"] = tform_dict["initial"]
+#             tform_dict.pop("initial", None)
+#
+#             if isinstance(tform_dict.get("registered"), list) is False:
+#                 tform_dict["registered"] = [tform_dict["registered"]]
+#
+#             for idx in range(len(tform_dict["registered"])):
+#                 tform_dict[idx] = [tform_dict["registered"][idx]]
+#
+#             tform_dict.pop("registered", None)
+#         else:
+#             tform_dict = prepare_tform_dict(tform_dict, shape_tform=False)
+#
+#         if tform_dict.get("initial") is not None:
+#             for initial_tform in tform_dict.get("initial"):
+#                 if isinstance(initial_tform, list) is False:
+#                     initial_tform = [initial_tform]
+#
+#                 for tform in initial_tform:
+#                     image = transform_2d_image(image, [tform])
+#
+#         tform_dict.pop("initial", None)
+#
+#         for k, v in tform_dict.items():
+#
+#             if writer == "zarr" and k == list(tform_dict.keys())[-1]:
+#                 image = transform_2d_image(
+#                     image,
+#                     v,
+#                     writer="zarr",
+#                     zarr_store_dir=im_tform_kwargs["zarr_store_dir"],
+#                     channel_names=im_tform_kwargs["channel_names"],
+#                     channel_colors=im_tform_kwargs["channel_colors"],
+#                 )
+#             else:
+#                 print(v)
+#                 image = transform_2d_image(image, v)
+#
+#     return image
 
 
 def compute_rot_bound(image, angle=30):
@@ -998,12 +1012,12 @@ class RegImage:
             preprocessing.pop("contrast_enhance", None)
 
         if preprocessing.get("contrast_enhance_opt") is True:
-            preprocessing.update({"contrast_enhance":contrast_enhance})
+            preprocessing.update({"contrast_enhance": contrast_enhance})
         else:
             preprocessing.pop("contrast_enhance", None)
 
         if preprocessing.get("inv_int_opt") is True:
-            preprocessing.update({"inv_int":sitk_inv_int})
+            preprocessing.update({"inv_int": sitk_inv_int})
         else:
             preprocessing.pop("inv_int", None)
 

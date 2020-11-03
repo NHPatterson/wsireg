@@ -7,7 +7,6 @@ from lxml import etree
 import geojson
 from wsireg.reg_utils import (
     prepare_tform_dict,
-    pmap_dict_to_sitk,
     apply_transform_dict,
 )
 from copy import deepcopy
@@ -49,7 +48,7 @@ def read_zen_shapes(zen_fp):
 
         if shape.tag == "Polygon":
             ptset_cz = shape.find("Geometry/Points")
-            ptset_type = "Polygon"
+            # ptset_type = "Polygon"
 
             poly_str = ptset_cz.text
             poly_str = poly_str.split(" ")
@@ -188,7 +187,7 @@ def invert_linear_transformation(transformation, is_initial=True):
         theta = float(inv_params[0])
         c, s = np.abs(np.cos(theta)), np.abs(np.sin(theta))
         bound_w = (h * s) + (w * c)
-        bound_h = (h * c) + (w * s)
+        # bound_h = (h * c) + (w * s)
 
         if is_initial is True:
             if int(w) != int(bound_w):
@@ -451,5 +450,5 @@ def apply_transformation_dict_shapes(shapes, image_res, tform_dict):
 def scale_shape_coordinates(poly, scale_factor):
     poly_coords = np.asarray(poly["geometry"]["coordinates"][0])
     poly_coords = poly_coords * scale_factor
-    poly.get("geometry").update({"coordinates":[poly_coords.tolist()]})
+    poly.get("geometry").update({"coordinates": [poly_coords.tolist()]})
     return poly

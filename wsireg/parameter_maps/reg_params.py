@@ -14,7 +14,9 @@ DEFAULT_REG_PARAM_MAPS = {
         "ImageSampler": ["Random"],
         "Interpolator": ['LinearInterpolator'],
         "MaximumNumberOfIterations": ['400'],
-        "MaximumNumberOfSamplingAttempts": ['10',],
+        "MaximumNumberOfSamplingAttempts": [
+            '10',
+        ],
         "MaximumStepLength": [
             '100.0',
             '75.0',
@@ -62,7 +64,9 @@ DEFAULT_REG_PARAM_MAPS = {
         "ImageSampler": ['Random'],
         "Interpolator": ['LinearInterpolator'],
         "MaximumNumberOfIterations": ['800'],
-        "MaximumNumberOfSamplingAttempts": ['10',],
+        "MaximumNumberOfSamplingAttempts": [
+            '10',
+        ],
         "MaximumStepLength": [
             '100.0',
             '75.0',
@@ -110,7 +114,9 @@ DEFAULT_REG_PARAM_MAPS = {
         "ImageSampler": ['Random'],
         "Interpolator": ['LinearInterpolator'],
         "MaximumNumberOfIterations": ['800'],
-        "MaximumNumberOfSamplingAttempts": ['10',],
+        "MaximumNumberOfSamplingAttempts": [
+            '10',
+        ],
         "MaximumStepLength": [
             '100.0',
             '75.0',
@@ -181,7 +187,9 @@ DEFAULT_REG_PARAM_MAPS = {
         "ImageSampler": ['Random'],
         "Interpolator": ['LinearInterpolator'],
         "MaximumNumberOfIterations": ['100'],
-        "MaximumNumberOfSamplingAttempts": ['10',],
+        "MaximumNumberOfSamplingAttempts": [
+            '10',
+        ],
         "MaximumStepLength": [
             '100',
             '90',
@@ -230,7 +238,9 @@ DEFAULT_REG_PARAM_MAPS = {
         "ImageSampler": ['Random'],
         "Interpolator": ['LinearInterpolator'],
         "MaximumNumberOfIterations": ['75'],
-        "MaximumNumberOfSamplingAttempts": ['10',],
+        "MaximumNumberOfSamplingAttempts": [
+            '10',
+        ],
         "MaximumStepLength": ['100', '50', '20', '10'],
         "Metric": ['AdvancedMattesMutualInformation'],
         "MovingImageDimension": ['2'],

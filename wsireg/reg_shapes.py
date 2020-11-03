@@ -67,5 +67,10 @@ class RegShapes:
             out_shapes = self.shape_data
 
         geojson.dump(
-            out_shapes, open(output_fp, "w",), indent=4,
+            out_shapes,
+            open(
+                output_fp,
+                "w",
+            ),
+            indent=4,
         )

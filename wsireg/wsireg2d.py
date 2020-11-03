@@ -665,7 +665,9 @@ class WsiReg2D(object):
         print("transforming {} to {}".format(edge_key, final_modality))
 
         output_path = self.output_dir / "{}-{}_to_{}_registered".format(
-            self.project_name, edge_key, final_modality,
+            self.project_name,
+            edge_key,
+            final_modality,
         )
         if file_writer == "sitk" or file_writer == "ometiff":
             image = apply_transform_dict(
@@ -806,21 +808,28 @@ class WsiReg2D(object):
             output_path = (
                 self.output_dir
                 / "{}-{}_to_{}_transformations.json".format(
-                    self.project_name, key, final_modality,
+                    self.project_name,
+                    key,
+                    final_modality,
                 )
             )
 
             with open(output_path, 'w') as fp:
                 json.dump(self.transformations[key], fp, indent=4)
 
-        for (modality, attachment_modality,) in self.attachment_images.items():
+        for (
+            modality,
+            attachment_modality,
+        ) in self.attachment_images.items():
 
             final_modality = self.reg_paths[attachment_modality][-1]
 
             output_path = (
                 self.output_dir
                 / "{}-{}_to_{}_transformations.json".format(
-                    self.project_name, modality, final_modality,
+                    self.project_name,
+                    modality,
+                    final_modality,
                 )
             )
 
