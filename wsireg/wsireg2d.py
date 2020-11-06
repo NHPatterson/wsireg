@@ -3,14 +3,13 @@ import json
 import SimpleITK as sitk
 from wsireg.reg_utils import (
     RegImage,
+    TransformRegImage,
     register_2d_images,
-    apply_transform_dict,
     sitk_pmap_to_dict,
     pmap_dict_to_json,
     json_to_pmap_dict,
 )
 from wsireg.reg_shapes import RegShapes
-from wsireg.im_utils import sitk_to_ometiff
 from wsireg.config_utils import parse_check_reg_config
 
 
@@ -603,7 +602,7 @@ class WsiReg2D(object):
 
         return transforms
 
-    def _transform_nonreg_image(self, modality_key, file_writer):
+    def _transform_nonreg_image(self, modality_key, file_writer="ome.tiff"):
         print(
             "transforming non-registered modality : {} ".format(modality_key)
         )
@@ -623,33 +622,23 @@ class WsiReg2D(object):
         else:
             transformations = None
 
-        if file_writer == "sitk":
-            image = apply_transform_dict(
-                im_data["image_fp"], im_data["image_res"], transformations
-            )
-            sitk.WriteImage(image, str(output_path) + ".tiff", True)
-
-        elif file_writer == "zarr":
-            im_data_zarr = {
-                "zarr_store_dir": str(output_path) + ".zarr",
-                "channel_names": im_data["channel_names"],
-                "channel_colors": im_data["channel_colors"],
-            }
-
-            zarr_image_fp = apply_transform_dict(
-                im_data["image_fp"],
-                im_data["image_res"],
-                transformations,
-                writer="zarr",
-                **im_data_zarr,
-            )
-
-            return zarr_image_fp
+        tfregimage = TransformRegImage(
+            output_path.stem,
+            im_data["image_fp"],
+            im_data["image_res"],
+            transformations,
+            channel_names=im_data.get("channel_names"),
+            channel_colors=im_data.get("channel_colors"),
+        )
+        im_fp = tfregimage.transform_image(
+            str(output_path.parent), output_type=file_writer, tile_size=512
+        )
+        return im_fp
 
     def _transform_image(
         self,
         edge_key,
-        file_writer="sitk",
+        file_writer="ome.tiff",
         attachment=False,
         attachment_modality=None,
     ):
@@ -669,43 +658,21 @@ class WsiReg2D(object):
             edge_key,
             final_modality,
         )
-        if file_writer == "sitk" or file_writer == "ometiff":
-            image = apply_transform_dict(
-                im_data["image_fp"], im_data["image_res"], transformations
-            )
-            if file_writer == "sitk":
-                sitk.WriteImage(image, str(output_path) + ".tiff", True)
-            elif file_writer == "ometiff":
-                image_res = (image.GetSpacing()[0], image.GetSpacing()[1])
-                image_name = "{}-{}_registered".format(
-                    self.project_name, edge_key
-                )
-                sitk_to_ometiff(
-                    image,
-                    str(output_path) + "ome.tiff",
-                    image_name=image_name,
-                    channel_names=im_data["channel_names"],
-                    image_res=image_res,
-                )
+        tfregimage = TransformRegImage(
+            output_path.stem,
+            im_data["image_fp"],
+            im_data["image_res"],
+            transformations,
+            channel_names=im_data.get("channel_names"),
+            channel_colors=im_data.get("channel_colors"),
+        )
+        im_fp = tfregimage.transform_image(
+            str(self.output_dir), output_type=file_writer, tile_size=512
+        )
 
-        elif file_writer == "zarr":
-            im_data_zarr = {
-                "zarr_store_dir": str(output_path) + ".zarr",
-                "channel_names": im_data["channel_names"],
-                "channel_colors": im_data["channel_colors"],
-            }
+        return im_fp
 
-            zarr_image_fp = apply_transform_dict(
-                im_data["image_fp"],
-                im_data["image_res"],
-                transformations,
-                writer="zarr",
-                **im_data_zarr,
-            )
-
-            return zarr_image_fp
-
-    def transform_images(self, file_writer="sitk", transform_non_reg=True):
+    def transform_images(self, file_writer="ome.tiff", transform_non_reg=True):
         """
         Transform and write images to disk after registration. Also transforms all attachment images
 
@@ -716,55 +683,32 @@ class WsiReg2D(object):
             zarr store
         """
 
-        if file_writer == "zarr":
-            zarr_paths = []
-        else:
-            zarr_paths = []
+        image_fps = []
 
         if all(
             [reg_edge.get("registered") for reg_edge in self.reg_graph_edges]
         ):
             for key in self.reg_paths.keys():
-
-                if file_writer == "zarr":
-                    zarr_paths.append(
-                        self._transform_image(key, file_writer=file_writer)
-                    )
-                elif file_writer == "sitk" or file_writer == "ometiff":
-                    self._transform_image(key, file_writer=file_writer)
+                self._transform_image(key, file_writer=file_writer)
 
             for (
                 modality,
                 attachment_modality,
             ) in self.attachment_images.items():
 
-                if file_writer == "zarr":
-                    zarr_paths.append(
-                        self._transform_image(
-                            modality,
-                            file_writer=file_writer,
-                            attachment=True,
-                            attachment_modality=attachment_modality,
-                        )
-                    )
-                elif file_writer == "sitk" or file_writer == "ometiff":
-                    self._transform_image(
-                        modality,
-                        file_writer=file_writer,
-                        attachment=True,
-                        attachment_modality=attachment_modality,
-                    )
-
+                im_fp = self._transform_image(
+                    modality,
+                    file_writer=file_writer,
+                    attachment=True,
+                    attachment_modality=attachment_modality,
+                )
+                image_fps.append(im_fp)
         if transform_non_reg is True:
             # preprocess and save unregistered nodes
             nonreg_keys = self._find_nonreg_modalities()
 
             for key in nonreg_keys:
-                zarr_paths.append(
-                    self._transform_nonreg_image(key, file_writer=file_writer)
-                )
-
-        return zarr_paths
+                self._transform_nonreg_image(key, file_writer=file_writer)
 
     def transform_shapes(self):
         """
@@ -918,7 +862,7 @@ if __name__ == "__main__":
         "--fw",
         type=str,
         nargs=1,
-        help="how to write output registered images: ometiff, zarr, sitk (default: ometiff)",
+        help="how to write output registered images: ome.tiff, ome.zarr (default: ome.tiff)",
     )
 
     args = parser.parse_args()
