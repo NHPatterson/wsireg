@@ -5,12 +5,67 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import cv2
 import SimpleITK as sitk
-from tifffile import create_output, TiffFile, xml2dict, TiffWriter, imread
+from tifffile import (
+    create_output,
+    TiffFile,
+    xml2dict,
+    TiffWriter,
+    imread,
+    OmeXml,
+)
 from czifile import CziFile
 import zarr
 import dask.array as da
+from wsireg.reg_utils import apply_transform_dict
 
 TIFFFILE_EXTS = [".scn", ".tif", ".tiff", ".ndpi"]
+
+SITK_TO_NP_DTYPE = {
+    0: np.int8,
+    1: np.uint8,
+    2: np.int16,
+    3: np.uint16,
+    4: np.int32,
+    5: np.uint32,
+    6: np.int64,
+    7: np.uint64,
+    8: np.float32,
+    9: np.float64,
+    10: np.complex64,
+    11: np.complex64,
+    12: np.int8,
+    13: np.uint8,
+    14: np.int16,
+    15: np.int16,
+    16: np.int32,
+    17: np.int32,
+    18: np.int64,
+    19: np.int64,
+    20: np.float32,
+    21: np.float64,
+    22: np.uint8,
+    23: np.uint16,
+    24: np.uint32,
+    25: np.uint64,
+}
+
+COLNAME_TO_HEX = {
+    "red": "FF0000",
+    "green": "00FF00",
+    "blue": "0000FF",
+    "magenta": "FF00FF",
+    "yellow": "FFFF00",
+    "cyan": "00FFFFF",
+    "white": "FFFFFF",
+}
+
+
+def zarr_get_base_pyr_layer(zarr_store):
+    if isinstance(zarr_store, zarr.hierarchy.Group):
+        zarr_im = zarr_store[str(0)]
+    elif isinstance(zarr_store, zarr.core.Array):
+        zarr_im = zarr_store
+    return zarr_im
 
 
 def tifffile_zarr_backend(image_filepath, largest_series, preprocessing):
@@ -18,11 +73,7 @@ def tifffile_zarr_backend(image_filepath, largest_series, preprocessing):
     print("using zarr backend")
     zarr_series = imread(image_filepath, aszarr=True, series=largest_series)
     zarr_store = zarr.open(zarr_series)
-
-    if isinstance(zarr_store, zarr.hierarchy.Group):
-        zarr_im = zarr_store[0]
-    elif isinstance(zarr_store, zarr.core.Array):
-        zarr_im = zarr_store
+    zarr_im = zarr_get_base_pyr_layer(zarr_store)
 
     if guess_rgb(zarr_im.shape):
         if preprocessing is not None:
@@ -55,10 +106,7 @@ def tifffile_dask_backend(image_filepath, largest_series, preprocessing):
     zarr_series = imread(image_filepath, aszarr=True, series=largest_series)
     zarr_store = zarr.open(zarr_series)
 
-    if isinstance(zarr_store, zarr.hierarchy.Group):
-        dask_im = da.squeeze(da.from_zarr(zarr_store[0]))
-    elif isinstance(zarr_store, zarr.core.Array):
-        dask_im = da.squeeze(da.from_zarr(zarr_store))
+    dask_im = da.squeeze(da.from_zarr(zarr_get_base_pyr_layer(zarr_store)))
 
     if guess_rgb(dask_im.shape):
         if preprocessing is not None:
@@ -240,6 +288,27 @@ class CziRegImageReader(CziFile):
         return out
 
 
+def tf_get_largest_series(image_filepath):
+    fp_ext = Path(image_filepath).suffix.lower()
+    tf_im = TiffFile(image_filepath)
+    if fp_ext == ".scn":
+        scn_meta = xml2dict(tf_im.scn_metadata)
+        image_meta = scn_meta.get("scn").get("collection").get("image")
+        largest_series = np.argmax(
+            [
+                im.get("scanSettings")
+                .get("objectiveSettings")
+                .get("objective")
+                for im in image_meta
+            ]
+        )
+    else:
+        largest_series = np.argmax(
+            [np.prod(np.asarray(series.shape)) for series in tf_im.series]
+        )
+    return largest_series
+
+
 def read_image(image_filepath, preprocessing):
     """
 
@@ -276,22 +345,7 @@ def read_image(image_filepath, preprocessing):
 
     # find out other WSI formats read by tifffile
     elif fp_ext in TIFFFILE_EXTS:
-        tf_im = TiffFile(image_filepath)
-        if fp_ext == ".scn":
-            scn_meta = xml2dict(tf_im.scn_metadata)
-            image_meta = scn_meta.get("scn").get("collection").get("image")
-            largest_series = np.argmax(
-                [
-                    im.get("scanSettings")
-                    .get("objectiveSettings")
-                    .get("objective")
-                    for im in image_meta
-                ]
-            )
-        else:
-            largest_series = np.argmax(
-                [np.prod(np.asarray(series.shape)) for series in tf_im.series]
-            )
+        largest_series = tf_get_largest_series(image_filepath)
 
         try:
             image = tifffile_dask_backend(
@@ -313,6 +367,430 @@ def read_image(image_filepath, preprocessing):
         image = sitk_backend(image_filepath, preprocessing)
 
     return image
+
+
+def sitk_image_info(image_filepath):
+    reader = sitk.ImageFileReader()
+    reader.SetFileName(image_filepath)
+    reader.LoadPrivateTagsOn()
+    reader.ReadImageInformation()
+    im_dims = np.asarray(reader.GetSize())
+    # swap to YX
+    im_dims[[0, 1]] = im_dims[[1, 0]]
+    im_dtype = np.dtype(SITK_TO_NP_DTYPE.get(reader.GetPixelID()))
+    is_vector = sitk.GetPixelIDValueAsString(reader.GetPixelID())
+
+    if is_vector in "vector":
+        im_dims = np.append(im_dims, 3)
+    elif len(im_dims) == 3:
+        im_dims = im_dims[[2, 0, 1]]
+    else:
+        im_dims = np.concatenate([[1], im_dims], axis=0)
+
+    return im_dims, im_dtype
+
+
+def get_im_info(image_filepath):
+    if Path(image_filepath).suffix.lower() == ".czi":
+        czi = CziFile(image_filepath)
+        ch_dim_idx = czi.axes.index('C')
+        y_dim_idx = czi.axes.index('Y')
+        x_dim_idx = czi.axes.index('X')
+        im_dims = np.array(czi.shape)[[ch_dim_idx, y_dim_idx, x_dim_idx]]
+        im_dtype = czi.dtype
+        reader = "czi"
+
+    elif Path(image_filepath).suffix.lower() in TIFFFILE_EXTS:
+        largest_series = tf_get_largest_series(image_filepath)
+        zarr_im = zarr.open(
+            imread(image_filepath, aszarr=True, series=largest_series)
+        )
+        zarr_im = zarr_get_base_pyr_layer(zarr_im)
+        im_dims = np.squeeze(zarr_im.shape)
+        if len(im_dims) == 2:
+            im_dims = np.concatenate([[1], im_dims])
+        im_dtype = zarr_im.dtype
+        reader = "tifffile"
+
+    else:
+        im_dims, im_dtype = sitk_image_info(image_filepath)
+        reader = "sitk"
+
+    return im_dims, im_dtype, reader
+
+
+def tf_zarr_read_single_ch(image_filepath, channel_idx, is_rgb):
+    largest_series = tf_get_largest_series(image_filepath)
+    zarr_im = zarr.open(
+        imread(image_filepath, aszarr=True, series=largest_series)
+    )
+    zarr_im = zarr_get_base_pyr_layer(zarr_im)
+
+    try:
+        im = da.squeeze(da.from_zarr(zarr_im))
+        if is_rgb is True:
+            im = im[:, :, channel_idx].compute()
+        elif len(im.shape) > 2:
+            im = im[channel_idx, :, :].compute()
+        else:
+            im = im.compute()
+
+    except ValueError:
+        im = zarr_im
+        if is_rgb is True:
+            im = im[:, :, channel_idx]
+        elif len(im.shape) > 2:
+            im = im[channel_idx, :, :].compute()
+        else:
+            im = im.compute()
+
+    return im
+
+
+def czi_read_single_ch(image_filepath, channel_idx):
+    czi = CziRegImageReader(image_filepath)
+
+    im = czi.sub_asarray(
+        channel_idx=channel_idx,
+    )
+
+    return im
+
+
+def calc_pyramid_levels(xy_final_shape, tile_size):
+
+    res_shape = xy_final_shape[::-1]
+    res_shapes = [tuple(res_shape)]
+
+    while all(res_shape > tile_size):
+        res_shape = res_shape // 2
+        res_shapes.append(tuple(res_shape))
+
+    return res_shapes[:-1]
+
+
+def add_ome_axes_single_plane(image_np):
+    return image_np.reshape((1,) * (3) + image_np.shape)
+
+
+def generate_channels(channel_names, channel_colors, im_dtype):
+    channel_info = []
+    for channel_name, channel_color in zip(channel_names, channel_colors):
+        channel_info.append(
+            {
+                "label": channel_name,
+                "color": channel_color,
+                "active": True,
+                "window": {"start": 0, "end": int(np.iinfo(im_dtype).max)},
+            }
+        )
+    return channel_info
+
+
+def format_channel_names(channel_names, n_ch):
+    if channel_names is None or n_ch != len(channel_names):
+        channel_names = ["C{}".format(idx) for idx in range(n_ch)]
+    return channel_names
+
+
+def get_pyramid_info(y_size, x_size, n_ch, tile_size):
+    yx_size = np.asarray([y_size, x_size], dtype=np.int32)
+    pyr_levels = calc_pyramid_levels(yx_size, tile_size)
+    pyr_shapes = [(1, n_ch, 1, int(pl[0]), int(pl[1])) for pl in pyr_levels]
+    return pyr_levels, pyr_shapes
+
+
+def prepare_ome_zarr_group(
+    zarr_store_dir,
+    y_size,
+    x_size,
+    n_ch,
+    im_dtype,
+    tile_size=512,
+    channel_names=None,
+    channel_colors=None,
+):
+    store = zarr.DirectoryStore(zarr_store_dir)
+    grp = zarr.group(store, overwrite=True)
+    zarr_dtype = "{}{}".format(im_dtype.kind, im_dtype.itemsize)
+
+    pyr_levels, pyr_shapes = get_pyramid_info(x_size, y_size, n_ch, tile_size)
+
+    paths = []
+    for path, pyr_shape in enumerate(pyr_levels):
+        grp.create_dataset(
+            str(path),
+            shape=pyr_shapes[path],
+            dtype=zarr_dtype,
+            chunks=(1, 1, 1, tile_size, tile_size),
+        )
+        paths.append({"path": str(path)})
+
+    multiscales = [
+        {
+            "version": "0.1",
+            "datasets": paths,
+        }
+    ]
+    grp.attrs["multiscales"] = multiscales
+    n_pyr_levels = len(paths)
+
+    channel_names = format_channel_names(channel_names, n_ch)
+
+    n_colors = n_ch // len(COLNAME_TO_HEX) + 1
+    color_palette = [*COLNAME_TO_HEX] * n_colors
+
+    if channel_colors is None:
+        channel_colors = [color_palette[idx] for idx in range(n_ch)]
+    elif n_ch != len(channel_colors) and n_ch != 1:
+        channel_colors = [color_palette[idx] for idx in range(n_ch)]
+    elif n_ch != len(channel_colors) and n_ch == 1:
+        channel_colors = ["FFFFFF"]
+    else:
+        channel_colors = [COLNAME_TO_HEX[ch] for ch in channel_colors]
+
+    channel_info = generate_channels(channel_names, channel_colors, im_dtype)
+
+    image_data = {
+        'id': 1,
+        'channels': channel_info,
+        'rdefs': {
+            'model': 'color',
+        },
+    }
+
+    grp.attrs["omero"] = image_data
+
+    return grp, n_pyr_levels, pyr_levels
+
+
+def get_final_tform_info(tform_dict):
+    x_size, y_size = tform_dict.get(list(tform_dict.keys())[-1])[-1].get(
+        "Size"
+    )
+    return int(y_size), int(x_size)
+
+
+def image_to_zarr_store(zgrp, image, channel_idx, n_pyr_levels, pyr_levels):
+    for pyr_idx in range(n_pyr_levels):
+        if pyr_idx == 0:
+            image = sitk.GetArrayFromImage(image)
+        else:
+            resize_shape = (
+                pyr_levels[pyr_idx][1],
+                pyr_levels[pyr_idx][0],
+            )
+            image = cv2.resize(image, resize_shape, cv2.INTER_LINEAR)
+
+        zgrp[str(pyr_idx)][
+            :, channel_idx : channel_idx + 1, :, :, :
+        ] = add_ome_axes_single_plane(image)
+
+
+def prepare_ome_xml_str(
+    y_size, x_size, n_ch, im_dtype, is_rgb, **ome_metadata
+):
+
+    omexml = OmeXml()
+    if is_rgb:
+        stored_shape = (1, 1, 1, y_size, x_size, n_ch)
+        im_shape = (y_size, x_size, n_ch)
+    else:
+        stored_shape = (n_ch, 1, 1, y_size, x_size, 1)
+        im_shape = (n_ch, y_size, x_size)
+
+    omexml.addimage(
+        dtype=im_dtype,
+        shape=im_shape,
+        # specify how the image is stored in the TIFF file
+        storedshape=stored_shape,
+        **ome_metadata,
+    )
+
+    return omexml.tostring().encode("utf8")
+
+
+def get_final_yx_from_tform(tform_reg_im):
+    if tform_reg_im.tform_dict is not None:
+        y_size, x_size = get_final_tform_info(tform_reg_im.tform_dict)
+    else:
+        y_size, x_size = (
+            (tform_reg_im.im_dims[0], tform_reg_im.im_dims[1])
+            if tform_reg_im.is_rgb
+            else (tform_reg_im.im_dims[1], tform_reg_im.im_dims[2])
+        )
+    return y_size, x_size
+
+
+def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size):
+
+    y_size, x_size = get_final_yx_from_tform(tform_reg_im)
+
+    n_ch = (
+        tform_reg_im.im_dims[2]
+        if tform_reg_im.is_rgb
+        else tform_reg_im.im_dims[0]
+    )
+    pyr_levels, pyr_shapes = get_pyramid_info(y_size, x_size, n_ch, tile_size)
+    n_pyr_levels = len(pyr_levels)
+    output_file_name = str(Path(output_dir) / tform_reg_im.image_name)
+    if tform_reg_im.reader in ["tifffile", "czi"]:
+
+        for channel_idx in range(n_ch):
+            if tform_reg_im.reader == "tifffile":
+                tform_reg_im.image = tf_zarr_read_single_ch(
+                    tform_reg_im.image_filepath,
+                    tform_reg_im.is_rgb,
+                    channel_idx,
+                )
+                tform_reg_im.image = np.squeeze(tform_reg_im.image)
+            elif tform_reg_im.reader == "czi":
+                tform_reg_im.image = czi_read_single_ch(
+                    tform_reg_im.image_filepath, channel_idx
+                )
+                tform_reg_im.image = np.squeeze(tform_reg_im.image)
+
+            tform_reg_im.image = sitk.GetImageFromArray(
+                tform_reg_im.image, isVector=False
+            )
+            tform_reg_im.image.SetSpacing(
+                (tform_reg_im.image_res, tform_reg_im.image_res)
+            )
+
+            tform_reg_im.preprocess_reg_image_spatial(
+                tform_reg_im.spatial_prepro, tform_reg_im.transforms
+            )
+
+            tform_reg_im.image = apply_transform_dict(
+                tform_reg_im.image,
+                tform_reg_im.image_res,
+                tform_reg_im.tform_dict,
+                is_shape_mask=False,
+                writer="sitk",
+            )
+            if channel_idx == 0:
+                channel_names = format_channel_names(
+                    tform_reg_im.channel_names, n_ch
+                )
+                print(f"saving to {output_file_name}.ome.zarr")
+
+                (zgrp, n_pyr_levels, pyr_levels,) = prepare_ome_zarr_group(
+                    f"{output_file_name}.ome.zarr",
+                    y_size,
+                    x_size,
+                    n_ch,
+                    tform_reg_im.im_dtype,
+                    tile_size=tile_size,
+                    channel_names=channel_names,
+                    channel_colors=tform_reg_im.channel_colors,
+                )
+
+            image_to_zarr_store(
+                zgrp, tform_reg_im.image, channel_idx, n_pyr_levels, pyr_levels
+            )
+
+    return f"{output_file_name}.ome.zarr"
+
+
+def transform_to_ome_tiff(tform_reg_im, output_dir, tile_size):
+    y_size, x_size = get_final_yx_from_tform(tform_reg_im)
+
+    n_ch = (
+        tform_reg_im.im_dims[2]
+        if tform_reg_im.is_rgb
+        else tform_reg_im.im_dims[0]
+    )
+    pyr_levels, pyr_shapes = get_pyramid_info(y_size, x_size, n_ch, tile_size)
+    n_pyr_levels = len(pyr_levels)
+    output_file_name = str(Path(output_dir) / tform_reg_im.image_name)
+    channel_names = format_channel_names(tform_reg_im.channel_names, n_ch)
+
+    omexml = prepare_ome_xml_str(
+        y_size,
+        x_size,
+        n_ch,
+        tform_reg_im.im_dtype,
+        tform_reg_im.is_rgb,
+        PhysicalSizeX=tform_reg_im.image_res,
+        PhysicalSizeY=tform_reg_im.image_res,
+        PhysicalSizeXUnit="µm",
+        PhysicalSizeYUnit="µm",
+        Name=tform_reg_im.image_name,
+        Channel=None if tform_reg_im.is_rgb else {"Name": channel_names},
+    )
+
+    if tform_reg_im.reader in ["tifffile", "czi"]:
+        print(f"saving to {output_file_name}.ome.tiff")
+        with TiffWriter(f"{output_file_name}.ome.tiff", bigtiff=True) as tif:
+            for channel_idx in range(n_ch):
+                if tform_reg_im.reader == "tifffile":
+                    tform_reg_im.image = tf_zarr_read_single_ch(
+                        tform_reg_im.image_filepath,
+                        tform_reg_im.is_rgb,
+                        channel_idx,
+                    )
+                    tform_reg_im.image = np.squeeze(tform_reg_im.image)
+                elif tform_reg_im.reader == "czi":
+                    tform_reg_im.image = czi_read_single_ch(
+                        tform_reg_im.image_filepath, channel_idx
+                    )
+                    tform_reg_im.image = np.squeeze(tform_reg_im.image)
+
+                tform_reg_im.image = sitk.GetImageFromArray(
+                    tform_reg_im.image, isVector=False
+                )
+                tform_reg_im.image.SetSpacing(
+                    (tform_reg_im.image_res, tform_reg_im.image_res)
+                )
+
+                tform_reg_im.preprocess_reg_image_spatial(
+                    tform_reg_im.spatial_prepro, tform_reg_im.transforms
+                )
+                tform_reg_im.image = apply_transform_dict(
+                    tform_reg_im.image,
+                    tform_reg_im.image_res,
+                    tform_reg_im.tform_dict,
+                    is_shape_mask=False,
+                    writer="sitk",
+                )
+
+                tform_reg_im.image = sitk.GetArrayFromImage(tform_reg_im.image)
+
+                options = dict(
+                    tile=(tile_size, tile_size),
+                    compression="jpeg" if tform_reg_im.is_rgb else None,
+                    photometric="rgb" if tform_reg_im.is_rgb else "minisblack",
+                    metadata=None,
+                )
+                # write OME-XML to the ImageDescription tag of the first page
+                description = omexml if channel_idx == 0 else None
+
+                # write channel data
+                tif.write(
+                    tform_reg_im.image,
+                    subifds=n_pyr_levels - 1,
+                    description=description,
+                    **options,
+                )
+
+                print(
+                    f"channel {channel_idx} shape: {tform_reg_im.image.shape}"
+                )
+
+                for pyr_idx in range(1, n_pyr_levels):
+                    resize_shape = (
+                        pyr_levels[pyr_idx][0],
+                        pyr_levels[pyr_idx][1],
+                    )
+                    tform_reg_im.image = cv2.resize(
+                        tform_reg_im.image, resize_shape, cv2.INTER_LINEAR
+                    )
+                    print(
+                        f"pyr {pyr_idx} : channel {channel_idx} shape: {tform_reg_im.image.shape}"
+                    )
+
+                    tif.write(tform_reg_im.image, **options, subfiletype=1)
+    return f"{output_file_name}.ome.tiff"
 
 
 def sitk_vect_to_gs(image):
@@ -402,62 +880,3 @@ def std_prepro():
         'inv_int': sitk_inv_int,
     }
     return STD_PREPRO
-
-
-def sitk_to_ometiff(
-    sitk_image,
-    output_name,
-    image_name=None,
-    channel_names=None,
-    image_res=None,
-):
-
-    if image_res is None:
-        image_res = (None, None)
-
-    # assume multicomponent RGB/A images
-    if (
-        sitk_image.GetNumberOfComponentsPerPixel() >= 3
-        and sitk_image.GetNumberOfComponentsPerPixel() < 5
-    ):
-        photometric_tag = "rgb"
-        channel_names = None
-        axes = "YXS"
-    else:
-        photometric_tag = "minisblack"
-        if (
-            channel_names is None
-            or len(channel_names) != sitk_image.GetDepth()
-        ):
-            channel_names = [
-                "Ch{}".format(str(idx).zfill(3))
-                for idx in range(sitk_image.GetDepth())
-            ]
-        axes = "CYX"
-
-    sitk_image = sitk.GetArrayFromImage(sitk_image)
-
-    if image_name is None:
-        image_name = "default"
-
-    with TiffWriter(output_name) as tif:
-        tif.save(
-            sitk_image,
-            compress=9,
-            tile=(1024, 1024),
-            photometric=photometric_tag,
-            metadata={
-                "axes": axes,
-                "SignificantBits": sitk_image.dtype.itemsize * 8,
-                "Image": {
-                    "Name": image_name,
-                    "Pixels": {
-                        "PhysicalSizeX": image_res[0],
-                        "PhysicalSizeY": image_res[1],
-                        "PhysicalSizeXUnit": "µm",
-                        "PhysicalSizeYUnit": "µm",
-                        "Channel": {"Name": channel_names},
-                    },
-                },
-            },
-        )
