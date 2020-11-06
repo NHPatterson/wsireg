@@ -1,16 +1,15 @@
 from pathlib import Path
 import json
 import SimpleITK as sitk
-from wsireg.reg_utils import (
-    RegImage,
-    TransformRegImage,
+from wsireg.reg_image import RegImage, TransformRegImage
+from wsireg.utils.reg_utils import (
     register_2d_images,
     sitk_pmap_to_dict,
     pmap_dict_to_json,
     json_to_pmap_dict,
 )
 from wsireg.reg_shapes import RegShapes
-from wsireg.config_utils import parse_check_reg_config
+from wsireg.utils.config_utils import parse_check_reg_config
 
 
 class WsiReg2D(object):

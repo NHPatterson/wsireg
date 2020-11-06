@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from lxml import etree
 import geojson
-from wsireg.reg_utils import (
+from wsireg.utils.tform_utils import (
     prepare_tform_dict,
     apply_transform_dict,
 )

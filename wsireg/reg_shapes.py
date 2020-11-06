@@ -1,5 +1,5 @@
 import geojson
-from wsireg.shape_utils import (
+from wsireg.utils.shape_utils import (
     shape_reader,
     apply_transformation_dict_shapes,
     scale_shape_coordinates,

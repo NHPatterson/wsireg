@@ -16,7 +16,7 @@ from tifffile import (
 from czifile import CziFile
 import zarr
 import dask.array as da
-from wsireg.reg_utils import apply_transform_dict
+from wsireg.utils.tform_utils import apply_transform_dict
 
 TIFFFILE_EXTS = [".scn", ".tif", ".tiff", ".ndpi"]
 
