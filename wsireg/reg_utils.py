@@ -2,7 +2,6 @@ from pathlib import Path
 import json
 import tempfile
 import numpy as np
-import zarr
 import SimpleITK as sitk
 from wsireg.parameter_maps.transformations import (
     BASE_RIG_TFORM,
@@ -14,46 +13,11 @@ from wsireg.im_utils import (
     std_prepro,
     contrast_enhance,
     sitk_inv_int,
+    get_im_info,
+    guess_rgb,
+    transform_to_ome_tiff,
+    transform_to_ome_zarr,
 )
-
-SITK_TO_NP_DTYPE = {
-    0: np.int8,
-    1: np.uint8,
-    2: np.int16,
-    3: np.uint16,
-    4: np.int32,
-    5: np.uint32,
-    6: np.int64,
-    7: np.uint64,
-    8: np.float32,
-    9: np.float64,
-    10: np.complex64,
-    11: np.complex64,
-    12: np.int8,
-    13: np.uint8,
-    14: np.int16,
-    15: np.int16,
-    16: np.int32,
-    17: np.int32,
-    18: np.int64,
-    19: np.int64,
-    20: np.float32,
-    21: np.float64,
-    22: np.uint8,
-    23: np.uint16,
-    24: np.uint32,
-    25: np.uint64,
-}
-
-COLNAME_TO_HEX = {
-    "red": "FF0000",
-    "green": "00FF00",
-    "blue": "0000FF",
-    "magenta": "FF00FF",
-    "yellow": "FFFF00",
-    "cyan": "00FFFFF",
-    "white": "FFFFFF",
-}
 
 
 def sitk_pmap_to_dict(pmap):
@@ -378,24 +342,17 @@ def transform_2d_image(
     else:
         tfx = None
 
-    if tfx is None:
-        xy_final_size = np.array(image.GetSize(), dtype=np.uint32)
-    else:
-        xy_final_size = np.array(
-            transformation_maps[-1]["Size"], dtype=np.uint32
-        )
+    # if tfx is None:
+    #     xy_final_size = np.array(image.GetSize(), dtype=np.uint32)
+    # else:
+    #     xy_final_size = np.array(
+    #         transformation_maps[-1]["Size"], dtype=np.uint32
+    #     )
 
     if writer == "sitk" or writer is None:
         return transform_image_to_sitk(image, tfx)
     elif writer == "zarr":
-        return transform_image_to_ome_zarr(
-            image,
-            tfx,
-            xy_final_size,
-            zarr_store_dir=zarr_kwargs["zarr_store_dir"],
-            channel_names=zarr_kwargs["channel_names"],
-            channel_colors=zarr_kwargs["channel_colors"],
-        )
+        return
     else:
         raise ValueError("writer type {} not recognized".format(writer))
 
@@ -435,166 +392,403 @@ def transform_image_to_sitk(image, tfx):
     return image
 
 
-def calc_pyramid_levels(xy_final_shape):
-
-    res_shape = xy_final_shape[::-1]
-    res_shapes = [tuple(res_shape)]
-
-    while all(res_shape > 256):
-        res_shape = res_shape // 2
-        res_shapes.append(tuple(res_shape))
-
-    return res_shapes[:-1]
-
-
-def add_ome_axes_single_plane(image_np):
-    return image_np.reshape((1,) * (3) + image_np.shape)
-
-
-def generate_channels(channel_names, channel_colors, pixel_id_np):
-    channel_info = []
-    for channel_name, channel_color in zip(channel_names, channel_colors):
-        channel_info.append(
-            {
-                "label": channel_name,
-                "color": channel_color,
-                "active": True,
-                "window": {"start": 0, "end": int(np.iinfo(pixel_id_np).max)},
-            }
-        )
-    return channel_info
-
-
-def transform_image_to_ome_zarr(
-    image,
-    tfx,
-    xy_final_size,
-    zarr_store_dir="myzarr",
-    channel_names=None,
-    channel_colors=None,
-):
-
-    pixel_id = image.GetPixelID()
-    pixel_id_np = SITK_TO_NP_DTYPE.get(pixel_id)
-    zarr_dtype = "{}{}".format(
-        np.dtype(pixel_id_np).kind, np.dtype(pixel_id_np).itemsize
-    )
-
-    store = zarr.DirectoryStore(zarr_store_dir)
-    grp = zarr.group(store, overwrite=True)
-    pyr_levels = calc_pyramid_levels(xy_final_size[:2])
-
-    if pixel_id < 12 and image.GetDepth() == 0:
-        n_ch = 1
-    else:
-        n_ch = int(image.GetDepth())
-
-    if pixel_id >= 13:
-        n_ch = int(image.GetNumberOfComponentsPerPixel())
-
-    pyr_shapes = [(1, n_ch, 1, int(pl[0]), int(pl[1])) for pl in pyr_levels]
-
-    paths = []
-    for path, pyr_shape in enumerate(pyr_levels):
-        grp.create_dataset(
-            str(path),
-            shape=pyr_shapes[path],
-            dtype=zarr_dtype,
-            chunks=(1, 1, 1, 512, 512),
-        )
-        paths.append({"path": str(path)})
-
-    multiscales = [
-        {
-            "version": "0.1",
-            "datasets": paths,
-        }
-    ]
-    grp.attrs["multiscales"] = multiscales
-
-    if pixel_id in list(range(1, 13)) and image.GetDepth() == 0:
-        if tfx is not None:
-            tfx.SetMovingImage(image)
-            tformed_im = tfx.Execute()
-            tformed_im = sitk.Cast(tformed_im, pixel_id)
-        else:
-            tformed_im = image
-
-        for idx, path in enumerate(paths):
-            if idx > 0:
-                tformed_im = sitk.Shrink(tformed_im, (2, 2))
-
-            grp[str(idx)][:] = add_ome_axes_single_plane(
-                sitk.GetArrayFromImage(tformed_im)
-            )
-    elif pixel_id in list(range(1, 13)) and image.GetDepth() > 0:
-        for chan in range(image.GetDepth()):
-            if tfx is not None:
-                tfx.SetMovingImage(image[:, :, chan])
-                tformed_im = sitk.Cast(tfx.Execute(), pixel_id)
-            else:
-                tformed_im = image[:, :, chan]
-
-            for idx, path in enumerate(paths):
-                if idx > 0:
-                    tformed_im = sitk.Shrink(tformed_im, (2, 2))
-
-                grp[str(idx)][
-                    :, chan : chan + 1, :, :, :
-                ] = add_ome_axes_single_plane(
-                    sitk.GetArrayFromImage(tformed_im)
-                )
-            del tformed_im
-
-    elif pixel_id > 12:
-        for vec_idx in range(image.GetNumberOfComponentsPerPixel()):
-            tformed_im = sitk.VectorIndexSelectionCast(image, vec_idx)
-            pixel_id_nonvec = tformed_im.GetPixelID()
-            if tfx is not None:
-                tfx.SetMovingImage(tformed_im)
-                tformed_im = sitk.Cast(tfx.Execute(), pixel_id_nonvec)
-
-            for idx, path in enumerate(paths):
-                if idx > 0:
-                    tformed_im = sitk.Shrink(tformed_im, (2, 2))
-
-                grp[str(idx)][
-                    :, vec_idx : vec_idx + 1, :, :, :
-                ] = add_ome_axes_single_plane(
-                    sitk.GetArrayFromImage(tformed_im)
-                )
-            del tformed_im
-
-    if channel_names is None or n_ch != len(channel_names):
-        channel_names = ["C{}".format(idx) for idx in range(n_ch)]
-
-    n_colors = n_ch // len(COLNAME_TO_HEX) + 1
-    color_palette = [*COLNAME_TO_HEX] * n_colors
-
-    if channel_colors is None:
-        channel_colors = [color_palette[idx] for idx in range(n_ch)]
-    elif n_ch != len(channel_colors) and n_ch != 1:
-        channel_colors = [color_palette[idx] for idx in range(n_ch)]
-    elif n_ch != len(channel_colors) and n_ch == 1:
-        channel_colors = ["FFFFFF"]
-    else:
-        channel_colors = [COLNAME_TO_HEX[ch] for ch in channel_colors]
-
-    channel_info = generate_channels(
-        channel_names, channel_colors, pixel_id_np
-    )
-
-    image_data = {
-        'id': 1,
-        'channels': channel_info,
-        'rdefs': {
-            'model': 'color',
-        },
-    }
-
-    grp.attrs["omero"] = image_data
-
-    return zarr_store_dir
+#
+# def transform_image_to_ome_zarr(
+#     image,
+#     tfx,
+#     xy_final_size,
+#     zarr_store_dir="myzarr",
+#     channel_names=None,
+#     channel_colors=None,
+# ):
+#
+#     pixel_id = image.GetPixelID()
+#     pixel_id_np = SITK_TO_NP_DTYPE.get(pixel_id)
+#     zarr_dtype = "{}{}".format(
+#         np.dtype(pixel_id_np).kind, np.dtype(pixel_id_np).itemsize
+#     )
+#
+#     store = zarr.DirectoryStore(zarr_store_dir)
+#     grp = zarr.group(store, overwrite=True)
+#     pyr_levels = calc_pyramid_levels(xy_final_size[:2])
+#
+#     if pixel_id < 12 and image.GetDepth() == 0:
+#         n_ch = 1
+#     else:
+#         n_ch = int(image.GetDepth())
+#
+#     if pixel_id >= 13:
+#         n_ch = int(image.GetNumberOfComponentsPerPixel())
+#
+#     pyr_shapes = [(1, n_ch, 1, int(pl[0]), int(pl[1])) for pl in pyr_levels]
+#
+#     paths = []
+#     for path, pyr_shape in enumerate(pyr_levels):
+#         grp.create_dataset(
+#             str(path),
+#             shape=pyr_shapes[path],
+#             dtype=zarr_dtype,
+#             chunks=(1, 1, 1, 512, 512),
+#         )
+#         paths.append({"path": str(path)})
+#
+#     multiscales = [
+#         {
+#             "version": "0.1",
+#             "datasets": paths,
+#         }
+#     ]
+#     grp.attrs["multiscales"] = multiscales
+#
+#     if pixel_id in list(range(1, 13)) and image.GetDepth() == 0:
+#         if tfx is not None:
+#             tfx.SetMovingImage(image)
+#             tformed_im = tfx.Execute()
+#             tformed_im = sitk.Cast(tformed_im, pixel_id)
+#         else:
+#             tformed_im = image
+#
+#         for idx, path in enumerate(paths):
+#             if idx > 0:
+#                 tformed_im = sitk.Shrink(tformed_im, (2, 2))
+#
+#             grp[str(idx)][:] = add_ome_axes_single_plane(
+#                 sitk.GetArrayFromImage(tformed_im)
+#             )
+#     elif pixel_id in list(range(1, 13)) and image.GetDepth() > 0:
+#         for chan in range(image.GetDepth()):
+#             if tfx is not None:
+#                 tfx.SetMovingImage(image[:, :, chan])
+#                 tformed_im = sitk.Cast(tfx.Execute(), pixel_id)
+#             else:
+#                 tformed_im = image[:, :, chan]
+#
+#             for idx, path in enumerate(paths):
+#                 if idx > 0:
+#                     tformed_im = sitk.Shrink(tformed_im, (2, 2))
+#
+#                 grp[str(idx)][
+#                     :, chan : chan + 1, :, :, :
+#                 ] = add_ome_axes_single_plane(
+#                     sitk.GetArrayFromImage(tformed_im)
+#                 )
+#             del tformed_im
+#
+#     elif pixel_id > 12:
+#         for vec_idx in range(image.GetNumberOfComponentsPerPixel()):
+#             tformed_im = sitk.VectorIndexSelectionCast(image, vec_idx)
+#             pixel_id_nonvec = tformed_im.GetPixelID()
+#             if tfx is not None:
+#                 tfx.SetMovingImage(tformed_im)
+#                 tformed_im = sitk.Cast(tfx.Execute(), pixel_id_nonvec)
+#
+#             for idx, path in enumerate(paths):
+#                 if idx > 0:
+#                     tformed_im = sitk.Shrink(tformed_im, (2, 2))
+#
+#                 grp[str(idx)][
+#                     :, vec_idx : vec_idx + 1, :, :, :
+#                 ] = add_ome_axes_single_plane(
+#                     sitk.GetArrayFromImage(tformed_im)
+#                 )
+#             del tformed_im
+#
+#     if channel_names is None or n_ch != len(channel_names):
+#         channel_names = ["C{}".format(idx) for idx in range(n_ch)]
+#
+#     n_colors = n_ch // len(COLNAME_TO_HEX) + 1
+#     color_palette = [*COLNAME_TO_HEX] * n_colors
+#
+#     if channel_colors is None:
+#         channel_colors = [color_palette[idx] for idx in range(n_ch)]
+#     elif n_ch != len(channel_colors) and n_ch != 1:
+#         channel_colors = [color_palette[idx] for idx in range(n_ch)]
+#     elif n_ch != len(channel_colors) and n_ch == 1:
+#         channel_colors = ["FFFFFF"]
+#     else:
+#         channel_colors = [COLNAME_TO_HEX[ch] for ch in channel_colors]
+#
+#     channel_info = generate_channels(
+#         channel_names, channel_colors, pixel_id_np
+#     )
+#
+#     image_data = {
+#         'id': 1,
+#         'channels': channel_info,
+#         'rdefs': {
+#             'model': 'color',
+#         },
+#     }
+#
+#     grp.attrs["omero"] = image_data
+#
+#     return zarr_store_dir
+#
+#
+# def transform_image_to_ome_zarr(
+#     image,
+#     tfx,
+#     xy_final_size,
+#     zarr_store_dir="myzarr",
+#     channel_names=None,
+#     channel_colors=None,
+# ):
+#
+#     pixel_id = image.GetPixelID()
+#     pixel_id_np = SITK_TO_NP_DTYPE.get(pixel_id)
+#     zarr_dtype = "{}{}".format(
+#         np.dtype(pixel_id_np).kind, np.dtype(pixel_id_np).itemsize
+#     )
+#
+#     store = zarr.DirectoryStore(zarr_store_dir)
+#     grp = zarr.group(store, overwrite=True)
+#     pyr_levels = calc_pyramid_levels(xy_final_size[:2])
+#
+#     if pixel_id < 12 and image.GetDepth() == 0:
+#         n_ch = 1
+#     else:
+#         n_ch = int(image.GetDepth())
+#
+#     if pixel_id >= 13:
+#         n_ch = int(image.GetNumberOfComponentsPerPixel())
+#
+#     pyr_shapes = [(1, n_ch, 1, int(pl[0]), int(pl[1])) for pl in pyr_levels]
+#
+#     paths = []
+#     for path, pyr_shape in enumerate(pyr_levels):
+#         grp.create_dataset(
+#             str(path),
+#             shape=pyr_shapes[path],
+#             dtype=zarr_dtype,
+#             chunks=(1, 1, 1, 512, 512),
+#         )
+#         paths.append({"path": str(path)})
+#
+#     multiscales = [
+#         {
+#             "version": "0.1",
+#             "datasets": paths,
+#         }
+#     ]
+#     grp.attrs["multiscales"] = multiscales
+#
+#     if pixel_id in list(range(1, 13)) and image.GetDepth() == 0:
+#         if tfx is not None:
+#             tfx.SetMovingImage(image)
+#             tformed_im = tfx.Execute()
+#             tformed_im = sitk.Cast(tformed_im, pixel_id)
+#         else:
+#             tformed_im = image
+#
+#         for idx, path in enumerate(paths):
+#             if idx > 0:
+#                 tformed_im = sitk.Shrink(tformed_im, (2, 2))
+#
+#             grp[str(idx)][:] = add_ome_axes_single_plane(
+#                 sitk.GetArrayFromImage(tformed_im)
+#             )
+#     elif pixel_id in list(range(1, 13)) and image.GetDepth() > 0:
+#         for chan in range(image.GetDepth()):
+#             if tfx is not None:
+#                 tfx.SetMovingImage(image[:, :, chan])
+#                 tformed_im = sitk.Cast(tfx.Execute(), pixel_id)
+#             else:
+#                 tformed_im = image[:, :, chan]
+#
+#             for idx, path in enumerate(paths):
+#                 if idx > 0:
+#                     tformed_im = sitk.Shrink(tformed_im, (2, 2))
+#
+#                 grp[str(idx)][
+#                     :, chan : chan + 1, :, :, :
+#                 ] = add_ome_axes_single_plane(
+#                     sitk.GetArrayFromImage(tformed_im)
+#                 )
+#             del tformed_im
+#
+#     elif pixel_id > 12:
+#         for vec_idx in range(image.GetNumberOfComponentsPerPixel()):
+#             tformed_im = sitk.VectorIndexSelectionCast(image, vec_idx)
+#             pixel_id_nonvec = tformed_im.GetPixelID()
+#             if tfx is not None:
+#                 tfx.SetMovingImage(tformed_im)
+#                 tformed_im = sitk.Cast(tfx.Execute(), pixel_id_nonvec)
+#
+#             for idx, path in enumerate(paths):
+#                 if idx > 0:
+#                     tformed_im = sitk.Shrink(tformed_im, (2, 2))
+#
+#                 grp[str(idx)][
+#                     :, vec_idx : vec_idx + 1, :, :, :
+#                 ] = add_ome_axes_single_plane(
+#                     sitk.GetArrayFromImage(tformed_im)
+#                 )
+#             del tformed_im
+#
+#     if channel_names is None or n_ch != len(channel_names):
+#         channel_names = ["C{}".format(idx) for idx in range(n_ch)]
+#
+#     n_colors = n_ch // len(COLNAME_TO_HEX) + 1
+#     color_palette = [*COLNAME_TO_HEX] * n_colors
+#
+#     if channel_colors is None:
+#         channel_colors = [color_palette[idx] for idx in range(n_ch)]
+#     elif n_ch != len(channel_colors) and n_ch != 1:
+#         channel_colors = [color_palette[idx] for idx in range(n_ch)]
+#     elif n_ch != len(channel_colors) and n_ch == 1:
+#         channel_colors = ["FFFFFF"]
+#     else:
+#         channel_colors = [COLNAME_TO_HEX[ch] for ch in channel_colors]
+#
+#     channel_info = generate_channels(
+#         channel_names, channel_colors, pixel_id_np
+#     )
+#
+#     image_data = {
+#         'id': 1,
+#         'channels': channel_info,
+#         'rdefs': {
+#             'model': 'color',
+#         },
+#     }
+#
+#     grp.attrs["omero"] = image_data
+#
+#     return zarr_store_dir
+#
+#
+# def transform_image_to_ome_tiff(
+#     image,
+#     tfx,
+#     xy_final_size,
+#     zarr_store_dir="myzarr",
+#     channel_names=None,
+#     channel_colors=None,
+# ):
+#
+#     pixel_id = image.GetPixelID()
+#     pixel_id_np = SITK_TO_NP_DTYPE.get(pixel_id)
+#     zarr_dtype = "{}{}".format(
+#         np.dtype(pixel_id_np).kind, np.dtype(pixel_id_np).itemsize
+#     )
+#
+#     store = zarr.DirectoryStore(zarr_store_dir)
+#     grp = zarr.group(store, overwrite=True)
+#     pyr_levels = calc_pyramid_levels(xy_final_size[:2])
+#
+#     if pixel_id < 12 and image.GetDepth() == 0:
+#         n_ch = 1
+#     else:
+#         n_ch = int(image.GetDepth())
+#
+#     if pixel_id >= 13:
+#         n_ch = int(image.GetNumberOfComponentsPerPixel())
+#
+#     pyr_shapes = [(1, n_ch, 1, int(pl[0]), int(pl[1])) for pl in pyr_levels]
+#
+#     paths = []
+#     for path, pyr_shape in enumerate(pyr_levels):
+#         grp.create_dataset(
+#             str(path),
+#             shape=pyr_shapes[path],
+#             dtype=zarr_dtype,
+#             chunks=(1, 1, 1, 512, 512),
+#         )
+#         paths.append({"path": str(path)})
+#
+#     multiscales = [
+#         {
+#             "version": "0.1",
+#             "datasets": paths,
+#         }
+#     ]
+#     grp.attrs["multiscales"] = multiscales
+#     n_pyr_levels = len(paths)
+#
+#     if pixel_id in list(range(1, 13)) and image.GetDepth() == 0:
+#         if tfx is not None:
+#             tfx.SetMovingImage(image)
+#             tformed_im = tfx.Execute()
+#             tformed_im = sitk.Cast(tformed_im, pixel_id)
+#         else:
+#             tformed_im = image
+#
+#         for idx, path in enumerate(paths):
+#             if idx > 0:
+#                 tformed_im = sitk.Shrink(tformed_im, (2, 2))
+#
+#             grp[str(idx)][:] = add_ome_axes_single_plane(
+#                 sitk.GetArrayFromImage(tformed_im)
+#             )
+#     elif pixel_id in list(range(1, 13)) and image.GetDepth() > 0:
+#         for chan in range(image.GetDepth()):
+#             if tfx is not None:
+#                 tfx.SetMovingImage(image[:, :, chan])
+#                 tformed_im = sitk.Cast(tfx.Execute(), pixel_id)
+#             else:
+#                 tformed_im = image[:, :, chan]
+#
+#             for idx, path in enumerate(paths):
+#                 if idx > 0:
+#                     tformed_im = sitk.Shrink(tformed_im, (2, 2))
+#
+#                 grp[str(idx)][
+#                     :, chan : chan + 1, :, :, :
+#                 ] = add_ome_axes_single_plane(
+#                     sitk.GetArrayFromImage(tformed_im)
+#                 )
+#             del tformed_im
+#
+#     elif pixel_id > 12:
+#         for vec_idx in range(image.GetNumberOfComponentsPerPixel()):
+#             tformed_im = sitk.VectorIndexSelectionCast(image, vec_idx)
+#             pixel_id_nonvec = tformed_im.GetPixelID()
+#             if tfx is not None:
+#                 tfx.SetMovingImage(tformed_im)
+#                 tformed_im = sitk.Cast(tfx.Execute(), pixel_id_nonvec)
+#
+#             for idx, path in enumerate(paths):
+#                 if idx > 0:
+#                     tformed_im = sitk.Shrink(tformed_im, (2, 2))
+#
+#                 grp[str(idx)][
+#                     :, vec_idx : vec_idx + 1, :, :, :
+#                 ] = add_ome_axes_single_plane(
+#                     sitk.GetArrayFromImage(tformed_im)
+#                 )
+#             del tformed_im
+#
+#     if channel_names is None or n_ch != len(channel_names):
+#         channel_names = ["C{}".format(idx) for idx in range(n_ch)]
+#
+#     n_colors = n_ch // len(COLNAME_TO_HEX) + 1
+#     color_palette = [*COLNAME_TO_HEX] * n_colors
+#
+#     if channel_colors is None:
+#         channel_colors = [color_palette[idx] for idx in range(n_ch)]
+#     elif n_ch != len(channel_colors) and n_ch != 1:
+#         channel_colors = [color_palette[idx] for idx in range(n_ch)]
+#     elif n_ch != len(channel_colors) and n_ch == 1:
+#         channel_colors = ["FFFFFF"]
+#     else:
+#         channel_colors = [COLNAME_TO_HEX[ch] for ch in channel_colors]
+#
+#     channel_info = generate_channels(
+#         channel_names, channel_colors, pixel_id_np
+#     )
+#
+#     image_data = {
+#         'id': 1,
+#         'channels': channel_info,
+#         'rdefs': {
+#             'model': 'color',
+#         },
+#     }
+#
+#     grp.attrs["omero"] = image_data
+#
+#     return zarr_store_dir
+#
 
 
 def apply_transform_dict(
@@ -1056,59 +1250,103 @@ class RegImage:
                     self.mask, self.image_res, imported_transforms
                 )
             self.transforms.append(imported_transforms)
-
-        if "mask_bbox" in spatial_preprocessing:
-            bbox = spatial_preprocessing["mask_bbox"]
-            self.image = self.image[
-                bbox[0] : bbox[0] + bbox[2], bbox[1] : bbox[3]
-            ]
-            if self.mask is not None:
-                self.mask = self.mask[
+        if spatial_preprocessing is not None:
+            if spatial_preprocessing.get("mask_bbox") is not None:
+                bbox = spatial_preprocessing["mask_bbox"]
+                self.image = self.image[
                     bbox[0] : bbox[0] + bbox[2], bbox[1] : bbox[3]
                 ]
-            self.transforms.append({"mask_bbox": bbox})
+                if self.mask is not None:
+                    self.mask = self.mask[
+                        bbox[0] : bbox[0] + bbox[2], bbox[1] : bbox[3]
+                    ]
+                self.transforms.append({"mask_bbox": bbox})
 
-        if spatial_preprocessing.get("rot_cc") is not None:
-            rotangle = spatial_preprocessing["rot_cc"]
-            if rotangle is not None and rotangle != 0:
-                print(f"rotating counter-clockwise {rotangle}")
-                # self.image.SetSpacing((self.image_res, self.image_res))
-                rot_tform = gen_rigid_tform_rot(
-                    self.image, self.image_res, rotangle
+            if spatial_preprocessing.get("rot_cc") is not None:
+                rotangle = spatial_preprocessing["rot_cc"]
+                if rotangle is not None and rotangle != 0:
+                    print(f"rotating counter-clockwise {rotangle}")
+                    # self.image.SetSpacing((self.image_res, self.image_res))
+                    rot_tform = gen_rigid_tform_rot(
+                        self.image, self.image_res, rotangle
+                    )
+                    self.image = transform_2d_image(self.image, [rot_tform])
+
+                    if self.mask is not None:
+                        self.mask = transform_2d_image(self.mask, [rot_tform])
+
+                    self.transforms.append(rot_tform)
+
+            if spatial_preprocessing.get("flip") is not None:
+                flip_direction = spatial_preprocessing["flip"]
+                if flip_direction != "None" and flip_direction is not None:
+                    print(f"flipping image {flip_direction}")
+
+                    flip_tform = gen_aff_tform_flip(
+                        self.image, self.image_res, flip_direction
+                    )
+                    # image.SetSpacing((self.image_res, self.image_res))
+                    self.image = transform_2d_image(self.image, [flip_tform])
+
+                    if self.mask is not None:
+                        self.mask = transform_2d_image(self.mask, [flip_tform])
+
+                    self.transforms.append(flip_tform)
+
+            downsampling = spatial_preprocessing.get("downsample")
+            # downsample single plane preprocessing
+            if downsampling is not None and downsampling > 1:
+                print(
+                    "performing downsampling by factor: {}".format(
+                        downsampling
+                    )
                 )
-                self.image = transform_2d_image(self.image, [rot_tform])
+                self.image.SetSpacing((self.image_res, self.image_res))
+                self.image = sitk.Shrink(
+                    self.image, (downsampling, downsampling)
+                )
 
                 if self.mask is not None:
-                    self.mask = transform_2d_image(self.mask, [rot_tform])
 
-                self.transforms.append(rot_tform)
+                    self.mask.SetSpacing((self.image_res, self.image_res))
+                    self.mask = sitk.Shrink(
+                        self.mask, (downsampling, downsampling)
+                    )
 
-        if spatial_preprocessing.get("flip") is not None:
-            flip_direction = spatial_preprocessing["flip"]
-            if flip_direction != "None" and flip_direction is not None:
-                print(f"flipping image {flip_direction}")
 
-                flip_tform = gen_aff_tform_flip(
-                    self.image, self.image_res, flip_direction
-                )
-                # image.SetSpacing((self.image_res, self.image_res))
-                self.image = transform_2d_image(self.image, [flip_tform])
+class TransformRegImage(RegImage):
+    def __init__(
+        self,
+        image_name,
+        image_fp,
+        image_res,
+        tform_dict,
+        spatial_preprocessing=None,
+        transforms=None,
+        channel_names=None,
+        channel_colors=None,
+    ):
+        self.image_name = image_name
+        self.image_filepath = image_fp
+        self.image_res = image_res
+        self.tform_dict = tform_dict
 
-                if self.mask is not None:
-                    self.mask = transform_2d_image(self.mask, [flip_tform])
+        self.spatial_prepro = spatial_preprocessing
+        self.transforms = transforms
+        im_dims, self.im_dtype, self.reader = get_im_info(self.image_filepath)
+        self.im_dims = tuple(im_dims)
+        self.is_rgb = guess_rgb(self.im_dims)
+        self.mask = None
 
-                self.transforms.append(flip_tform)
+        self.channel_names = channel_names
+        self.channel_colors = channel_colors
 
-        downsampling = spatial_preprocessing.get("downsample")
-        # downsample single plane preprocessing
-        if downsampling is not None and downsampling > 1:
-            print("performing downsampling by factor: {}".format(downsampling))
-            self.image.SetSpacing((self.image_res, self.image_res))
-            self.image = sitk.Shrink(self.image, (downsampling, downsampling))
+    def transform_image(
+        self, output_dir, output_type="ome.tiff", tile_size=512
+    ):
+        if output_type == "ome.zarr" or output_type == "zarr":
+            im_fp = transform_to_ome_zarr(self, output_dir, tile_size)
+        if output_type == "ome.tiff":
+            im_fp = transform_to_ome_tiff(self, output_dir, tile_size)
 
-            if self.mask is not None:
-
-                self.mask.SetSpacing((self.image_res, self.image_res))
-                self.mask = sitk.Shrink(
-                    self.mask, (downsampling, downsampling)
-                )
+        return im_fp
