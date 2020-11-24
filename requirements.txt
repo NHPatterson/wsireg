@@ -1,7 +1,7 @@
 numpy
 opencv-python
 czifile
-tifffile>=2020.7.24
+tifffile>=2020.10.1
 imagecodecs
 lxml
 geojson

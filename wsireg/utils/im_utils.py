@@ -425,10 +425,9 @@ def tf_zarr_read_single_ch(image_filepath, channel_idx, is_rgb):
         imread(image_filepath, aszarr=True, series=largest_series)
     )
     zarr_im = zarr_get_base_pyr_layer(zarr_im)
-
     try:
         im = da.squeeze(da.from_zarr(zarr_im))
-        if is_rgb is True:
+        if is_rgb:
             im = im[:, :, channel_idx].compute()
         elif len(im.shape) > 2:
             im = im[channel_idx, :, :].compute()
@@ -443,7 +442,6 @@ def tf_zarr_read_single_ch(image_filepath, channel_idx, is_rgb):
             im = im[channel_idx, :, :].compute()
         else:
             im = im.compute()
-
     return im
 
 
@@ -640,8 +638,8 @@ def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size):
             if tform_reg_im.reader == "tifffile":
                 tform_reg_im.image = tf_zarr_read_single_ch(
                     tform_reg_im.image_filepath,
-                    tform_reg_im.is_rgb,
                     channel_idx,
+                    tform_reg_im.is_rgb,
                 )
                 tform_reg_im.image = np.squeeze(tform_reg_im.image)
             elif tform_reg_im.reader == "czi":
@@ -718,7 +716,9 @@ def transform_to_ome_tiff(tform_reg_im, output_dir, tile_size):
         Name=tform_reg_im.image_name,
         Channel=None if tform_reg_im.is_rgb else {"Name": channel_names},
     )
-
+    print(n_ch)
+    print(omexml)
+    rgb_im_data = []
     if tform_reg_im.reader in ["tifffile", "czi"]:
         print(f"saving to {output_file_name}.ome.tiff")
         with TiffWriter(f"{output_file_name}.ome.tiff", bigtiff=True) as tif:
@@ -726,10 +726,11 @@ def transform_to_ome_tiff(tform_reg_im, output_dir, tile_size):
                 if tform_reg_im.reader == "tifffile":
                     tform_reg_im.image = tf_zarr_read_single_ch(
                         tform_reg_im.image_filepath,
-                        tform_reg_im.is_rgb,
                         channel_idx,
+                        tform_reg_im.is_rgb,
                     )
                     tform_reg_im.image = np.squeeze(tform_reg_im.image)
+
                 elif tform_reg_im.reader == "czi":
                     tform_reg_im.image = czi_read_single_ch(
                         tform_reg_im.image_filepath, channel_idx
@@ -754,7 +755,55 @@ def transform_to_ome_tiff(tform_reg_im, output_dir, tile_size):
                     writer="sitk",
                 )
 
-                tform_reg_im.image = sitk.GetArrayFromImage(tform_reg_im.image)
+                if tform_reg_im.is_rgb:
+                    rgb_im_data.append(tform_reg_im.image)
+                else:
+                    print("saving")
+
+                    tform_reg_im.image = sitk.GetArrayFromImage(
+                        tform_reg_im.image
+                    )
+
+                    options = dict(
+                        tile=(tile_size, tile_size),
+                        compression="jpeg" if tform_reg_im.is_rgb else None,
+                        photometric="rgb"
+                        if tform_reg_im.is_rgb
+                        else "minisblack",
+                        metadata=None,
+                    )
+                    # write OME-XML to the ImageDescription tag of the first page
+                    description = omexml if channel_idx == 0 else None
+
+                    # write channel data
+                    tif.write(
+                        tform_reg_im.image,
+                        subifds=n_pyr_levels - 1,
+                        description=description,
+                        **options,
+                    )
+
+                    print(
+                        f"channel {channel_idx} shape: {tform_reg_im.image.shape}"
+                    )
+
+                    for pyr_idx in range(1, n_pyr_levels):
+                        resize_shape = (
+                            pyr_levels[pyr_idx][0],
+                            pyr_levels[pyr_idx][1],
+                        )
+                        tform_reg_im.image = cv2.resize(
+                            tform_reg_im.image, resize_shape, cv2.INTER_LINEAR
+                        )
+                        print(
+                            f"pyr {pyr_idx} : channel {channel_idx} shape: {tform_reg_im.image.shape}"
+                        )
+
+                        tif.write(tform_reg_im.image, **options, subfiletype=1)
+
+            if tform_reg_im.is_rgb:
+                rgb_im_data = sitk.Compose(rgb_im_data)
+                rgb_im_data = sitk.GetArrayFromImage(rgb_im_data)
 
                 options = dict(
                     tile=(tile_size, tile_size),
@@ -763,33 +812,30 @@ def transform_to_ome_tiff(tform_reg_im, output_dir, tile_size):
                     metadata=None,
                 )
                 # write OME-XML to the ImageDescription tag of the first page
-                description = omexml if channel_idx == 0 else None
+                description = omexml
 
                 # write channel data
                 tif.write(
-                    tform_reg_im.image,
+                    rgb_im_data,
                     subifds=n_pyr_levels - 1,
                     description=description,
                     **options,
                 )
 
-                print(
-                    f"channel {channel_idx} shape: {tform_reg_im.image.shape}"
-                )
+                print(f"RGB shape: {rgb_im_data.shape}")
 
                 for pyr_idx in range(1, n_pyr_levels):
                     resize_shape = (
                         pyr_levels[pyr_idx][0],
                         pyr_levels[pyr_idx][1],
                     )
-                    tform_reg_im.image = cv2.resize(
-                        tform_reg_im.image, resize_shape, cv2.INTER_LINEAR
+                    rgb_im_data = cv2.resize(
+                        rgb_im_data, resize_shape, cv2.INTER_LINEAR
                     )
-                    print(
-                        f"pyr {pyr_idx} : channel {channel_idx} shape: {tform_reg_im.image.shape}"
-                    )
+                    print(f"pyr {pyr_idx} : RGB , shape: {rgb_im_data.shape}")
 
-                    tif.write(tform_reg_im.image, **options, subfiletype=1)
+                    tif.write(rgb_im_data, **options, subfiletype=1)
+
     return f"{output_file_name}.ome.tiff"
 
 
