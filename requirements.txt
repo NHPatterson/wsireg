@@ -7,4 +7,6 @@ lxml
 geojson
 pyYAML
 zarr
+toolz
 dask
+fsspec
