@@ -690,7 +690,9 @@ def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size):
     return f"{output_file_name}.ome.zarr"
 
 
-def transform_to_ome_tiff(tform_reg_im, output_dir, tile_size):
+def transform_to_ome_tiff(
+    tform_reg_im, output_dir, tile_size, write_pyramid=True
+):
     y_size, x_size = get_final_yx_from_tform(tform_reg_im)
 
     n_ch = (
@@ -716,8 +718,7 @@ def transform_to_ome_tiff(tform_reg_im, output_dir, tile_size):
         Name=tform_reg_im.image_name,
         Channel=None if tform_reg_im.is_rgb else {"Name": channel_names},
     )
-    print(n_ch)
-    print(omexml)
+
     rgb_im_data = []
     if tform_reg_im.reader in ["tifffile", "czi"]:
         print(f"saving to {output_file_name}.ome.tiff")
@@ -786,20 +787,24 @@ def transform_to_ome_tiff(tform_reg_im, output_dir, tile_size):
                     print(
                         f"channel {channel_idx} shape: {tform_reg_im.image.shape}"
                     )
+                    if write_pyramid:
+                        for pyr_idx in range(1, n_pyr_levels):
+                            resize_shape = (
+                                pyr_levels[pyr_idx][0],
+                                pyr_levels[pyr_idx][1],
+                            )
+                            tform_reg_im.image = cv2.resize(
+                                tform_reg_im.image,
+                                resize_shape,
+                                cv2.INTER_LINEAR,
+                            )
+                            print(
+                                f"pyr {pyr_idx} : channel {channel_idx} shape: {tform_reg_im.image.shape}"
+                            )
 
-                    for pyr_idx in range(1, n_pyr_levels):
-                        resize_shape = (
-                            pyr_levels[pyr_idx][0],
-                            pyr_levels[pyr_idx][1],
-                        )
-                        tform_reg_im.image = cv2.resize(
-                            tform_reg_im.image, resize_shape, cv2.INTER_LINEAR
-                        )
-                        print(
-                            f"pyr {pyr_idx} : channel {channel_idx} shape: {tform_reg_im.image.shape}"
-                        )
-
-                        tif.write(tform_reg_im.image, **options, subfiletype=1)
+                            tif.write(
+                                tform_reg_im.image, **options, subfiletype=1
+                            )
 
             if tform_reg_im.is_rgb:
                 rgb_im_data = sitk.Compose(rgb_im_data)
@@ -823,18 +828,20 @@ def transform_to_ome_tiff(tform_reg_im, output_dir, tile_size):
                 )
 
                 print(f"RGB shape: {rgb_im_data.shape}")
+                if write_pyramid:
+                    for pyr_idx in range(1, n_pyr_levels):
+                        resize_shape = (
+                            pyr_levels[pyr_idx][0],
+                            pyr_levels[pyr_idx][1],
+                        )
+                        rgb_im_data = cv2.resize(
+                            rgb_im_data, resize_shape, cv2.INTER_LINEAR
+                        )
+                        print(
+                            f"pyr {pyr_idx} : RGB , shape: {rgb_im_data.shape}"
+                        )
 
-                for pyr_idx in range(1, n_pyr_levels):
-                    resize_shape = (
-                        pyr_levels[pyr_idx][0],
-                        pyr_levels[pyr_idx][1],
-                    )
-                    rgb_im_data = cv2.resize(
-                        rgb_im_data, resize_shape, cv2.INTER_LINEAR
-                    )
-                    print(f"pyr {pyr_idx} : RGB , shape: {rgb_im_data.shape}")
-
-                    tif.write(rgb_im_data, **options, subfiletype=1)
+                        tif.write(rgb_im_data, **options, subfiletype=1)
 
     return f"{output_file_name}.ome.tiff"
 

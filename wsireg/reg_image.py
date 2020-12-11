@@ -262,11 +262,17 @@ class TransformRegImage(RegImage):
         self.channel_colors = channel_colors
 
     def transform_image(
-        self, output_dir, output_type="ome.tiff", tile_size=512
+        self,
+        output_dir,
+        output_type="ome.tiff",
+        tile_size=512,
+        write_pyramid=True,
     ):
         if output_type == "ome.zarr" or output_type == "zarr":
             im_fp = transform_to_ome_zarr(self, output_dir, tile_size)
         if output_type == "ome.tiff":
-            im_fp = transform_to_ome_tiff(self, output_dir, tile_size)
+            im_fp = transform_to_ome_tiff(
+                self, output_dir, tile_size, write_pyramid=write_pyramid
+            )
 
         return im_fp
