@@ -718,6 +718,7 @@ def transform_to_ome_tiff(
         Name=tform_reg_im.image_name,
         Channel=None if tform_reg_im.is_rgb else {"Name": channel_names},
     )
+    subifds = n_pyr_levels - 1 if write_pyramid is True else None
 
     rgb_im_data = []
     if tform_reg_im.reader in ["tifffile", "czi"]:
@@ -775,11 +776,10 @@ def transform_to_ome_tiff(
                     )
                     # write OME-XML to the ImageDescription tag of the first page
                     description = omexml if channel_idx == 0 else None
-
                     # write channel data
                     tif.write(
                         tform_reg_im.image,
-                        subifds=n_pyr_levels - 1,
+                        subifds=subifds,
                         description=description,
                         **options,
                     )
@@ -822,7 +822,7 @@ def transform_to_ome_tiff(
                 # write channel data
                 tif.write(
                     rgb_im_data,
-                    subifds=n_pyr_levels - 1,
+                    subifds=subifds,
                     description=description,
                     **options,
                 )
