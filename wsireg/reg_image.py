@@ -1,5 +1,6 @@
 from pathlib import Path
 import SimpleITK as sitk
+import itk
 from wsireg.utils.im_utils import (
     read_image,
     std_prepro,
@@ -9,12 +10,17 @@ from wsireg.utils.im_utils import (
     guess_rgb,
     transform_to_ome_tiff,
     transform_to_ome_zarr,
+    prepare_np_image,
 )
 from wsireg.utils.tform_utils import (
-    apply_transform_dict,
-    transform_2d_image,
+    transform_2d_image_itkelx,
     gen_aff_tform_flip,
     gen_rigid_tform_rot,
+    wsireg_transforms_to_itk_composite,
+)
+from wsireg.utils.reg_utils import json_to_pmap_dict
+from wsireg.utils.itk_im_conversions import (
+    sitk_image_to_itk_image,
 )
 
 
@@ -29,19 +35,24 @@ class RegImage:
 
     Parameters
     ----------
-    image_fp : str
-        filepath to image to be processed
-    spacing : float
+    image : str or np.array
+        filepath to image to be processed or a numpy array of the image
+    image_res : float
         Physical spacing (xy resolution) of the image (units are assumed to be the same for each image in experiment but are not
         defined)
         Does not yet support isotropic resolution
     prepro_dict : dict
         preprocessing dict to apply to image
+    transforms:list
+        list of elastix transformation data to apply to an image during preprocessing
+    mask : str or np.ndarray
+        filepath of a mask image to be processed or a numpy array of the mask
+        all values => 1 are considered WITHIN the mask
     """
 
     def __init__(
         self,
-        image_fp,
+        image,
         image_res,
         prepro_dict={
             "image_type": "FL",
@@ -51,24 +62,34 @@ class RegImage:
         transforms=None,
         mask=None,
     ):
+        if isinstance(image, str):
+            self.image = Path(image)
+        else:
+            self.image = image
 
-        self.image_filepath = Path(image_fp)
         self.image_res = image_res
         self.preprocessing = std_prepro()
-        self.transforms = []
-        self.mask = mask
+        self.transforms = [] if transforms is None else transforms
+
+        if mask is not None:
+            if isinstance(mask, str):
+                self.mask = read_image(mask, preprocessing=None)
+            else:
+                self.mask = prepare_np_image(mask, preprocessing=None)
+            self.mask.SetSpacing((self.image_res, self.image_res))
+        else:
+            self.mask = None
 
         if prepro_dict is None:
-            self.image = read_image(self.image_filepath, preprocessing=None)
+            if isinstance(self.image, Path):
+                self.image = read_image(self.image, preprocessing=None)
+            else:
+                self.image = prepare_np_image(self.image, preprocessing=None)
 
             if self.image.GetDepth() > 0:
                 self.image.SetSpacing((self.image_res, self.image_res, 1))
             else:
                 self.image.SetSpacing((self.image_res, self.image_res))
-
-            if self.mask is not None:
-                self.mask = read_image(self.mask, preprocessing=None)
-                self.mask.SetSpacing((self.image_res, self.image_res))
 
         else:
 
@@ -79,12 +100,8 @@ class RegImage:
                 self.image,
                 spatial_preprocessing,
             ) = self.preprocess_reg_image_intensity(
-                str(self.image_filepath), self.preprocessing
+                self.image, self.preprocessing
             )
-
-            if self.mask is not None:
-                self.mask = read_image(str(self.mask), preprocessing=None)
-                self.mask.SetSpacing((self.image_res, self.image_res))
 
             if self.image.GetDepth() >= 1:
                 raise ValueError(
@@ -103,9 +120,13 @@ class RegImage:
         if self.mask is not None:
             self.mask.SetOrigin((0, 0))
 
-    def preprocess_reg_image_intensity(self, image_fp, preprocessing):
+        self.pixel_id = self.image.GetPixelID()
 
-        image = read_image(image_fp, preprocessing)
+    def preprocess_reg_image_intensity(self, image, preprocessing):
+        if isinstance(image, Path):
+            image = read_image(str(image), preprocessing=preprocessing)
+        else:
+            image = prepare_np_image(image, preprocessing=preprocessing)
 
         # separate spatial preprocessing from intensity preprocessing
         spatial_preprocessing = {}
@@ -162,11 +183,11 @@ class RegImage:
         # spatial preprocessing:
         # imported transforms -> Masking -> rotation -> flipping
         if imported_transforms is not None:
-            self.image = apply_transform_dict(
+            self.image = transform_2d_image_itkelx(
                 self.image, self.image_res, imported_transforms
             )
             if self.mask is not None:
-                self.mask = apply_transform_dict(
+                self.mask = transform_2d_image_itkelx(
                     self.mask, self.image_res, imported_transforms
                 )
             self.transforms.append(imported_transforms)
@@ -190,10 +211,14 @@ class RegImage:
                     rot_tform = gen_rigid_tform_rot(
                         self.image, self.image_res, rotangle
                     )
-                    self.image = transform_2d_image(self.image, [rot_tform])
+                    self.image = transform_2d_image_itkelx(
+                        self.image, [rot_tform]
+                    )
 
                     if self.mask is not None:
-                        self.mask = transform_2d_image(self.mask, [rot_tform])
+                        self.mask = transform_2d_image_itkelx(
+                            self.mask, [rot_tform]
+                        )
 
                     self.transforms.append(rot_tform)
 
@@ -206,15 +231,19 @@ class RegImage:
                         self.image, self.image_res, flip_direction
                     )
                     # image.SetSpacing((self.image_res, self.image_res))
-                    self.image = transform_2d_image(self.image, [flip_tform])
+                    self.image = transform_2d_image_itkelx(
+                        self.image, [flip_tform]
+                    )
 
                     if self.mask is not None:
-                        self.mask = transform_2d_image(self.mask, [flip_tform])
+                        self.mask = transform_2d_image_itkelx(
+                            self.mask, [flip_tform]
+                        )
 
                     self.transforms.append(flip_tform)
 
             downsampling = spatial_preprocessing.get("downsample")
-            # downsample single plane preprocessing
+
             if downsampling is not None and downsampling > 1:
                 print(
                     "performing downsampling by factor: {}".format(
@@ -233,33 +262,84 @@ class RegImage:
                         self.mask, (downsampling, downsampling)
                     )
 
+    def sitk_to_itk(self, cast_to_float32=True):
+        self.image = sitk_image_to_itk_image(
+            self.image, cast_to_float32=cast_to_float32
+        )
+        if self.mask is not None:
+            self.mask = sitk_image_to_itk_image(
+                self.mask, cast_to_float32=False
+            )
+            mask_im_type = itk.Image[itk.UC, 2]
+            self.mask = itk.binary_threshold_image_filter(
+                self.mask,
+                lower_threshold=1,
+                inside_value=1,
+                ttype=(type(self.mask), mask_im_type),
+            )
+
 
 class TransformRegImage(RegImage):
+    """
+    Extension of RegImage for performing transformation and outputting to OME-TIFF or OME-zarr
+
+    Parameters
+    ----------
+    image_name: str
+        Name of the image to be used when outputting the data
+    image_fp: str
+        filepath to the image data
+    image_res : float
+        Physical spacing (xy resolution) of the image (units are assumed to be the same for each image in experiment but are not
+        defined)
+        Does not yet support isotropic resolution
+    transform_data:list
+        list of wsireg elastix transforms
+    transforms
+    channel_names
+    channel_colors
+
+    """
+
     def __init__(
         self,
         image_name,
         image_fp,
         image_res,
-        tform_dict,
-        spatial_preprocessing=None,
-        transforms=None,
+        spatial_preprocessing = None,
+        transform_data=None,
         channel_names=None,
         channel_colors=None,
     ):
+        """"""
         self.image_name = image_name
         self.image_filepath = image_fp
         self.image_res = image_res
-        self.tform_dict = tform_dict
+        self.transform_data = transform_data
 
-        self.spatial_prepro = spatial_preprocessing
-        self.transforms = transforms
         im_dims, self.im_dtype, self.reader = get_im_info(self.image_filepath)
         self.im_dims = tuple(im_dims)
         self.is_rgb = guess_rgb(self.im_dims)
         self.mask = None
 
+        self.spatial_prepro = spatial_preprocessing
+        self.transforms = None
+
         self.channel_names = channel_names
         self.channel_colors = channel_colors
+
+        if isinstance(self.transform_data, str) is True:
+            self.transform_data = json_to_pmap_dict(self.transform_data)
+        if self.transform_data is not None:
+            (
+                self.composite_transform,
+                self.itk_transforms,
+            ) = wsireg_transforms_to_itk_composite(self.transform_data)
+            self.final_tform = self.itk_transforms[-1]
+        else:
+            self.final_tform = None
+            self.itk_transforms = None
+            self.composite_transform = None
 
     def transform_image(
         self,
@@ -268,11 +348,33 @@ class TransformRegImage(RegImage):
         tile_size=512,
         write_pyramid=True,
     ):
-        if output_type == "ome.zarr" or output_type == "zarr":
+        """
+        Method to transform the image. Will attempt to write layer-by-layer where possible
+
+        Parameters
+        ----------
+        output_dir:str
+            directory where outputs will be saved
+        output_type:str
+            "ome.zarr" or "ome.tiff"
+        tile_size: int
+            size of the tiles in the pyramid, default 512
+        write_pyramid:bool
+            whether to write sub-resolutions of the image
+
+        Returns
+        -------
+        im_fp:str
+            filepath to the saved data
+        """
+        if output_type.lower() == "ome.zarr" or output_type.lower() == "zarr":
             im_fp = transform_to_ome_zarr(self, output_dir, tile_size)
-        if output_type == "ome.tiff":
+        if output_type.lower() == "ome.tiff":
             im_fp = transform_to_ome_tiff(
-                self, output_dir, tile_size, write_pyramid=write_pyramid
+                self,
+                output_dir,
+                tile_size,
+                write_pyramid=write_pyramid,
             )
 
         return im_fp
