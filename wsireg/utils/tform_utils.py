@@ -1,9 +1,43 @@
+from pathlib import Path
+import json
 import numpy as np
+import itk
 import SimpleITK as sitk
+from wsireg.utils.itk_im_conversions import (
+    sitk_image_to_itk_image,
+    itk_image_to_sitk_image,
+)
 from wsireg.parameter_maps.transformations import (
     BASE_RIG_TFORM,
     BASE_AFF_TFORM,
 )
+
+
+NUMERIC_ELX_PARAMETERS = {
+    "CenterOfRotationPoint": np.float64,
+    "DefaultPixelValue": np.float64,
+    "Direction": np.float64,
+    "FixedImageDimension": np.int64,
+    "Index": np.int64,
+    "MovingImageDimension": np.int64,
+    "NumberOfParameters": np.int64,
+    "Origin": np.float64,
+    "Size": np.int64,
+    "Spacing": np.float64,
+    "TransformParameters": np.float64,
+}
+
+ELX_LINEAR_TRANSFORMS = [
+    "AffineTransform",
+    "EulerTransform",
+    "SimilarityTransform",
+]
+
+ELX_TO_ITK_INTERPOLATORS = {
+    "FinalNearestNeighborInterpolator": sitk.sitkNearestNeighbor,
+    "FinalLinearInterpolator": sitk.sitkLinear,
+    "FinalBSplineInterpolator": sitk.sitkBSpline,
+}
 
 
 def prepare_tform_dict(tform_dict, shape_tform=False):
@@ -26,8 +60,7 @@ def prepare_tform_dict(tform_dict, shape_tform=False):
 
     return tform_dict_out
 
-
-def transform_2d_image(
+def transform_2d_image_itkelx(
     image, transformation_maps, writer="sitk", **zarr_kwargs
 ):
     """
@@ -47,11 +80,7 @@ def transform_2d_image(
     Transformed SimpleITK.Image
     """
     if transformation_maps is not None:
-
-        try:
-            tfx = sitk.TransformixImageFilter()
-        except AttributeError:
-            tfx = sitk.SimpleTransformix()
+        tfx = itk.TransformixFilter.New()
 
         # TODO: add mask cropping here later
 
@@ -66,6 +95,7 @@ def transform_2d_image(
         #     image.SetOrigin(tuple([int(i) for i in origin]))
 
         # else:
+        transform_pobj = itk.ParameterObject.New()
         for idx, tmap in enumerate(transformation_maps):
             if isinstance(tmap, str):
                 tmap = sitk.ReadParameterFile(tmap)
@@ -74,13 +104,13 @@ def transform_2d_image(
                 tmap["InitialTransformParametersFileName"] = (
                     "NoInitialTransform",
                 )
-                tfx.SetTransformParameterMap(tmap)
+                transform_pobj.AddParameterMap(tmap)
             else:
                 tmap["InitialTransformParametersFileName"] = (
                     "NoInitialTransform",
                 )
-
-                tfx.AddTransformParameterMap(tmap)
+                transform_pobj.AddParameterMap(tmap)
+        tfx.SetTransformParameterObject(transform_pobj)
         tfx.LogToConsoleOn()
         tfx.LogToFileOff()
     else:
@@ -94,7 +124,7 @@ def transform_2d_image(
     #     )
 
     if writer == "sitk" or writer is None:
-        return transform_image_to_sitk(image, tfx)
+        return transform_image_itkelx_to_sitk(image, tfx)
     elif writer == "zarr":
         return
     else:
@@ -136,7 +166,57 @@ def transform_image_to_sitk(image, tfx):
     return image
 
 
-def apply_transform_dict(
+def transform_image_itkelx_to_sitk(image, tfx):
+
+    # manage transformation/casting if data is multichannel or RGB
+    # data is always returned in the same PixelIDType as it is entered
+
+    pixel_id = image.GetPixelID()
+    if tfx is not None:
+        if pixel_id in list(range(1, 13)) and image.GetDepth() == 0:
+            image = sitk_image_to_itk_image(image, cast_to_float32=True)
+            tfx.SetMovingImage(image)
+            tfx.UpdateLargestPossibleRegion()
+            image = tfx.GetOutput()
+            image = itk_image_to_sitk_image(image)
+            image = sitk.Cast(image, pixel_id)
+
+        elif pixel_id in list(range(1, 13)) and image.GetDepth() > 0:
+            images = []
+            for chan in range(image.GetDepth()):
+                image = sitk_image_to_itk_image(
+                    image[:, :, chan], cast_to_float32=True
+                )
+                tfx.SetMovingImage(image)
+                tfx.UpdateLargestPossibleRegion()
+                image = tfx.GetOutput()
+                image = itk_image_to_sitk_image(image)
+                image = sitk.Cast(image, pixel_id)
+                images.append(image)
+            image = sitk.JoinSeries(images)
+            image = sitk.Cast(image, pixel_id)
+
+        elif pixel_id > 12:
+            images = []
+            for idx in range(image.GetNumberOfComponentsPerPixel()):
+                im = sitk.VectorIndexSelectionCast(image, idx)
+                pixel_id_nonvec = im.GetPixelID()
+                im = sitk_image_to_itk_image(im, cast_to_float32=True)
+                tfx.SetMovingImage(im)
+                tfx.UpdateLargestPossibleRegion()
+                im = tfx.GetOutput()
+                im = itk_image_to_sitk_image(im)
+                im = sitk.Cast(im, pixel_id_nonvec)
+                images.append(im)
+                del im
+
+            image = sitk.Compose(images)
+            image = sitk.Cast(image, pixel_id)
+
+    return image
+
+
+def apply_transform_dict_itkelx(
     image_fp,
     image_res,
     tform_dict_in,
@@ -146,7 +226,8 @@ def apply_transform_dict(
     **im_tform_kwargs,
 ):
     """
-    apply a complex series of transformations in a python dictionary to an image
+    Apply a complex series of transformations in a python dictionary to an image
+
     Parameters
     ----------
     image_fp : str
@@ -156,13 +237,14 @@ def apply_transform_dict(
     tform_dict : dict of lists
         dict of SimpleElastix transformations stored in lists, may contain an "initial" transforms (preprocessing transforms)
         these will be applied first, then the key order of the dict will determine the rest of the transformations
-    prepro_dict : dict
-        preprocessing to perform on image before transformation, default None reads full image
     is_shape_mask : bool
         whether the image being transformed is a shape mask (determines import)
+
     Returns
     -------
-    SimpleITK.Image that has been transformed
+    image: itk.Image
+        image that has been transformed
+
     """
 
     if is_shape_mask is False:
@@ -179,7 +261,7 @@ def apply_transform_dict(
 
     if tform_dict_in is None:
         if writer == "zarr":
-            image = transform_2d_image(
+            image = transform_2d_image_itkelx(
                 image,
                 None,
                 writer="zarr",
@@ -188,7 +270,7 @@ def apply_transform_dict(
                 channel_colors=im_tform_kwargs["channel_colors"],
             )
         else:
-            image = transform_2d_image(image, None)
+            image = transform_2d_image_itkelx(image, None)
 
     else:
         tform_dict = tform_dict_in.copy()
@@ -213,13 +295,13 @@ def apply_transform_dict(
                     initial_tform = [initial_tform]
 
                 for tform in initial_tform:
-                    image = transform_2d_image(image, [tform])
+                    image = transform_2d_image_itkelx(image, [tform])
 
             tform_dict.pop("initial", None)
 
         for k, v in tform_dict.items():
             if writer == "zarr" and k == list(tform_dict.keys())[-1]:
-                image = transform_2d_image(
+                image = transform_2d_image_itkelx(
                     image,
                     v,
                     writer="zarr",
@@ -228,7 +310,7 @@ def apply_transform_dict(
                     channel_colors=im_tform_kwargs["channel_colors"],
                 )
             else:
-                image = transform_2d_image(image, v)
+                image = transform_2d_image_itkelx(image, v)
 
     return image
 
@@ -339,3 +421,338 @@ def gen_aff_tform_flip(image, spacing, flip="h"):
     tform["TransformParameters"] = tform_params
 
     return tform
+
+
+def euler_elx_to_itk2d(tform):
+    euler2d = sitk.Euler2DTransform()
+
+    center = [float(p) for p in tform['CenterOfRotationPoint']]
+    euler2d.SetFixedParameters(center)
+    elx_parameters = [float(p) for p in tform['TransformParameters']]
+    euler2d.SetParameters(elx_parameters)
+
+    return euler2d
+
+def similarity_elx_to_itk2d(tform):
+    similarity2d = sitk.Similarity2DTransform()
+
+    center = [float(p) for p in tform['CenterOfRotationPoint']]
+    similarity2d.SetFixedParameters(center)
+    elx_parameters = [float(p) for p in tform['TransformParameters']]
+    similarity2d.SetParameters(elx_parameters)
+
+    return similarity2d
+
+def affine_elx_to_itk2d(tform):
+    im_dimension = len(tform["Size"])
+    affine2d = sitk.AffineTransform(im_dimension)
+
+    center = [float(p) for p in tform['CenterOfRotationPoint']]
+    affine2d.SetFixedParameters(center)
+    elx_parameters = [float(p) for p in tform['TransformParameters']]
+    affine2d.SetParameters(elx_parameters)
+
+    return affine2d
+
+
+def bspline_elx_to_itk2d(tform):
+    im_dimension = len(tform["Size"])
+
+    bspline2d = sitk.BSplineTransform(im_dimension, 3)
+    bspline2d.SetTransformDomainOrigin(
+        [float(p) for p in tform['Origin']]
+    )  # from fixed image
+    bspline2d.SetTransformDomainPhysicalDimensions(
+        [int(p) for p in tform['Size']]
+    )  # from fixed image
+    bspline2d.SetTransformDomainDirection(
+        [float(p) for p in tform['Direction']]
+    )  # from fixed image
+
+    fixedParams = [int(p) for p in tform['GridSize']]
+    fixedParams += [float(p) for p in tform['GridOrigin']]
+    fixedParams += [float(p) for p in tform['GridSpacing']]
+    fixedParams += [float(p) for p in tform['GridDirection']]
+    bspline2d.SetFixedParameters(fixedParams)
+    bspline2d.SetParameters([float(p) for p in tform['TransformParameters']])
+    return bspline2d
+
+
+def convert_to_itk(tform):
+
+    if tform["Transform"][0] == "AffineTransform":
+        itk_tform = affine_elx_to_itk2d(tform)
+    elif tform["Transform"][0] == "SimilarityTransform":
+        itk_tform = similarity_elx_to_itk2d(tform)
+    elif tform["Transform"][0] == "EulerTransform":
+        itk_tform = euler_elx_to_itk2d(tform)
+    elif tform["Transform"][0] == "BSplineTransform":
+        itk_tform = bspline_elx_to_itk2d(tform)
+
+    itk_tform.OutputSpacing = [float(p) for p in tform["Spacing"]]
+    itk_tform.OutputDirection = [float(p) for p in tform["Direction"]]
+    itk_tform.OutputOrigin = [float(p) for p in tform["Origin"]]
+    itk_tform.OutputSize = [int(p) for p in tform["Size"]]
+    itk_tform.ResampleInterpolator = tform["ResampleInterpolator"][0]
+
+    return itk_tform
+
+
+def make_composite_itk(itk_tforms):
+
+    itk_composite = sitk.CompositeTransform(2)
+    for t in itk_tforms:
+        itk_composite.AddTransform(t)
+    return itk_composite
+
+
+def get_final_tform(parameter_data):
+    if (
+        isinstance(parameter_data, str)
+        and Path(parameter_data).suffix == ".json"
+    ):
+        parameter_data = json.load(open(parameter_data, "r"))
+
+    final_key = list(parameter_data.keys())[-1]
+
+    final_tform = parameter_data[final_key][-1]
+    return final_tform
+
+
+def collate_wsireg_transforms(parameter_data):
+
+    if (
+        isinstance(parameter_data, str)
+        and Path(parameter_data).suffix == ".json"
+    ):
+        parameter_data = json.load(open(parameter_data, "r"))
+
+    parameter_data_list = []
+    for k, v in parameter_data.items():
+        if k == "initial":
+            if isinstance(v, dict):
+                parameter_data_list.append([v])
+            elif isinstance(v, list):
+                for init_tform in v:
+                    parameter_data_list.append([init_tform])
+        else:
+            sub_tform = []
+            if isinstance(v, dict):
+                sub_tform.append(v)
+            elif isinstance(v, list):
+                sub_tform += v
+            sub_tform = sub_tform[::-1]
+            parameter_data_list.append(sub_tform)
+
+    flat_pmap_list = [
+        item for sublist in parameter_data_list for item in sublist
+    ]
+
+    return flat_pmap_list
+
+
+def wsireg_transforms_to_itk_composite(parameter_data):
+
+    flat_pmap_list = collate_wsireg_transforms(parameter_data)
+    itk_tforms = [convert_to_itk(t) for t in flat_pmap_list]
+    composite_tform = make_composite_itk(itk_tforms)
+
+    return composite_tform, itk_tforms
+
+
+def wsireg_transforms_to_resampler(final_tform):
+    resampler = sitk.ResampleImageFilter()
+    resampler.SetOutputOrigin(final_tform.OutputOrigin)
+    resampler.SetSize(final_tform.OutputSize)
+    resampler.SetOutputDirection(final_tform.OutputDirection)
+    resampler.SetOutputSpacing(final_tform.OutputSpacing)
+    interpolator = ELX_TO_ITK_INTERPOLATORS.get(
+        final_tform.ResampleInterpolator
+    )
+    resampler.SetInterpolator(interpolator)
+    return resampler
+
+
+def sitk_transform_image(image, final_tform, composite_transform):
+    resampler = wsireg_transforms_to_resampler(final_tform)
+    resampler.SetTransform(composite_transform)
+    image = resampler.Execute(image)
+    return image
+
+
+#
+# def apply_transform_dict(
+#     image_fp,
+#     image_res,
+#     tform_dict_in,
+#     prepro_dict=None,
+#     is_shape_mask=False,
+#     writer="sitk",
+#     **im_tform_kwargs,
+# ):
+#     """
+#     Apply a complex series of transformations in a python dictionary to an image
+#
+#     Parameters
+#     ----------
+#     image_fp : str
+#         file path to the image to be transformed, it will be read in it's entirety
+#     image_res : float
+#         pixel resolution of image to be transformed
+#     tform_dict : dict of lists
+#         dict of SimpleElastix transformations stored in lists, may contain an "initial" transforms (preprocessing transforms)
+#         these will be applied first, then the key order of the dict will determine the rest of the transformations
+#     prepro_dict : dict
+#         preprocessing to perform on image before transformation, default None reads full image
+#     is_shape_mask : bool
+#         whether the image being transformed is a shape mask (determines import)
+#
+#     Returns
+#     -------
+#     image: itk.Image
+#         image that has been transformed
+#
+#     """
+#
+#     if is_shape_mask is False:
+#         if isinstance(image_fp, sitk.Image):
+#             image = image_fp
+#         # else:
+#         #     image = RegImage(
+#         #         image_fp, image_res, prepro_dict=prepro_dict
+#         #     ).image
+#     else:
+#         image = sitk.GetImageFromArray(image_fp)
+#         del image_fp
+#         image.SetSpacing((image_res, image_res))
+#
+#     if tform_dict_in is None:
+#         if writer == "zarr":
+#             image = transform_2d_image(
+#                 image,
+#                 None,
+#                 writer="zarr",
+#                 zarr_store_dir=im_tform_kwargs["zarr_store_dir"],
+#                 channel_names=im_tform_kwargs["channel_names"],
+#                 channel_colors=im_tform_kwargs["channel_colors"],
+#             )
+#         else:
+#             image = transform_2d_image(image, None)
+#
+#     else:
+#         tform_dict = tform_dict_in.copy()
+#
+#         if tform_dict.get("registered") is None and tform_dict.get(0) is None:
+#             tform_dict["registered"] = tform_dict["initial"]
+#             tform_dict.pop("initial", None)
+#
+#             if isinstance(tform_dict.get("registered"), list) is False:
+#                 tform_dict["registered"] = [tform_dict["registered"]]
+#
+#             for idx in range(len(tform_dict["registered"])):
+#                 tform_dict[idx] = [tform_dict["registered"][idx]]
+#
+#             tform_dict.pop("registered", None)
+#         else:
+#             tform_dict = prepare_tform_dict(tform_dict, shape_tform=False)
+#
+#         if "initial" in tform_dict:
+#             for initial_tform in tform_dict["initial"]:
+#                 if isinstance(initial_tform, list) is False:
+#                     initial_tform = [initial_tform]
+#
+#                 for tform in initial_tform:
+#                     image = transform_2d_image(image, [tform])
+#
+#             tform_dict.pop("initial", None)
+#
+#         for k, v in tform_dict.items():
+#             if writer == "zarr" and k == list(tform_dict.keys())[-1]:
+#                 image = transform_2d_image(
+#                     image,
+#                     v,
+#                     writer="zarr",
+#                     zarr_store_dir=im_tform_kwargs["zarr_store_dir"],
+#                     channel_names=im_tform_kwargs["channel_names"],
+#                     channel_colors=im_tform_kwargs["channel_colors"],
+#                 )
+#             else:
+#                 image = transform_2d_image(image, v)
+#
+#     return image
+
+
+#
+# def transform_2d_image(
+#     image, transformation_maps, writer="sitk", **zarr_kwargs
+# ):
+#     """
+#     Transform 2D images with multiple models and return the transformed image
+#     or write the transformed image to disk as a .tif file.
+#     Multichannel or multicomponent images (RGB) have to be transformed a single channel at a time
+#     This function takes care of performing those transformations and reconstructing the image in the same
+#     data type as the input
+#     Parameters
+#     ----------
+#     image : SimpleITK.Image
+#         Image to be transformed
+#     transformation_maps : list
+#         list of SimpleElastix ParameterMaps to used for transformation
+#     Returns
+#     -------
+#     Transformed SimpleITK.Image
+#     """
+#     if transformation_maps is not None:
+#
+#         try:
+#             tfx = sitk.TransformixImageFilter()
+#         except AttributeError:
+#             tfx = sitk.SimpleTransformix()
+#
+#         # TODO: add mask cropping here later
+#
+#         #     print("mask cropping")
+#         #     tmap = sitk.ReadParameterFile(transformation_maps[0])
+#         #     x_min = int(float(tmap["MinimumX"][0]))
+#         #     x_max = int(float(tmap["MaximumX"][0]))
+#         #     y_min = int(float(tmap["MinimumY"][0]))
+#         #     y_max = int(float(tmap["MaximumY"][0]))
+#         #     image = image[x_min:x_max, y_min:y_max]
+#         #     origin = np.repeat(0, len(image.GetSize()))
+#         #     image.SetOrigin(tuple([int(i) for i in origin]))
+#
+#         # else:
+#         for idx, tmap in enumerate(transformation_maps):
+#             if isinstance(tmap, str):
+#                 tmap = sitk.ReadParameterFile(tmap)
+#
+#             if idx == 0:
+#                 tmap["InitialTransformParametersFileName"] = (
+#                     "NoInitialTransform",
+#                 )
+#                 tfx.SetTransformParameterMap(tmap)
+#             else:
+#                 tmap["InitialTransformParametersFileName"] = (
+#                     "NoInitialTransform",
+#                 )
+#
+#                 tfx.AddTransformParameterMap(tmap)
+#         tfx.LogToConsoleOn()
+#         tfx.LogToFileOff()
+#     else:
+#         tfx = None
+#
+#     # if tfx is None:
+#     #     xy_final_size = np.array(image.GetSize(), dtype=np.uint32)
+#     # else:
+#     #     xy_final_size = np.array(
+#     #         transformation_maps[-1]["Size"], dtype=np.uint32
+#     #     )
+#
+#     if writer == "sitk" or writer is None:
+#         return transform_image_to_sitk(image, tfx)
+#     elif writer == "zarr":
+#         return
+#     else:
+#         raise ValueError("writer type {} not recognized".format(writer))
+#

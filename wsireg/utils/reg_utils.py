@@ -1,13 +1,16 @@
-from pathlib import Path
 import json
-import tempfile
 import SimpleITK as sitk
+import itk
 from wsireg.parameter_maps.reg_params import DEFAULT_REG_PARAM_MAPS
+from wsireg.utils.itk_im_conversions import (
+    itk_image_to_sitk_image,
+)
 
 
 def sitk_pmap_to_dict(pmap):
     """
-    convert SimpleElastix ParameterMap to python dictionary
+    Convert SimpleElastix ParameterMap to python dictionary
+
     Parameters
     ----------
     pmap
@@ -31,7 +34,8 @@ def sitk_pmap_to_dict(pmap):
 
 def pmap_dict_to_sitk(pmap_dict):
     """
-    convert python dict to SimpleElastix ParameterMap
+    Convert python dict to SimpleElastix ParameterMap
+
     Parameters
     ----------
     pmap_dict
@@ -41,15 +45,17 @@ def pmap_dict_to_sitk(pmap_dict):
     -------
     SimpleElastix ParameterMap of Python dict
     """
-    pmap = sitk.ParameterMap()
-    for k, v in pmap_dict.items():
-        pmap[k] = v
-    return pmap
+    # pmap = sitk.ParameterMap()
+    # pmap = {}
+    # for k, v in pmap_dict.items():
+    #     pmap[k] = v
+    return pmap_dict
 
 
 def pmap_dict_to_json(pmap_dict, output_file):
     """
-    save python dict of SimpleElastix to json
+    Save python dict of ITKElastix to json
+
     Parameters
     ----------
     pmap_dict : dict
@@ -63,7 +69,8 @@ def pmap_dict_to_json(pmap_dict, output_file):
 
 def json_to_pmap_dict(json_file):
     """
-    load python dict of SimpleElastix stored in json
+    Load python dict of SimpleElastix stored in json
+
     Parameters
     ----------
     json_file : dict
@@ -106,13 +113,33 @@ def parameter_load(reg_param):
         )
 
 
-def register_2d_images(
+def parameter_to_itk_pobj(reg_param_map):
+    """
+    Transfer parameter data stored in dict to ITKElastix ParameterObject
+
+    Parameters
+    ----------
+    reg_param_map: dict
+        elastix registration parameters
+
+    Returns
+    -------
+    itk_param_map:itk.ParameterObject
+        ITKElastix object for registration parameters
+    """
+    parameter_object = itk.ParameterObject.New()
+    itk_param_map = parameter_object.GetDefaultParameterMap("rigid")
+    for k, v in reg_param_map.items():
+        itk_param_map[k] = v
+    return itk_param_map
+
+
+def register_2d_images_itkelx(
     source_image,
     target_image,
     reg_params,
     reg_output_fp,
     histogram_match=False,
-    compute_inverse=True,
     return_image=False,
 ):
     """
@@ -132,24 +159,13 @@ def register_2d_images(
         where to store registration outputs (iteration data and transformation files)
     histogram_match : bool
         whether to attempt histogram matching to improve registration
-    compute_inverse : bool
-        whether to compute the inverse for BSplineTransforms. This is needed to transform
-        point sets
     Returns
     -------
-    list of SimpleElastix transformation parameter maps
-
+        tform_list: list
+            list of ITKElastix transformation parameter maps
+        image: itk.Image
+            resulting registered moving image
     """
-
-    try:
-        selx = sitk.SimpleElastix()
-    except AttributeError:
-        selx = sitk.ElastixImageFilter()
-
-    selx.SetOutputDirectory(str(reg_output_fp))
-
-    # these parameters may be made optional later
-    # not critical though
     if histogram_match is True:
         matcher = sitk.HistogramMatchingImageFilter()
         matcher.SetNumberOfHistogramLevels(64)
@@ -158,9 +174,16 @@ def register_2d_images(
         source_image.image = matcher.Execute(
             source_image.image, target_image.image
         )
+    source_image.sitk_to_itk()
+    target_image.sitk_to_itk()
 
-    selx.SetMovingImage(source_image.image)
-    selx.SetFixedImage(target_image.image)
+    selx = itk.ElastixRegistrationMethod.New(
+        source_image.image, target_image.image
+    )
+
+    # Set additional options
+    selx.SetLogToConsole(True)
+    selx.SetOutputDirectory(str(reg_output_fp))
 
     if source_image.mask is not None:
         selx.SetMovingMask(source_image.mask)
@@ -168,80 +191,188 @@ def register_2d_images(
     if target_image.mask is not None:
         selx.SetFixedMask(target_image.mask)
 
+    selx.SetMovingImage(source_image.image)
+    selx.SetFixedImage(target_image.image)
+
+    parameter_object_registration = itk.ParameterObject.New()
     for idx, reg_param in enumerate(reg_params):
         if idx == 0:
             pmap = parameter_load(reg_param)
             pmap["WriteResultImage"] = ("false",)
             if target_image.mask is not None:
                 pmap["AutomaticTransformInitialization"] = ("false",)
-            selx.SetParameterMap(pmap)
+            else:
+                pmap["AutomaticTransformInitialization"] = ('true',)
+
+            parameter_object_registration.AddParameterMap(pmap)
         else:
             pmap = parameter_load(reg_param)
             pmap["WriteResultImage"] = ("false",)
-            selx.AddParameterMap(pmap)
+            pmap["AutomaticTransformInitialization"] = ('false',)
+            parameter_object_registration.AddParameterMap(pmap)
 
-    selx.LogToConsoleOn()
-    selx.LogToFileOn()
+    selx.SetParameterObject(parameter_object_registration)
+
+    # Update filter object (required)
+    selx.UpdateLargestPossibleRegion()
+
+    # Results of Registration
+    result_transform_parameters = selx.GetTransformParameterObject()
 
     # execute registration:
-    if return_image is False:
-        selx.Execute()
-    else:
-        image = selx.Execute()
-
-    tform_list = list(selx.GetTransformParameterMap())
-
-    if compute_inverse is True:
-        compute_tforms = []
-        for idx, reg_param in enumerate(reg_params):
-            pmap = parameter_load(reg_param)
-            pmap["WriteResultImage"] = ("false",)
-            if pmap["Transform"][0] == "BSplineTransform":
-                compute_tforms.append((idx, pmap))
-
-        if len(compute_tforms) > 0:
-            for idx, compute_tform in compute_tforms:
-
-                selx.SetMovingImage(target_image.image)
-                selx.SetFixedImage(target_image.image)
-                compute_tform["Metric"] = ["DisplacementMagnitudePenalty"]
-                max_step_double = compute_tform["MaximumStepLength"]
-                compute_tform["MaximumStepLength"] = [
-                    str(float(step) * 2) for step in max_step_double
-                ]
-                selx.SetParameterMap(compute_tform)
-
-                with tempfile.TemporaryDirectory() as tempdir:
-                    temp_tform_path = Path(tempdir) / "temp_tform.txt"
-                    tform_out = list(selx.GetTransformParameterMap())[-1]
-                    tform_out["InitialTransformParametersFileName"] = [
-                        "NoInitialTransform"
-                    ]
-                    sitk.WriteParameterFile(
-                        tform_out,
-                        str(temp_tform_path),
-                    )
-                    selx.SetInitialTransformParameterFileName(
-                        str(temp_tform_path)
-                    )
-                    selx.SetOutputDirectory(tempdir)
-                    selx.Execute()
-                    inverted_tform = list(selx.GetTransformParameterMap())[0]
-
-                tform_normal = tform_list[idx]
-                tform_list[idx] = {
-                    "image": tform_normal,
-                    "invert": inverted_tform,
-                }
-        else:
-            raise ValueError(
-                "No support for inverting intermediate BSplineTransforms"
-            )
-    else:
-        print("no inversions to compute")
+    tform_list = []
+    for idx in range(result_transform_parameters.GetNumberOfParameterMaps()):
+        tform = {}
+        for k, v in result_transform_parameters.GetParameterMap(idx).items():
+            tform[k] = v
+        tform_list.append(tform)
 
     if return_image is False:
         return tform_list
     else:
-        image = sitk.Cast(image, source_image.image.GetPixelID())
+        image = selx.GetOutput()
+        image = itk_image_to_sitk_image(image)
+        image = sitk.Cast(image, source_image.pixel_id)
         return tform_list, image
+
+
+#
+# def register_2d_images(
+#     source_image,
+#     target_image,
+#     reg_params,
+#     reg_output_fp,
+#     histogram_match=False,
+#     compute_inverse=True,
+#     return_image=False,
+# ):
+#     """
+#     Register 2D images with multiple models and return a list of elastix
+#     transformation maps.
+#
+#     Parameters
+#     ----------
+#     source_image : SimpleITK.Image
+#         RegImage of image to be aligned
+#     target_image : SimpleITK.Image
+#         RegImage that is being aligned to (grammar is hard)
+#     reg_params : dict
+#         registration parameter maps stored in a dict, can be file paths to SimpleElastix parameterMaps stored
+#         as text or one of the default parameter maps (see parameter_load() function)
+#     reg_output_fp : str
+#         where to store registration outputs (iteration data and transformation files)
+#     histogram_match : bool
+#         whether to attempt histogram matching to improve registration
+#     compute_inverse : bool
+#         whether to compute the inverse for BSplineTransforms. This is needed to transform
+#         point sets
+#     Returns
+#     -------
+#     list of SimpleElastix transformation parameter maps
+#
+#     """
+#
+#     try:
+#         selx = sitk.SimpleElastix()
+#     except AttributeError:
+#         selx = sitk.ElastixImageFilter()
+#
+#     selx.SetOutputDirectory(str(reg_output_fp))
+#
+#     # these parameters may be made optional later
+#     # not critical though
+#     if histogram_match is True:
+#         matcher = sitk.HistogramMatchingImageFilter()
+#         matcher.SetNumberOfHistogramLevels(64)
+#         matcher.SetNumberOfMatchPoints(7)
+#         matcher.ThresholdAtMeanIntensityOn()
+#         source_image.image = matcher.Execute(
+#             source_image.image, target_image.image
+#         )
+#
+#     selx.SetMovingImage(source_image.image)
+#     selx.SetFixedImage(target_image.image)
+#
+#     if source_image.mask is not None:
+#         selx.SetMovingMask(source_image.mask)
+#
+#     if target_image.mask is not None:
+#         selx.SetFixedMask(target_image.mask)
+#
+#     for idx, reg_param in enumerate(reg_params):
+#         if idx == 0:
+#             pmap = parameter_load(reg_param)
+#             pmap["WriteResultImage"] = ("false",)
+#             if target_image.mask is not None:
+#                 pmap["AutomaticTransformInitialization"] = ("false",)
+#             selx.SetParameterMap(pmap)
+#         else:
+#             pmap = parameter_load(reg_param)
+#             pmap["WriteResultImage"] = ("false",)
+#             selx.AddParameterMap(pmap)
+#
+#     selx.LogToConsoleOn()
+#     selx.LogToFileOn()
+#
+#     # execute registration:
+#     if return_image is False:
+#         selx.Execute()
+#     else:
+#         image = selx.Execute()
+#
+#     tform_list = list(selx.GetTransformParameterMap())
+#
+#     if compute_inverse is True:
+#         compute_tforms = []
+#         for idx, reg_param in enumerate(reg_params):
+#             pmap = parameter_load(reg_param)
+#             pmap["WriteResultImage"] = ("false",)
+#             if pmap["Transform"][0] == "BSplineTransform":
+#                 compute_tforms.append((idx, pmap))
+#
+#         if len(compute_tforms) > 0:
+#             for idx, compute_tform in compute_tforms:
+#
+#                 selx.SetMovingImage(target_image.image)
+#                 selx.SetFixedImage(target_image.image)
+#                 compute_tform["Metric"] = ["DisplacementMagnitudePenalty"]
+#                 max_step_double = compute_tform["MaximumStepLength"]
+#                 compute_tform["MaximumStepLength"] = [
+#                     str(float(step) * 2) for step in max_step_double
+#                 ]
+#                 selx.SetParameterMap(compute_tform)
+#
+#                 with tempfile.TemporaryDirectory() as tempdir:
+#                     temp_tform_path = Path(tempdir) / "temp_tform.txt"
+#                     tform_out = list(selx.GetTransformParameterMap())[-1]
+#                     tform_out["InitialTransformParametersFileName"] = [
+#                         "NoInitialTransform"
+#                     ]
+#                     sitk.WriteParameterFile(
+#                         tform_out,
+#                         str(temp_tform_path),
+#                     )
+#                     selx.SetInitialTransformParameterFileName(
+#                         str(temp_tform_path)
+#                     )
+#                     selx.SetOutputDirectory(tempdir)
+#                     selx.Execute()
+#                     inverted_tform = list(selx.GetTransformParameterMap())[0]
+#
+#                 tform_normal = tform_list[idx]
+#                 tform_list[idx] = {
+#                     "image": tform_normal,
+#                     "invert": inverted_tform,
+#                 }
+#         else:
+#             raise ValueError(
+#                 "No support for inverting intermediate BSplineTransforms"
+#             )
+#     else:
+#         print("no inversions to compute")
+#
+#     if return_image is False:
+#         return tform_list
+#     else:
+#         image = sitk.Cast(image, source_image.image.GetPixelID())
+#         return tform_list, image

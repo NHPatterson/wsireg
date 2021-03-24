@@ -1,15 +1,14 @@
+from copy import deepcopy
 from pathlib import Path
-import tempfile
+import json
+import numpy as np
 import SimpleITK as sitk
 import cv2
-import numpy as np
-from lxml import etree
 import geojson
 from wsireg.utils.tform_utils import (
-    prepare_tform_dict,
-    apply_transform_dict,
+    wsireg_transforms_to_itk_composite,
+    collate_wsireg_transforms,
 )
-from copy import deepcopy
 
 GJ_SHAPE_TYPE = {
     "polygon": geojson.Polygon,
@@ -21,76 +20,51 @@ GJ_SHAPE_TYPE = {
 }
 
 
-def read_zen_shapes(zen_fp):
-    """Read Zeiss Zen Blue .cz ROIs files to wsimap shapely format.
+def gj_to_np(gj: dict):
+    """
+    Convert geojson representation to np.ndarray representation of shape
 
     Parameters
     ----------
-    zen_fp : str
-        file path of Zen .cz.
+    gj : dict
+        GeoJSON data stored as python dict
 
     Returns
     -------
-    list
-        list of wsimap shapely rois
-
+    dict
+        containing keys
+            "array": np.ndarray - x,y point data in array
+            "shape_type": str - indicates GeoJSON shape_type (Polygon, MultiPolygon, etc.)
+            "shape_name": str - name inherited from QuPath GeoJSON
     """
+    if gj.get("geometry").get("type") == "MultiPolygon":
+        pts = []
+        for geo in gj.get("geometry").get("coordinates"):
+            pts.append(np.squeeze(np.array(geo)))
+        pts = np.vstack(pts)
 
-    root = etree.parse(zen_fp)
+    else:
+        pts = np.squeeze(np.asarray(gj.get("geometry").get("coordinates")))
 
-    rois = root.xpath("//Elements")[0]
-    shapes_out = []
-    for shape in rois:
-        try:
-            ptset_name = shape.find("Attributes/Name").text
-        except AttributeError:
-            ptset_name = "unnamed"
+    if gj.get("properties").get("classification") is None:
+        shape_name = "unnamed"
+    else:
+        shape_name = gj.get("properties").get("classification").get("name")
 
-        if shape.tag == "Polygon":
-            ptset_cz = shape.find("Geometry/Points")
-            # ptset_type = "Polygon"
-
-            poly_str = ptset_cz.text
-            poly_str = poly_str.split(" ")
-            poly_str = [poly.split(",") for poly in poly_str]
-            poly_str = [[float(pt[0]), float(pt[1])] for pt in poly_str]
-
-            poly = {
-                "geometry": geojson.Polygon(poly_str),
-                "properties": {"classification": {"name": ptset_name}},
-            }
-
-            shapes_out.append(poly)
-
-        if shape.tag == "Rectangle":
-            rect_pts = shape.find("Geometry")
-
-            x = float(rect_pts.findtext("Left"))
-            y = float(rect_pts.findtext("Top"))
-            width = float(rect_pts.findtext("Width"))
-            height = float(rect_pts.findtext("Height"))
-
-            rect = geojson.Polygon(
-                [
-                    [x, y],
-                    [x + width, y],
-                    [x + width, y + height],
-                    [x, y + height],
-                    [x, y],
-                ]
-            )
-
-            rect = {
-                "geometry": rect,
-                "properties": {"classification": {"name": ptset_name}},
-            }
-
-            shapes_out.append(rect)
-
-    return shapes_out
+    return {
+        "array": pts,
+        "shape_type": gj.get("geometry").get("type"),
+        "shape_name": shape_name,
+    }
 
 
-def read_geojson(json_file):
+def add_unamed(gj):
+    if gj.get("properties").get("classification") is None:
+        gj.get("properties").update({"classification": {"name": "unnamed"}})
+    return gj
+
+
+def read_geojson(json_file: str):
     """Read GeoJSON files (and some QuPath metadata).
 
     Parameters
@@ -99,233 +73,379 @@ def read_geojson(json_file):
         file path of QuPath exported GeoJSON
     Returns
     -------
-    dict
-        dict of geojson information
-
+    gj_data : dict
+        dict of GeoJSON information
+    shapes_np : dict
+        dict of GeoJSON information stored in np.ndarray
+            "array": np.ndarray - x,y point data in array
+            "shape_type": str - indicates GeoJSON shape_type (Polygon, MultiPolygon, etc.)
+            "shape_name": str - name inherited from QuPath GeoJSON
     """
+    gj_data = json.load(open(json_file, "r"))
 
-    return geojson.load(open(json_file, "r"))
+    shapes_np = [gj_to_np(s) for s in gj_data]
+    gj_data = [add_unamed(gj) for gj in gj_data]
+    return gj_data, shapes_np
 
 
-def np_to_geojson(np_array, shape_type="polygon", shape_name="unnamed"):
+def np_to_geojson(
+    np_array: np.ndarray, shape_type="polygon", shape_name="unnamed"
+):
+    """convert np.ndarray to GeoJSON dict
+
+    Parameters
+    ----------
+    np_array: np.ndarray
+        coordinates of data
+    shape_type:str
+        GeoJSON shape type
+    shape_name:str
+        Name of the shape
+    Returns
+    -------
+    shape_gj : dict
+        dict of GeoJSON information
+    shape_np : dict
+        dict of GeoJSON information stored in np.ndarray
+            "array": np.ndarray - x,y point data in array
+            "shape_type": str - indicates GeoJSON shape_type (Polygon, MultiPolygon, etc.)
+            "shape_name": str - name inherited from QuPath GeoJSON
+    """
     sh_type = shape_type.lower()
 
     gj_func = GJ_SHAPE_TYPE[sh_type]
 
-    shape = {
+    shape_gj = {
         "geometry": gj_func(np_array.tolist()),
         "properties": {"classification": {"name": shape_name}},
     }
-
-    return shape
+    shape_np = {
+        "array": np_array,
+        "shape_type": shape_type.lower(),
+        "shape_name": shape_name,
+    }
+    return shape_gj, shape_np
 
 
 def shape_reader(shape_data, **kwargs):
+    """
+    Read shape data for transformation
+    Shape data is stored as numpy arrays for operations but also as GeoJSON
+    to contain metadata and interface with QuPath
+
+    Parameters
+    ----------
+    shape_data: list of np.ndarray or str
+        if str, will read data as GeoJSON file, if np.ndarray with assume
+        it is coordinates
+    kwargs
+        keyword args passed to np_to_geojson convert
+
+    Returns
+    -------
+    shapes_gj: list of dicts
+        list of dicts of GeoJSON information
+    shapes_np: list of dicts
+        list of dicts of GeoJSON information stored in np.ndarray
+        "array": np.ndarray - x,y point data in array
+        "shape_type": str - indicates GeoJSON shape_type (Polygon, MultiPolygon, etc.)
+        "shape_name": str - name inherited from QuPath GeoJSON
+    """
     if isinstance(shape_data, list) is False:
         shape_data = [shape_data]
 
-    shapes = []
+    shapes_gj = []
+    shapes_np = []
     for sh in shape_data:
         if isinstance(sh, dict):
-
-            out_shapes = np_to_geojson(
+            out_shape_gj, out_shape_np = np_to_geojson(
                 sh["array"], sh["shape_type"], sh["shape_name"]
             )
 
         elif isinstance(sh, np.ndarray):
-            out_shapes = np_to_geojson(sh, **kwargs)
+            out_shape_gj, out_shape_np = np_to_geojson(sh, **kwargs)
 
         else:
             if Path(sh).is_file():
                 sh_fp = Path(sh)
 
                 if sh_fp.suffix == ".json":
-                    out_shapes = read_geojson(str(sh_fp))
-                elif sh_fp.suffix == ".cz":
-                    out_shapes = read_zen_shapes(str(sh_fp))
+                    out_shape_gj, out_shape_np = read_geojson(str(sh_fp))
+                # elif sh_fp.suffix == ".cz":
+                #     out_shape_gj = read_zen_shapes(str(sh_fp))
+                #     out_shape_np = [gj_to_np(s) for s in out_shape_gj]
                 else:
                     raise ValueError(
                         "{} is not a geojson, Zeiss Zen shape file or numpy array".format(
                             str(sh_fp)
                         )
                     )
-        if isinstance(out_shapes, list):
-            shapes.extend(out_shapes)
+        if isinstance(out_shape_gj, list):
+            shapes_gj.extend(out_shape_gj)
         else:
-            shapes.append(out_shapes)
+            shapes_gj.append(out_shape_gj)
 
-    return shapes
+        if isinstance(out_shape_np, list):
+            shapes_np.extend(out_shape_np)
+        else:
+            shapes_np.append(out_shape_np)
+
+    return shapes_gj, shapes_np
 
 
-def read_elx_pts(pt_fp, transformation):
-    x_scaling = float(transformation["Spacing"][0])
-    y_scaling = float(transformation["Spacing"][1])
+def scale_shape_coordinates(poly: dict, scale_factor: float):
+    """
+    Scale coordinates by a factor
 
-    pts_f = open(pt_fp, "r")
-    lines = pts_f.readlines()
+    Parameters
+    ----------
+    poly: dict
+        dict of coordinate data contain np.ndarray in "array" key
+    scale_factor: float
+        isotropic scaling factor for the coordinates
 
-    pts_out = []
-    for line in lines:
-        pt = line.split("\t")[5]
-        pts = pt.strip("; OutputPoint = [ ").strip(" ]").split(" ")
-        pts_out.append(
-            [float(pts[0]) * (1 / x_scaling), float(pts[1]) * (1 / y_scaling)]
+    Returns
+    -------
+    poly: dict
+        dict containing coordinates scaled by scale_factor
+    """
+    poly_coords = poly["array"]
+    poly_coords = poly_coords * scale_factor
+    poly["array"] = poly_coords
+    return poly
+
+
+def invert_nonlinear_transforms(
+    itk_transforms: list, elx_transform_data: list
+):
+    """
+    Check list of sequential ITK transforms for non-linear (i.e., bspline) transforms
+    Transformations need to be inverted to transform from moving to fixed space as transformations
+    are mapped from fixed space to moving.
+    This will first convert any non-linear transforms to a displacement field then invert the displacement field
+    using ITK methods. It usually works quite well but is not an exact solution.
+    Linear transforms can be inverted on  the fly when transforming points
+
+    Parameters
+    ----------
+    itk_transforms:list
+        list of itk.Transform
+    elx_transform_data: list
+        list of dict containing elastix transformation parameters
+    Returns
+    -------
+    itk_transforms:list
+        list of itk.Transform where any non-linear transforms are replaced with an inverted displacement field
+    """
+    tform_linear = [t.IsLinear() for t in itk_transforms]
+
+    if all(tform_linear):
+        return itk_transforms
+    else:
+        nl_idxs = np.where(np.array(tform_linear) == 0)[0]
+        print(
+            f"transform(s) at index {[n for n in nl_idxs]} is(are) non-linear, inverting displacement field(s)\n"
+            "this can take some time"
         )
-
-    return pts_out
-
-
-def invert_linear_transformation(transformation, is_initial=True):
-
-    if transformation["Transform"] == ["BSplineTransform"]:
-        return transformation
-
-    if transformation["Transform"] == ["EulerTransform"]:
-        tform_params = transformation["TransformParameters"]
-        inv_params = [str(-1 * float(param)) for param in tform_params]
-        w, h = tuple([int(coord) for coord in transformation["Size"]])
-        theta = float(inv_params[0])
-        c, s = np.abs(np.cos(theta)), np.abs(np.sin(theta))
-        bound_w = (h * s) + (w * c)
-        # bound_h = (h * c) + (w * s)
-
-        if is_initial is True:
-            if int(w) != int(bound_w):
-                inv_params[1] = str(float(inv_params[1]) * -1)
-                # inv_params[2] = str(float(inv_params[1])*-1)
-
-    if transformation["Transform"] == ["AffineTransform"]:
-        inv_params = transformation["TransformParameters"]
-
-    transformation["TransformParameters"] = inv_params
-
-    return transformation
-
-
-def write_shape_to_elx_pts(shape, source_image_res, fp):
-    pts_f = open(str(fp), "w")
-    n_pts = len(shape["geometry"]["coordinates"][0])
-    pts_f.write("point\n")
-    pts_f.write(str(n_pts) + "\n")
-
-    if isinstance(source_image_res, float):
-        source_image_res = (source_image_res, source_image_res)
-
-    for pt in shape["geometry"]["coordinates"][0]:
-        pts_f.write(
-            "{} {}\n".format(
-                float(pt[0]) * float(source_image_res[0]),
-                float(pt[1]) * float(source_image_res[1]),
+        for nl_idx in nl_idxs:
+            tform = elx_transform_data[4]
+            tform_to_dfield = sitk.TransformToDisplacementFieldFilter()
+            tform_to_dfield.SetOutputSpacing(
+                [float(p) for p in tform["Spacing"]]
             )
-        )
-    pts_f.close()
+            tform_to_dfield.SetOutputOrigin(
+                [float(p) for p in tform["Origin"]]
+            )
+            tform_to_dfield.SetOutputDirection(
+                [float(p) for p in tform["Direction"]]
+            )
+            tform_to_dfield.SetSize([int(p) for p in tform["Size"]])
+            dfield = tform_to_dfield.Execute(itk_transforms[nl_idx])
+            dfield = sitk.InvertDisplacementField(dfield)
+            dfield = sitk.DisplacementFieldTransform(dfield)
+            itk_transforms[nl_idx] = dfield
+    return itk_transforms
 
 
-def transform_points(shape, source_image_res, transformation):
+def prepare_pt_transformation_data(transformations):
+    """
+    Read and prepare wsireg transformation data for point set transformation
 
-    with tempfile.TemporaryDirectory() as tempdir:
-        fp = Path(tempdir) / "elx_pts.txt"
-
-        write_shape_to_elx_pts(shape, source_image_res, fp)
-
-        try:
-            tfx = sitk.TransformixImageFilter()
-        except AttributeError:
-            tfx = sitk.SimpleTransformix()
-
-        if isinstance(transformation, list):
-            print('combining tforms')
-            for idx, tform in enumerate(transformation):
-                if idx == 0:
-                    tfx.SetTransformParameterMap(tform)
-                else:
-                    tfx.AddTransformParameterMap(tform)
-
-            transformation = transformation[-1]
-        else:
-            tfx.SetTransformParameterMap(transformation)
-
-        tfx.SetFixedPointSetFileName(str(fp))
-        tfx.SetOutputDirectory(tempdir)
-        tfx.LogToFileOff()
-        tfx.LogToConsoleOff()
-        tfx.Execute()
-        fp_out = Path(tempdir) / "outputpoints.txt"
-
-        transformed_pts = read_elx_pts(str(fp_out), transformation)
-
-        tf_shape = shape.copy()
-        tf_shape["geometry"] = geojson.Polygon([transformed_pts])
-
-        final_spacing = transformation["Spacing"]
-
-    return tf_shape, final_spacing
+    Parameters
+    ----------
+    transformations
+        list of dict containing elastix transformation data or str to wsireg .json file containing
+        elastix transformation data
+    Returns
+    -------
+    itk_pt_transforms:list
+        list of transformation data ready to operate on points
+    target_res:
+        physical spacing of the final transformation in the transform sequence
+        This is needed to map coordinates defined as pixel indices to physical coordinates and then back
+    """
+    composite, itk_transforms = wsireg_transforms_to_itk_composite(
+        transformations
+    )
+    elx_transform_data = collate_wsireg_transforms(transformations)
+    itk_pt_transforms = invert_nonlinear_transforms(
+        itk_transforms, elx_transform_data
+    )
+    target_res = float(elx_transform_data[-1]["Spacing"][0])
+    return itk_pt_transforms, target_res
 
 
-#
-#
-# if "initial" in tform_dict:
-#     for initial_tform in tform_dict["initial"]:
-#         if isinstance(initial_tform, list):
-#             initial_tform = initial_tform
-#         else:
-#             initial_tform = [initial_tform]
-#         image = transform_2d_image(image, image_res, initial_tform)
-#         tform_dict.pop("initial", None)
-# for k, v in tform_dict.items():
-#     image = transform_2d_image(image, image_res, v)
-#
-# return image
+def itk_transform_pts(
+    pt_data: np.ndarray,
+    itk_transforms: list,
+    px_idx=True,
+    source_res=1,
+    output_idx=True,
+    target_res=2,
+):
+    """
+    Transforms x,y points stored in np.ndarray using list of ITK transforms
+    All transforms are in physical coordinates, so all points must be converted to physical coordinates
+    before transformation, but this function allows converting back to pixel indices after transformation
 
+    Can intake points in physical coordinates is px_idx == False
+    Can output points in physical coordinates if output_idx == False
 
-def create_flat_tform_list(tform_dict):
-    tform_list = []
-    tform_dict = prepare_tform_dict(tform_dict, shape_tform=True)
-    for k, v in tform_dict.items():
-        if k == "initial" and len(v) == 1:
-            for tform in v[0]:
-                tform["InitialTransformParametersFileName"] = [
-                    "NoInitialTransform"
-                ]
-                tform = invert_linear_transformation(
-                    tform.copy(), is_initial=True
+    Parameters
+    ----------
+    pt_data : np.ndarray
+        array where rows are points and columns are x,y
+    itk_transforms: list
+        list of ITK transforms, non-linear transforms should be inverted
+    px_idx: bool
+        whether points are specified in physical coordinates (i.e., microns) or
+        in pixel indices
+    source_res: float
+        resolution of the image on which annotations were made
+    output_idx: bool
+        whether transformed points should be output in physical coordinates (i.e., microns) or
+        in pixel indices
+    target_res: float
+        resolution of the final target image for conversion back to pixel indices
+
+    Returns
+    -------
+    tformed_pts:np.ndarray
+        transformed points array where rows are points and columns are x,y
+
+    """
+    tformed_pts = []
+    for pt in pt_data:
+        if px_idx is True:
+            pt = pt * source_res
+        for idx, t in enumerate(itk_transforms):
+            if idx == 0:
+                t_pt = (
+                    t.GetInverse().TransformPoint(pt)
+                    if t.IsLinear()
+                    else t.TransformPoint(pt)
                 )
+            else:
+                t_pt = (
+                    t.GetInverse().TransformPoint(t_pt)
+                    if t.IsLinear()
+                    else t.TransformPoint(t_pt)
+                )
+        t_pt = np.array(t_pt)
+        if output_idx is True:
+            t_pt *= 1 / target_res
+        tformed_pts.append(t_pt)
 
-                tform_list.append(tform)
-        else:
-            for tform in v:
-                tform["InitialTransformParametersFileName"] = [
-                    "NoInitialTransform"
-                ]
-                if k == "initial":
-                    tform = invert_linear_transformation(
-                        tform.copy(), is_initial=True
-                    )
-                else:
-                    tform = invert_linear_transformation(
-                        tform.copy(), is_initial=False
-                    )
-
-                tform_list.append(tform)
-
-    return tform_list
+    return np.stack(tformed_pts)
 
 
-def apply_transformorm_dict_shapes(shape, source_image_res, tform_dict):
-    tform_list = create_flat_tform_list(tform_dict)
+def transform_shapes(
+    shape_data: list,
+    itk_transforms: list,
+    px_idx=True,
+    source_res=1,
+    output_idx=True,
+    target_res=2,
+):
+    """
+    Convenience function to apply itk_transform_pts to a list of shape data
 
-    for idx, tf in enumerate(tform_list):
-        print('applying:')
-        print(tf)
-        if idx == 0:
-            shape, new_spacing = transform_points(shape, source_image_res, tf)
-        else:
-            shape, new_spacing = transform_points(shape, new_spacing, tf)
+    Parameters
+    ----------
+    shape_data:
+        list of arrays where rows are points and columns are x,y
+    itk_transforms: list
+        list of ITK transforms, non-linear transforms should be inverted
+    px_idx: bool
+        whether points are specified in physical coordinates (i.e., microns) or
+        in pixel indices
+    source_res: float
+        resolution of the image on which annotations were made
+    output_idx: bool
+        whether transformed points should be output in physical coordinates (i.e., microns) or
+        in pixel indices
+    target_res: float
+        resolution of the final target image for conversion back to pixel indices
 
-    return shape
+    Returns
+    -------
+        transformed_shape_data:list
+            list of transformed np.ndarray data where rows are points and columns are x,y
+    """
+    transformed_shape_data = []
+    for sh in shape_data:
+        t_ptset = deepcopy(sh)
+        ptset = sh.get("array")
+        t_pts = itk_transform_pts(
+            ptset,
+            itk_transforms,
+            px_idx=px_idx,
+            source_res=source_res,
+            output_idx=output_idx,
+            target_res=target_res,
+        )
+        t_ptset["array"] = t_pts
+        transformed_shape_data.append(t_ptset)
+
+    return transformed_shape_data
 
 
-def get_int_dtype(value):
+def insert_transformed_pts_gj(gj_data: list, np_data: list):
+    """
+    insert point data into a list of geojson data
+
+    Parameters
+    ----------
+    shape_gj : dict
+        dict of GeoJSON information
+    shape_np : dict
+        transformed point data in wsireg shape dict
+
+    Returns
+    -------
+    shape_gj : dict
+        dict of GeoJSON information with updated coordinate information
+    """
+    gj_data_t = deepcopy(gj_data)
+    for sh, gj in zip(np_data, gj_data_t):
+        gj.get("geometry").update({"coordinates": [sh["array"].tolist()]})
+    return gj_data_t
+
+
+def get_int_dtype(value: int):
+    """
+    Determine appropriate bit precision for indexed image
+
+    Parameters
+    ----------
+    value:int
+        number of shapes
+
+    Returns
+    -------
+    dtype:np.dtype
+        apppropriate data type for index mask
+    """
     if value <= np.iinfo(np.uint8).max:
         return np.uint8
     if value <= np.iinfo(np.uint16).max:
@@ -336,44 +456,18 @@ def get_int_dtype(value):
         raise ValueError("Too many shapes")
 
 
-def get_all_shape_coords(shapes):
+def get_all_shape_coords(shapes: list):
     return np.vstack(
         [np.squeeze(sh["geometry"]["coordinates"][0]) for sh in shapes]
     )
 
 
-def shapes_to_mask_dict(shapes):
-    shape_names = np.unique(
-        [sh["properties"]["classification"]["name"] for sh in shapes]
-    )
-    mat_dtype = get_int_dtype(len(shapes))
-
-    all_coords = get_all_shape_coords(shapes)
-
-    x_max = np.max(all_coords[:, 0]) + 250
-    y_max = np.max(all_coords[:, 1]) + 250
-
-    mask_dict = {}
-
-    for shape_name in np.unique(shape_names):
-        mask_dict[shape_name] = np.zeros(
-            (y_max.astype(np.uint64), x_max.astype(np.uint64)), dtype=mat_dtype
-        )
-
-    for idx, shape in enumerate(shapes):
-        shape_name = shape["properties"]["classification"]["name"]
-
-        shape_coords = np.squeeze(np.array(shape["geometry"]["coordinates"]))
-        shape_coords = np.round([shape_coords]).astype(np.int32)
-
-        mask_dict[shape_name] = cv2.fillPoly(
-            mask_dict[shape_name], shape_coords, idx + 1
-        )
-    return mask_dict
-
-
-def approx_polygon_contour(mask, percent_arc_length=0.01):
-    """Approximate binary mask contours to polygon vertices using cv2.
+# code below is for managing transforms as masks rather than point sets
+# will probably not reimplement, if segmentation data can is expressed
+# as a mask, it can be transformed as an image (using attachment_modality)
+def approx_polygon_contour(mask: np.ndarray, percent_arc_length=0.01):
+    """
+    Approximate binary mask contours to polygon vertices using cv2.
 
     Parameters
     ----------
@@ -402,6 +496,24 @@ def approx_polygon_contour(mask, percent_arc_length=0.01):
 
 
 def index_mask_to_shapes(index_mask, shape_name, tf_shapes):
+    """
+    Find the polygons of a transformed shape mask, conveting binary mask
+    to list of polygon verteces and sorting by numerical index
+
+    Parameters
+    ----------
+    index_mask:np.ndarray
+        mask where each shape is defined by it's index
+    shape_name:str
+        name of the shape
+    tf_shapes:list
+        original list of shape GeoJSON data to be updated
+
+    Returns
+    -------
+    updated_shapes:list
+        dict of GeoJSON information with updated coordinate information
+    """
     labstats = sitk.LabelShapeStatisticsImageFilter()
     labstats.SetBackgroundValue(0)
     labstats.Execute(index_mask)
@@ -421,7 +533,7 @@ def index_mask_to_shapes(index_mask, shape_name, tf_shapes):
 
             sub_mask[sub_mask == idx + 1] = 255
 
-            yx_coords = approx_polygon_contour(sub_mask, 0.001)
+            yx_coords = approx_polygon_contour(sub_mask, 0.00001)
             xy_coords = yx_coords
             xy_coords = np.append(xy_coords, xy_coords[:1, :], axis=0)
             xy_coords = xy_coords + [x_min, y_min]
@@ -432,23 +544,71 @@ def index_mask_to_shapes(index_mask, shape_name, tf_shapes):
     return updated_shapes
 
 
-def apply_transformation_dict_shapes(shapes, image_res, tform_dict):
-    mask_dict = shapes_to_mask_dict(shapes)
-
-    tf_shapes = deepcopy(shapes)
-
-    for k, v in mask_dict.items():
-        print("transforming shapes: {}".format(k))
-        tformed_mask = apply_transform_dict(
-            v, image_res, tform_dict, is_shape_mask=True
-        )
-        tf_shapes = index_mask_to_shapes(tformed_mask, k, tf_shapes)
-
-    return tf_shapes
-
-
-def scale_shape_coordinates(poly, scale_factor):
-    poly_coords = np.asarray(poly["geometry"]["coordinates"][0])
-    poly_coords = poly_coords * scale_factor
-    poly.get("geometry").update({"coordinates": [poly_coords.tolist()]})
-    return poly
+# don't intend to maintain
+# def read_zen_shapes(zen_fp):
+#     """Read Zeiss Zen Blue .cz ROIs files to wsimap shapely format.
+#
+#     Parameters
+#     ----------
+#     zen_fp : str
+#         file path of Zen .cz.
+#
+#     Returns
+#     -------
+#     list
+#         list of wsimap shapely rois
+#
+#     """
+#
+#     root = etree.parse(zen_fp)
+#
+#     rois = root.xpath("//Elements")[0]
+#     shapes_out = []
+#     for shape in rois:
+#         try:
+#             ptset_name = shape.find("Attributes/Name").text
+#         except AttributeError:
+#             ptset_name = "unnamed"
+#
+#         if shape.tag == "Polygon":
+#             ptset_cz = shape.find("Geometry/Points")
+#             # ptset_type = "Polygon"
+#
+#             poly_str = ptset_cz.text
+#             poly_str = poly_str.split(" ")
+#             poly_str = [poly.split(",") for poly in poly_str]
+#             poly_str = [[float(pt[0]), float(pt[1])] for pt in poly_str]
+#
+#             poly = {
+#                 "geometry": geojson.Polygon(poly_str),
+#                 "properties": {"classification": {"name": ptset_name}},
+#             }
+#
+#             shapes_out.append(poly)
+#
+#         if shape.tag == "Rectangle":
+#             rect_pts = shape.find("Geometry")
+#
+#             x = float(rect_pts.findtext("Left"))
+#             y = float(rect_pts.findtext("Top"))
+#             width = float(rect_pts.findtext("Width"))
+#             height = float(rect_pts.findtext("Height"))
+#
+#             rect = geojson.Polygon(
+#                 [
+#                     [x, y],
+#                     [x + width, y],
+#                     [x + width, y + height],
+#                     [x, y + height],
+#                     [x, y],
+#                 ]
+#             )
+#
+#             rect = {
+#                 "geometry": rect,
+#                 "properties": {"classification": {"name": ptset_name}},
+#             }
+#
+#             shapes_out.append(rect)
+#
+#     return shapes_out

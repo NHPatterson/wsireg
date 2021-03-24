@@ -16,7 +16,8 @@ from tifffile import (
 from czifile import CziFile
 import zarr
 import dask.array as da
-from wsireg.utils.tform_utils import apply_transform_dict
+from wsireg.utils.tform_utils import sitk_transform_image
+
 
 TIFFFILE_EXTS = [".scn", ".tif", ".tiff", ".ndpi"]
 
@@ -61,6 +62,19 @@ COLNAME_TO_HEX = {
 
 
 def zarr_get_base_pyr_layer(zarr_store):
+    """
+    Find the base pyramid layer of a zarr store
+
+    Parameters
+    ----------
+    zarr_store
+        zarr store
+
+    Returns
+    -------
+    zarr_im: zarr.core.Array
+        zarr array of base layer
+    """
     if isinstance(zarr_store, zarr.hierarchy.Group):
         zarr_im = zarr_store[str(0)]
     elif isinstance(zarr_store, zarr.core.Array):
@@ -69,7 +83,26 @@ def zarr_get_base_pyr_layer(zarr_store):
 
 
 def tifffile_zarr_backend(image_filepath, largest_series, preprocessing):
+    """
+    Read image with tifffile and use zarr to read data into memory
 
+    Parameters
+    ----------
+    image_filepath: str
+        path to the image file
+    largest_series: int
+        index of the largest series in the image
+    preprocessing:
+        whether to do some read-time pre-processing
+        - greyscale conversion (at the tile level)
+        - read individual or range of channels (at the tile level)
+
+    Returns
+    -------
+    image: sitk.Image
+        image ready for other registration pre-processing
+
+    """
     print("using zarr backend")
     zarr_series = imread(image_filepath, aszarr=True, series=largest_series)
     zarr_store = zarr.open(zarr_series)
@@ -102,6 +135,26 @@ def tifffile_zarr_backend(image_filepath, largest_series, preprocessing):
 
 
 def tifffile_dask_backend(image_filepath, largest_series, preprocessing):
+    """
+    Read image with tifffile and use dask to read data into memory
+
+    Parameters
+    ----------
+    image_filepath: str
+        path to the image file
+    largest_series: int
+        index of the largest series in the image
+    preprocessing:
+        whether to do some read-time pre-processing
+        - greyscale conversion (at the tile level)
+        - read individual or range of channels (at the tile level)
+
+    Returns
+    -------
+    image: sitk.Image
+        image ready for other registration pre-processing
+
+    """
     print("using dask backend")
     zarr_series = imread(image_filepath, aszarr=True, series=largest_series)
     zarr_store = zarr.open(zarr_series)
@@ -134,6 +187,24 @@ def tifffile_dask_backend(image_filepath, largest_series, preprocessing):
 
 
 def sitk_backend(image_filepath, preprocessing):
+    """
+    Read image with SimpleITK..this will always read the full image into memory
+
+    Parameters
+    ----------
+    image_filepath: str
+        path to the image file
+    preprocessing:
+        whether to do some read-time pre-processing
+        - greyscale conversion (at the tile level)
+        - read individual or range of channels (at the tile level)
+
+    Returns
+    -------
+    image: sitk.Image
+        image ready for other registration pre-processing
+
+    """
     print("using sitk backend")
     image = sitk.ReadImage(image_filepath)
 
@@ -156,13 +227,15 @@ def sitk_backend(image_filepath, preprocessing):
 
 
 def guess_rgb(shape):
-    """from: napari's internal im utils
+    """
     Guess if the passed shape comes from rgb data.
     If last dim is 3 or 4 assume the data is rgb, including rgba.
+
     Parameters
     ----------
     shape : list of int
         Shape of the data that should be checked.
+
     Returns
     -------
     bool
@@ -175,6 +248,18 @@ def guess_rgb(shape):
 
 
 def grayscale(rgb):
+    """
+    convert RGB image data to greyscale
+
+    Parameters
+    ----------
+    rgb: np.ndarray
+        image data
+    Returns
+    -------
+    image:np.ndarray
+        returns 8-bit greyscale image for 24-bit RGB image
+    """
     result = (
         (rgb[..., 0] * 0.2125)
         + (rgb[..., 1] * 0.7154)
@@ -185,6 +270,10 @@ def grayscale(rgb):
 
 
 class CziRegImageReader(CziFile):
+    """
+    Sub-class of CziFile with added functionality to only read certain channels
+    """
+
     def sub_asarray(
         self,
         resize=True,
@@ -217,6 +306,10 @@ class CziRegImageReader(CziFile):
         as_uint8 : bool
             byte-scale image data to np.uint8 data type
 
+        Parameters
+        ----------
+        out:np.ndarray
+            image read with selected parameters as np.ndarray
         """
 
         out_shape = list(self.shape)
@@ -289,6 +382,20 @@ class CziRegImageReader(CziFile):
 
 
 def tf_get_largest_series(image_filepath):
+    """
+    Determine largest series for .scn files by examining metadata
+    For other multi-series files, find the one with the most pixels
+
+    Parameters
+    ----------
+    image_filepath: str
+        path to the image file
+
+    Returns
+    -------
+    largest_series:int
+        index of the largest series in the image data
+    """
     fp_ext = Path(image_filepath).suffix.lower()
     tf_im = TiffFile(image_filepath)
     if fp_ext == ".scn":
@@ -309,8 +416,54 @@ def tf_get_largest_series(image_filepath):
     return largest_series
 
 
+def prepare_np_image(image, preprocessing):
+    """
+    preprocess images stored as numpy arrays
+
+    Parameters
+    ----------
+    image:np.ndarray
+        image data
+    preprocessing:dict
+        whether to do some read-time pre-processing
+        - greyscale conversion (at the tile level)
+        - read individual or range of channels (at the tile level)
+
+    Returns
+    -------
+    image:sitk.Image
+        image ready for registration
+    """
+    is_rgb = guess_rgb(image.shape)
+
+    # greyscale an RGB np array
+    if preprocessing is not None:
+        if is_rgb:
+            image = grayscale(image)
+            is_rgb = False
+
+        # select channels for registration if multi-channel
+        if image.ndim > 2 and preprocessing.get("ch_indices") is not None:
+            image = np.squeeze(image[preprocessing.get("ch_indices"), :, :])
+
+    # pass nparray to sitk image
+    image = sitk.GetImageFromArray(image, isVector=is_rgb)
+
+    # sitk preprocessing
+    if (
+        preprocessing is not None
+        and preprocessing.get('as_uint8') is True
+        and image.GetPixelID() != sitk.sitkUInt8
+    ):
+        image = sitk.RescaleIntensity(image)
+        image = sitk.Cast(image, sitk.sitkUInt8)
+
+    return image
+
+
 def read_image(image_filepath, preprocessing):
     """
+    Convenience function to read images
 
     Parameters
     ----------
@@ -320,6 +473,7 @@ def read_image(image_filepath, preprocessing):
         read time preprocessing dict ("as_uint8" and "ch_indices")
     Returns
     -------
+    image: sitk.Image
         SimpleITK image of image data from czi, scn or other image formats read by SimpleITK
     """
 
@@ -370,6 +524,22 @@ def read_image(image_filepath, preprocessing):
 
 
 def sitk_image_info(image_filepath):
+    """
+    Get image info for files only ready by SimpleITK
+
+    Parameters
+    ----------
+    image_filepath:str
+        filepath to image
+
+    Returns
+    -------
+    im_dims: np.ndarray
+        image dimensions in np.ndarray
+    im_dtype: np.dtype
+        data type of the image
+
+    """
     reader = sitk.ImageFileReader()
     reader.SetFileName(image_filepath)
     reader.LoadPrivateTagsOn()
@@ -391,6 +561,23 @@ def sitk_image_info(image_filepath):
 
 
 def get_im_info(image_filepath):
+    """
+    Use CziFile and tifffile to get image dimension and other information.
+
+    Parameters
+    ----------
+    image_filepath: str
+        filepath to the image file
+
+    Returns
+    -------
+    im_dims: np.ndarray
+        image dimensions in np.ndarray
+    im_dtype: np.dtype
+        data type of the image
+    reader:str
+        whether to use "czifile" or "tifffile" to read the image
+    """
     if Path(image_filepath).suffix.lower() == ".czi":
         czi = CziFile(image_filepath)
         ch_dim_idx = czi.axes.index('C')
@@ -420,6 +607,23 @@ def get_im_info(image_filepath):
 
 
 def tf_zarr_read_single_ch(image_filepath, channel_idx, is_rgb):
+    """
+    Reads a single channel using zarr or dask in combination with tifffile
+
+    Parameters
+    ----------
+    image_filepath:str
+        file path to image
+    channel_idx:int
+        index of the channel to be read
+    is_rgb:bool
+        whether image is rgb interleaved
+
+    Returns
+    -------
+    im:np.ndarray
+        image as a np.ndarray
+    """
     largest_series = tf_get_largest_series(image_filepath)
     zarr_im = zarr.open(
         imread(image_filepath, aszarr=True, series=largest_series)
@@ -456,7 +660,22 @@ def czi_read_single_ch(image_filepath, channel_idx):
 
 
 def calc_pyramid_levels(xy_final_shape, tile_size):
+    """
+    Calculate number of pyramids for a given image dimension and tile size
+    Stops when further downsampling would be smaller than tile_size.
 
+    Parameters
+    ----------
+    xy_final_shape:np.ndarray
+        final shape in xy order
+    tile_size: int
+        size of the tiles in the pyramidal layers
+    Returns
+    -------
+    res_shapes:list
+        list of tuples of the shapes of the downsampled images
+
+    """
     res_shape = xy_final_shape[::-1]
     res_shapes = [tuple(res_shape)]
 
@@ -468,10 +687,38 @@ def calc_pyramid_levels(xy_final_shape, tile_size):
 
 
 def add_ome_axes_single_plane(image_np):
+    """
+    Reshapes np.ndarray image to match OME-zarr standard
+
+    Parameters
+    ----------
+    image_np:np.ndarray
+        image to which additional axes are added to meet OME-zarr standard
+
+    Returns
+    -------
+    image_np:np.ndarray
+        reshaped image array
+
+    """
     return image_np.reshape((1,) * (3) + image_np.shape)
 
 
 def generate_channels(channel_names, channel_colors, im_dtype):
+    """
+    Generate OME-zarr channels metadata
+
+    Parameters
+    ----------
+    channel_names:list
+    channel_colors:list
+    im_dtype:np.dtype
+
+    Returns
+    -------
+    channel_info:list
+        list of dicts containing OME-zarr channel info
+    """
     channel_info = []
     for channel_name, channel_color in zip(channel_names, channel_colors):
         channel_info.append(
@@ -486,12 +733,50 @@ def generate_channels(channel_names, channel_colors, im_dtype):
 
 
 def format_channel_names(channel_names, n_ch):
+    """
+    Format channel names and ensure number of channel names matches number of channels or default
+    to C1, C2, C3, etc.
+
+    Parameters
+    ----------
+    channel_names:list
+        list of str that are channel names
+    n_ch: int
+        number of channels detected in image
+
+    Returns
+    -------
+    channel_names:
+        list of str that are formatted
+    """
     if channel_names is None or n_ch != len(channel_names):
         channel_names = ["C{}".format(idx) for idx in range(n_ch)]
     return channel_names
 
 
 def get_pyramid_info(y_size, x_size, n_ch, tile_size):
+    """
+    Get pyramidal info for OME-zarr output
+
+    Parameters
+    ----------
+    y_size: int
+        y dimension of base layer
+    x_size:int
+        x dimension of base layer
+    n_ch:int
+        number of channels in the image
+    tile_size:int
+        tile size of the image
+
+    Returns
+    -------
+    pyr_levels
+        pyramidal levels
+    pyr_shapes:
+        OME-zarr pyramid shapes for all levels
+
+    """
     yx_size = np.asarray([y_size, x_size], dtype=np.int32)
     pyr_levels = calc_pyramid_levels(yx_size, tile_size)
     pyr_shapes = [(1, n_ch, 1, int(pl[0]), int(pl[1])) for pl in pyr_levels]
@@ -508,6 +793,37 @@ def prepare_ome_zarr_group(
     channel_names=None,
     channel_colors=None,
 ):
+    """
+    Prepare OME-zarr store with all meta data and channel info and initialize store
+
+    Parameters
+    ----------
+    zarr_store_dir:str
+        filepath to zarr store
+    y_size: int
+        y dimension of base layer
+    x_size:int
+        x dimension of base layer
+    n_ch:int
+        number of channels in the image
+    im_dtype:np.dtype
+        data type of the image
+    tile_size:int
+        tile size of the image
+    channel_names:list
+        list of str channel names
+    channel_colors:
+        list of hex or str channel colors
+
+    Returns
+    -------
+    grp: zarr.store
+        initialized store
+    n_pyr_levels: int
+        number of sub-resolutions
+    pyr_levels: list
+        shapes of sub-resolutions
+    """
     store = zarr.DirectoryStore(zarr_store_dir)
     grp = zarr.group(store, overwrite=True)
     zarr_dtype = "{}{}".format(im_dtype.kind, im_dtype.itemsize)
@@ -562,14 +878,46 @@ def prepare_ome_zarr_group(
     return grp, n_pyr_levels, pyr_levels
 
 
-def get_final_tform_info(tform_dict):
-    x_size, y_size = tform_dict.get(list(tform_dict.keys())[-1])[-1].get(
-        "Size"
+def get_final_tform_info(final_tform):
+    """
+    Extract size and spacing information from wsireg's final transformation elastix data
+
+    Parameters
+    ----------
+    final_tform:itk.Transform
+        itk.Transform with added attributes containing transform data
+
+    Returns
+    -------
+    y_size: int
+    x_size: int
+    y_spacing: float
+    x_spacing: float
+
+    """
+    x_size, y_size = final_tform.OutputSize[0], final_tform.OutputSize[1]
+    x_spacing, y_spacing = (
+        final_tform.OutputSpacing[0],
+        final_tform.OutputSpacing[1],
     )
-    return int(y_size), int(x_size)
+    return int(y_size), int(x_size), float(y_spacing), float(x_spacing)
 
 
 def image_to_zarr_store(zgrp, image, channel_idx, n_pyr_levels, pyr_levels):
+    """
+    Write image into zarr store with sub resolutions
+
+    Parameters
+    ----------
+    grp: zarr.store
+        initialized store
+    image:sitk.Image
+        image
+    channel_idx:int
+        which channel the image represents
+    n_pyr_levels: int
+    pyr_levels: list
+    """
     for pyr_idx in range(n_pyr_levels):
         if pyr_idx == 0:
             image = sitk.GetArrayFromImage(image)
@@ -609,15 +957,18 @@ def prepare_ome_xml_str(
 
 
 def get_final_yx_from_tform(tform_reg_im):
-    if tform_reg_im.tform_dict is not None:
-        y_size, x_size = get_final_tform_info(tform_reg_im.tform_dict)
+    if tform_reg_im.final_tform is not None:
+        y_size, x_size, y_spacing, x_spacing = get_final_tform_info(
+            tform_reg_im.final_tform
+        )
     else:
         y_size, x_size = (
             (tform_reg_im.im_dims[0], tform_reg_im.im_dims[1])
             if tform_reg_im.is_rgb
             else (tform_reg_im.im_dims[1], tform_reg_im.im_dims[2])
         )
-    return y_size, x_size
+        y_spacing, x_spacing = None, None
+    return y_size, x_size, y_spacing, x_spacing
 
 
 def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size):
@@ -632,8 +983,9 @@ def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size):
     pyr_levels, pyr_shapes = get_pyramid_info(y_size, x_size, n_ch, tile_size)
     n_pyr_levels = len(pyr_levels)
     output_file_name = str(Path(output_dir) / tform_reg_im.image_name)
-    if tform_reg_im.reader in ["tifffile", "czi"]:
-
+    if tform_reg_im.reader in ["tifffile", "czi", "sitk"]:
+        if tform_reg_im.reader == "sitk":
+            full_image = sitk.ReadImage(tform_reg_im.image_filepath)
         for channel_idx in range(n_ch):
             if tform_reg_im.reader == "tifffile":
                 tform_reg_im.image = tf_zarr_read_single_ch(
@@ -642,30 +994,26 @@ def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size):
                     tform_reg_im.is_rgb,
                 )
                 tform_reg_im.image = np.squeeze(tform_reg_im.image)
+
             elif tform_reg_im.reader == "czi":
                 tform_reg_im.image = czi_read_single_ch(
                     tform_reg_im.image_filepath, channel_idx
                 )
                 tform_reg_im.image = np.squeeze(tform_reg_im.image)
+            elif tform_reg_im.reader == "sitk":
+                if tform_reg_im.is_rgb:
+                    tform_reg_im.image = sitk.VectorIndexSelectionCast(
+                        full_image
+                    )
+                elif len(full_image.GetSize()) > 2:
+                    tform_reg_im.image = full_image[:, :, channel_idx]
+                else:
+                    tform_reg_im.image = full_image
 
-            tform_reg_im.image = sitk.GetImageFromArray(
-                tform_reg_im.image, isVector=False
-            )
-            tform_reg_im.image.SetSpacing(
-                (tform_reg_im.image_res, tform_reg_im.image_res)
-            )
-
-            tform_reg_im.preprocess_reg_image_spatial(
-                tform_reg_im.spatial_prepro, tform_reg_im.transforms
-            )
-
-            tform_reg_im.image = apply_transform_dict(
-                tform_reg_im.image,
-                tform_reg_im.image_res,
-                tform_reg_im.tform_dict,
-                is_shape_mask=False,
-                writer="sitk",
-            )
+            if tform_reg_im.composite_transform is not None:
+                tform_reg_im = transform_plane(tform_reg_im)
+            else:
+                tform_reg_im.image = sitk.GetImageFromArray(tform_reg_im.image)
             if channel_idx == 0:
                 channel_names = format_channel_names(
                     tform_reg_im.channel_names, n_ch
@@ -690,10 +1038,38 @@ def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size):
     return f"{output_file_name}.ome.zarr"
 
 
+def transform_plane(tform_reg_im):
+    if isinstance(tform_reg_im.image, sitk.Image) is False:
+        tform_reg_im.image = sitk.GetImageFromArray(
+            tform_reg_im.image, isVector=False
+        )
+
+    tform_reg_im.image.SetSpacing(
+        (tform_reg_im.image_res, tform_reg_im.image_res)
+    )
+
+    tform_reg_im.preprocess_reg_image_spatial(
+        tform_reg_im.spatial_prepro, tform_reg_im.transforms
+    )
+    tform_reg_im.image = sitk_transform_image(
+        tform_reg_im.image,
+        tform_reg_im.final_tform,
+        tform_reg_im.composite_transform,
+    )
+
+    return tform_reg_im
+
+
 def transform_to_ome_tiff(
-    tform_reg_im, output_dir, tile_size, write_pyramid=True
+    tform_reg_im,
+    output_dir,
+    tile_size=512,
+    write_pyramid=True,
 ):
-    y_size, x_size = get_final_yx_from_tform(tform_reg_im)
+
+    y_size, x_size, y_spacing, x_spacing = get_final_yx_from_tform(
+        tform_reg_im
+    )
 
     n_ch = (
         tform_reg_im.im_dims[2]
@@ -705,14 +1081,21 @@ def transform_to_ome_tiff(
     output_file_name = str(Path(output_dir) / tform_reg_im.image_name)
     channel_names = format_channel_names(tform_reg_im.channel_names, n_ch)
 
+    if tform_reg_im.transform_data is not None:
+        PhysicalSizeY = y_spacing
+        PhysicalSizeX = x_spacing
+    else:
+        PhysicalSizeY = tform_reg_im.image_res
+        PhysicalSizeX = tform_reg_im.image_res
+
     omexml = prepare_ome_xml_str(
         y_size,
         x_size,
         n_ch,
         tform_reg_im.im_dtype,
         tform_reg_im.is_rgb,
-        PhysicalSizeX=tform_reg_im.image_res,
-        PhysicalSizeY=tform_reg_im.image_res,
+        PhysicalSizeX=PhysicalSizeX,
+        PhysicalSizeY=PhysicalSizeY,
         PhysicalSizeXUnit="µm",
         PhysicalSizeYUnit="µm",
         Name=tform_reg_im.image_name,
@@ -721,7 +1104,11 @@ def transform_to_ome_tiff(
     subifds = n_pyr_levels - 1 if write_pyramid is True else None
 
     rgb_im_data = []
-    if tform_reg_im.reader in ["tifffile", "czi"]:
+
+    if tform_reg_im.reader in ["tifffile", "czi", "sitk"]:
+        if tform_reg_im.reader == "sitk":
+            full_image = sitk.ReadImage(tform_reg_im.image_filepath)
+
         print(f"saving to {output_file_name}.ome.tiff")
         with TiffWriter(f"{output_file_name}.ome.tiff", bigtiff=True) as tif:
             for channel_idx in range(n_ch):
@@ -738,37 +1125,34 @@ def transform_to_ome_tiff(
                         tform_reg_im.image_filepath, channel_idx
                     )
                     tform_reg_im.image = np.squeeze(tform_reg_im.image)
+                elif tform_reg_im.reader == "sitk":
+                    if tform_reg_im.is_rgb:
+                        tform_reg_im.image = sitk.VectorIndexSelectionCast(
+                            full_image
+                        )
+                    elif len(full_image.GetSize()) > 2:
+                        tform_reg_im.image = full_image[:, :, channel_idx]
+                    else:
+                        tform_reg_im.image = full_image
 
-                tform_reg_im.image = sitk.GetImageFromArray(
-                    tform_reg_im.image, isVector=False
-                )
-                tform_reg_im.image.SetSpacing(
-                    (tform_reg_im.image_res, tform_reg_im.image_res)
-                )
-
-                tform_reg_im.preprocess_reg_image_spatial(
-                    tform_reg_im.spatial_prepro, tform_reg_im.transforms
-                )
-                tform_reg_im.image = apply_transform_dict(
-                    tform_reg_im.image,
-                    tform_reg_im.image_res,
-                    tform_reg_im.tform_dict,
-                    is_shape_mask=False,
-                    writer="sitk",
-                )
+                if tform_reg_im.composite_transform is not None:
+                    tform_reg_im = transform_plane(tform_reg_im)
 
                 if tform_reg_im.is_rgb:
                     rgb_im_data.append(tform_reg_im.image)
                 else:
                     print("saving")
+                    if isinstance(tform_reg_im.image, sitk.Image):
+                        tform_reg_im.image = sitk.GetArrayFromImage(
+                            tform_reg_im.image
+                        )
 
-                    tform_reg_im.image = sitk.GetArrayFromImage(
-                        tform_reg_im.image
-                    )
 
                     options = dict(
                         tile=(tile_size, tile_size),
-                        compression="jpeg" if tform_reg_im.is_rgb else None,
+                        compression="jpeg"
+                        if tform_reg_im.is_rgb
+                        else "deflate",
                         photometric="rgb"
                         if tform_reg_im.is_rgb
                         else "minisblack",

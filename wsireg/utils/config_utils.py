@@ -3,7 +3,7 @@ import yaml
 
 def parse_check_reg_config(yaml_filepath):
     with open(yaml_filepath, "r") as file:
-        reg_config = yaml.safe_load(file)
+        reg_config = yaml.full_load(file)
 
     def check_for_key(top_key, check_dict, check_key):
         if check_dict.get(check_key) is None:
