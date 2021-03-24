@@ -12,6 +12,7 @@ Welcome to wsireg's documentation!
    contributing
    authors
    history
+   modules/index
 
 Indices and tables
 ==================
