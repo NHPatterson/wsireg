@@ -1147,7 +1147,6 @@ def transform_to_ome_tiff(
                             tform_reg_im.image
                         )
 
-
                     options = dict(
                         tile=(tile_size, tile_size),
                         compression="jpeg"

@@ -60,6 +60,7 @@ def prepare_tform_dict(tform_dict, shape_tform=False):
 
     return tform_dict_out
 
+
 def transform_2d_image_itkelx(
     image, transformation_maps, writer="sitk", **zarr_kwargs
 ):
@@ -433,6 +434,7 @@ def euler_elx_to_itk2d(tform):
 
     return euler2d
 
+
 def similarity_elx_to_itk2d(tform):
     similarity2d = sitk.Similarity2DTransform()
 
@@ -442,6 +444,7 @@ def similarity_elx_to_itk2d(tform):
     similarity2d.SetParameters(elx_parameters)
 
     return similarity2d
+
 
 def affine_elx_to_itk2d(tform):
     im_dimension = len(tform["Size"])

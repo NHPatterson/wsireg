@@ -101,6 +101,7 @@ class WsiReg2D(object):
 
         if config is not None:
             self.add_data_from_config(config)
+
     @property
     def modalities(self):
         return self._modalities

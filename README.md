@@ -3,10 +3,10 @@ Multi-modal or mono-modal whole slide image registration in a graph structure fo
 
 ## Features
 * Graph based approach to defining modalities and arbitrary transformation paths between associated images
-* Best to use images converted to OME-TIFF using [bioformats2raw](https://github.com/glencoesoftware/bioformats2raw) -> [raw2ometiff](https://github.com/glencoesoftware/bioformats2raw) pipeline
 * Use of `elastix` (through [ITKElastix](https://github.com/InsightSoftwareConsortium/ITKElastix/)) to perform registration
 * Support for linear and non-linear transformation models
 * Transform associated data (masks, shape data) along the same path as the images.
+* Supports images converted to OME-TIFF using [bioformats2raw](https://github.com/glencoesoftware/bioformats2raw) -> [raw2ometiff](https://github.com/glencoesoftware/bioformats2raw) pipeline
 * All registered images exported as pyramidal OME-TIFF or OME-zarr that can be viewed in software such as [Vitessce](vitessce.io),[vizarr](https://github.com/hms-dbmi/vizarr), [QuPath](https://qupath.github.io), [OMERO](https://www.openmicroscopy.org/omero/) or any platform that supports these formats.
 * All transforms for complex registration paths are internally composited and only 1 interpolation step is performed, avoiding accumulation of interpolation error from many registrations
 * Shape data (polygons, point sets, etc.) in GeoJSON format (future portable format for QuPath detection/annotation data) can be imported and transformations applied producing a modified GeoJSON

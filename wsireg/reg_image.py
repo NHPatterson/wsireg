@@ -306,7 +306,7 @@ class TransformRegImage(RegImage):
         image_name,
         image_fp,
         image_res,
-        spatial_preprocessing = None,
+        spatial_preprocessing=None,
         transform_data=None,
         channel_names=None,
         channel_colors=None,
