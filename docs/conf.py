@@ -32,7 +32,12 @@ import wsireg
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.viewcode','sphinx.ext.napoleon']
+extensions = [
+    'sphinx.ext.autodoc',
+    "sphinx_rtd_theme",
+    'sphinx.ext.viewcode',
+    'sphinx.ext.napoleon',
+]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -48,7 +53,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'wsireg'
-copyright = "2020, Nathan Heath Patterson"
+copyright = "2020-2021, Nathan Heath Patterson"
 author = "Nathan Heath Patterson"
 
 # The version info for the project you're documenting, acts as replacement
@@ -84,7 +89,7 @@ todo_include_todos = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+html_theme = 'sphinx_rtd_theme'
 
 # Theme options are theme-specific and customize the look and feel of a
 # theme further.  For a list of options available for each theme, see the
