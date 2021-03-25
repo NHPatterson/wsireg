@@ -1,17 +1,17 @@
+import time
+import yaml
 from pathlib import Path
 import json
 import SimpleITK as sitk
-from wsireg.reg_utils import (
-    RegImage,
-    register_2d_images,
-    apply_transform_dict,
+from wsireg.reg_image import RegImage, TransformRegImage
+from wsireg.utils.reg_utils import (
+    register_2d_images_itkelx,
     sitk_pmap_to_dict,
     pmap_dict_to_json,
     json_to_pmap_dict,
 )
 from wsireg.reg_shapes import RegShapes
-from wsireg.im_utils import sitk_to_ometiff
-from wsireg.config_utils import parse_check_reg_config
+from wsireg.utils.config_utils import parse_check_reg_config
 
 
 class WsiReg2D(object):
@@ -20,50 +20,57 @@ class WsiReg2D(object):
 
     Parameters
     ----------
-    project_name : str
+    project_name: str
         Project name will prefix all output files and directories
-    output_dir : str
+    output_dir: str
         Directory where registration data will be stored
-    cache_images : bool
+    cache_images: bool
         whether to store images as they are preprocessed for registration (if you need to repeat or modify settings
         this will avoid image io and preprocessing)
 
     Attributes
     ----------
-    modalities : dict
+    modalities: dict
         dictionary of modality information (file path, spatial res., preprocessing), defines a graph node
 
-    modalities : list
+    modalities: list
         list of all modality names
 
-    n_modalities : int
+    n_modalities: int
         number of modalities (nodes) in the graphs
 
-    reg_paths : dict
+    reg_paths: dict
         dictionary of a modalities path from node to node
 
-    reg_graph_edges : dict
+    reg_graph_edges: dict
         generated dictionary of necessary registrations to move modalities to their target modality
 
-    n_registrations : int
+    n_registrations: int
         number of explicit registrations (edges) in the graphs
 
-    transformation_paths : dict
+    transformation_paths: dict
         generated dictionary of necessary source - target transformations to transform modalities to their target modality
 
-    transformations : dict
+    transformations: dict
         per modality dictionary containing transformation parameters for each registration
 
-    attachment_images : dict
+    attachment_images: dict
         images to be transformed along the path of the defined graph, assoicated to a given modality (masks, other registered images)
 
-    attachment_shapes : dict
+    attachment_shapes: dict
         shape data attached to a modality to be transformed along the graph
 
 
     """
 
-    def __init__(self, project_name: str, output_dir: str, cache_images=True):
+    def __init__(
+        self,
+        project_name: str,
+        output_dir: str,
+        cache_images=True,
+        reload_data=False,
+        config=None,
+    ):
 
         if project_name is None:
             self.project_name = 'RegProj'
@@ -75,9 +82,6 @@ class WsiReg2D(object):
         self.output_dir = Path(output_dir)
         self.image_cache = self.output_dir / ".imcache_{}".format(project_name)
         self.cache_images = cache_images
-
-        if self.cache_images is True:
-            self.image_cache.mkdir(parents=False, exist_ok=True)
 
         self._modalities = {}
         self._modality_names = []
@@ -94,6 +98,9 @@ class WsiReg2D(object):
 
         self._shape_sets = {}
         self._shape_set_names = []
+
+        if config is not None:
+            self.add_data_from_config(config)
 
     @property
     def modalities(self):
@@ -164,7 +171,7 @@ class WsiReg2D(object):
 
         self.modalities = {
             modality_name: {
-                "image_fp": image_fp,
+                "image_filepath": image_fp,
                 "image_res": image_res,
                 "channel_names": channel_names,
                 "channel_colors": channel_colors,
@@ -398,7 +405,7 @@ class WsiReg2D(object):
             im_fp = str(cache_im_fp)
             im_from_cache = True
         else:
-            im_fp = self.modalities[modality_name]["image_fp"]
+            im_fp = self.modalities[modality_name]["image_filepath"]
             im_from_cache = False
 
         if cache_transform_fp.exists() is True:
@@ -422,7 +429,7 @@ class WsiReg2D(object):
             mod_data["preprocessing"] = override_preprocessing
 
             return (
-                mod_data["image_fp"],
+                mod_data["image_filepath"],
                 mod_data["image_res"],
                 mod_data["preprocessing"],
                 None,
@@ -431,7 +438,7 @@ class WsiReg2D(object):
         else:
 
             (
-                mod_data["image_fp"],
+                mod_data["image_filepath"],
                 mod_data["transforms"],
                 im_from_cache,
             ) = self._check_cache_modality(modality_name)
@@ -440,7 +447,7 @@ class WsiReg2D(object):
                 mod_data["preprocessing"] = None
 
             return (
-                mod_data["image_fp"],
+                mod_data["image_filepath"],
                 mod_data["image_res"],
                 mod_data["preprocessing"],
                 mod_data["transforms"],
@@ -475,7 +482,51 @@ class WsiReg2D(object):
         ]
         return list(set(self.modality_names).difference(registered_modalities))
 
-    def register_images(self, parallel=False, compute_inverse=False):
+    def save_config(self, registered=False):
+        ts = time.strftime('%Y%m%d-%H%M%S')
+        status = "registered" if registered is True else "setup"
+
+        reg_paths = {}
+        for idx, edge in enumerate(self.reg_graph_edges):
+            src_modality = edge.get("modalities").get("source")
+            if len(self.reg_paths[src_modality]) > 1:
+                thru_modality = self.reg_paths[src_modality][0]
+            else:
+                thru_modality = None
+            tgt_modality = self.reg_paths[src_modality][-1]
+            reg_paths.update(
+                {
+                    f"reg_path_{idx}": {
+                        "src_modality_name": edge.get("modalities").get(
+                            "source"
+                        ),
+                        "tgt_modality_name": tgt_modality,
+                        "thru_modality": thru_modality,
+                        "reg_params": edge.get("params"),
+                    }
+                }
+            )
+
+        config = {
+            "project_name": self.project_name,
+            "output_dir": str(self.output_dir),
+            "cache_images": self.cache_images,
+            "modalities": self.modalities,
+            "reg_paths": reg_paths,
+            "reg_graph_edges": self.reg_graph_edges
+            if status == "registered"
+            else None,
+        }
+
+        output_path = (
+            self.output_dir
+            / f"{ts}-{self.project_name}-configuration-{status}.yaml"
+        )
+
+        with open(str(output_path), "w") as f:
+            yaml.dump(config, f, sort_keys=False)
+
+    def register_images(self, parallel=False):
         """
         Start image registration process for all modalities
 
@@ -483,99 +534,115 @@ class WsiReg2D(object):
         ----------
         parallel : bool
             whether to run each edge in parallel (not implemented yet)
-        compute_inverse : bool
-            whether to compute the inverse transformation for each modality, may be used for point transformations but
-            isn't currently working universally
         """
+        if self.cache_images is True:
+            self.image_cache.mkdir(parents=False, exist_ok=True)
+
+        self.save_config(registered=False)
+
         for reg_edge in self.reg_graph_edges:
+            if (
+                reg_edge.get("registered") is None
+                or reg_edge.get("registered") is False
+            ):
+                src_name = reg_edge["modalities"]["source"]
+                tgt_name = reg_edge["modalities"]["target"]
 
-            src_name = reg_edge["modalities"]["source"]
-            tgt_name = reg_edge["modalities"]["target"]
+                (
+                    src_reg_image_fp,
+                    src_res,
+                    src_prepro,
+                    src_transforms,
+                    src_mask,
+                ) = self._prepare_modality(src_name, reg_edge, "source")
 
-            (
-                src_reg_image_fp,
-                src_res,
-                src_prepro,
-                src_transforms,
-                src_mask,
-            ) = self._prepare_modality(src_name, reg_edge, "source")
+                (
+                    tgt_reg_image_fp,
+                    tgt_res,
+                    tgt_prepro,
+                    tgt_transforms,
+                    tgt_mask,
+                ) = self._prepare_modality(tgt_name, reg_edge, "target")
 
-            (
-                tgt_reg_image_fp,
-                tgt_res,
-                tgt_prepro,
-                tgt_transforms,
-                tgt_mask,
-            ) = self._prepare_modality(tgt_name, reg_edge, "target")
-
-            src_reg_image = RegImage(
-                src_reg_image_fp,
-                src_res,
-                src_prepro,
-                src_transforms,
-                mask=src_mask,
-            )
-
-            tgt_reg_image = RegImage(
-                tgt_reg_image_fp,
-                tgt_res,
-                tgt_prepro,
-                tgt_transforms,
-                mask=tgt_mask,
-            )
-
-            if self.cache_images is True:
-                if reg_edge.get("override_prepro") is not None:
-                    if reg_edge.get("override_prepro").get("source") is None:
-                        self._cache_images(src_name, src_reg_image)
-                    if reg_edge.get("override_prepro").get("target") is None:
-                        self._cache_images(tgt_name, tgt_reg_image)
-                else:
-                    self._cache_images(src_name, src_reg_image)
-                    self._cache_images(tgt_name, tgt_reg_image)
-
-            reg_params = reg_edge["params"]
-
-            output_path = self.output_dir / "{}-{}_to_{}_reg_output".format(
-                self.project_name,
-                reg_edge["modalities"]["source"],
-                reg_edge["modalities"]["target"],
-            )
-
-            output_path.mkdir(parents=False, exist_ok=True)
-
-            output_path_tform = (
-                self.output_dir
-                / "{}-{}_to_{}_transformations.json".format(
-                    self.project_name,
-                    reg_edge["modalities"]["source"],
-                    reg_edge["modalities"]["target"],
+                src_reg_image = RegImage(
+                    src_reg_image_fp,
+                    src_res,
+                    src_prepro,
+                    src_transforms,
+                    mask=src_mask,
                 )
-            )
 
-            reg_tforms = register_2d_images(
-                src_reg_image,
-                tgt_reg_image,
-                reg_params,
-                output_path,
-                compute_inverse=compute_inverse,
-            )
+                tgt_reg_image = RegImage(
+                    tgt_reg_image_fp,
+                    tgt_res,
+                    tgt_prepro,
+                    tgt_transforms,
+                    mask=tgt_mask,
+                )
 
-            reg_tforms = [sitk_pmap_to_dict(tf) for tf in reg_tforms]
+                if self.cache_images is True:
+                    if reg_edge.get("override_prepro") is not None:
+                        if (
+                            reg_edge.get("override_prepro").get("source")
+                            is None
+                        ):
+                            self._cache_images(src_name, src_reg_image)
+                        if (
+                            reg_edge.get("override_prepro").get("target")
+                            is None
+                        ):
+                            self._cache_images(tgt_name, tgt_reg_image)
+                    else:
+                        self._cache_images(src_name, src_reg_image)
+                        self._cache_images(tgt_name, tgt_reg_image)
 
-            reg_edge["transforms"] = {
-                'initial': src_reg_image.transforms,
-                'registration': reg_tforms,
-            }
-            reg_edge["transforms"] = {
-                'initial': src_reg_image.transforms,
-                'registration': reg_tforms,
-            }
+                reg_params = reg_edge["params"]
 
-            reg_edge["registered"] = True
-            pmap_dict_to_json(reg_edge["transforms"], str(output_path_tform))
+                output_path = (
+                    self.output_dir
+                    / "{}-{}_to_{}_reg_output".format(
+                        self.project_name,
+                        reg_edge["modalities"]["source"],
+                        reg_edge["modalities"]["target"],
+                    )
+                )
+
+                output_path.mkdir(parents=False, exist_ok=True)
+
+                output_path_tform = (
+                    self.output_dir
+                    / "{}-{}_to_{}_transformations.json".format(
+                        self.project_name,
+                        reg_edge["modalities"]["source"],
+                        reg_edge["modalities"]["target"],
+                    )
+                )
+
+                reg_tforms = register_2d_images_itkelx(
+                    src_reg_image,
+                    tgt_reg_image,
+                    reg_params,
+                    output_path,
+                )
+
+                reg_tforms = [sitk_pmap_to_dict(tf) for tf in reg_tforms]
+                if src_transforms is not None:
+                    initial_transforms = src_reg_image.transforms[0]
+                else:
+                    initial_transforms = src_reg_image.transforms
+
+                reg_edge["transforms"] = {
+                    'initial': initial_transforms,
+                    'registration': reg_tforms,
+                }
+
+                reg_edge["registered"] = True
+                pmap_dict_to_json(
+                    reg_edge["transforms"], str(output_path_tform)
+                )
 
         self.transformations = self.reg_graph_edges
+        self.save_config(registered=True)
 
     @property
     def transformations(self):
@@ -583,9 +650,9 @@ class WsiReg2D(object):
 
     @transformations.setter
     def transformations(self, reg_graph_edges):
-        self._transformations = self._get_transformations(reg_graph_edges)
+        self._transformations = self._collate_transformations(reg_graph_edges)
 
-    def _get_transformations(self, reg_graph_edges):
+    def _collate_transformations(self, reg_graph_edges):
         transforms = {}
         edge_modality_pairs = [v['modalities'] for v in self.reg_graph_edges]
         for modality, tform_edges in self.transform_paths.items():
@@ -603,7 +670,7 @@ class WsiReg2D(object):
 
         return transforms
 
-    def _transform_nonreg_image(self, modality_key, file_writer):
+    def _transform_nonreg_image(self, modality_key, file_writer="ome.tiff"):
         print(
             "transforming non-registered modality : {} ".format(modality_key)
         )
@@ -623,33 +690,23 @@ class WsiReg2D(object):
         else:
             transformations = None
 
-        if file_writer == "sitk":
-            image = apply_transform_dict(
-                im_data["image_fp"], im_data["image_res"], transformations
-            )
-            sitk.WriteImage(image, str(output_path) + ".tiff", True)
-
-        elif file_writer == "zarr":
-            im_data_zarr = {
-                "zarr_store_dir": str(output_path) + ".zarr",
-                "channel_names": im_data["channel_names"],
-                "channel_colors": im_data["channel_colors"],
-            }
-
-            zarr_image_fp = apply_transform_dict(
-                im_data["image_fp"],
-                im_data["image_res"],
-                transformations,
-                writer="zarr",
-                **im_data_zarr,
-            )
-
-            return zarr_image_fp
+        tfregimage = TransformRegImage(
+            output_path.stem,
+            im_data["image_filepath"],
+            im_data["image_res"],
+            transform_data=transformations,
+            channel_names=im_data.get("channel_names"),
+            channel_colors=im_data.get("channel_colors"),
+        )
+        im_fp = tfregimage.transform_image(
+            str(output_path.parent), output_type=file_writer, tile_size=512
+        )
+        return im_fp
 
     def _transform_image(
         self,
         edge_key,
-        file_writer="sitk",
+        file_writer="ome.tiff",
         attachment=False,
         attachment_modality=None,
     ):
@@ -669,43 +726,21 @@ class WsiReg2D(object):
             edge_key,
             final_modality,
         )
-        if file_writer == "sitk" or file_writer == "ometiff":
-            image = apply_transform_dict(
-                im_data["image_fp"], im_data["image_res"], transformations
-            )
-            if file_writer == "sitk":
-                sitk.WriteImage(image, str(output_path) + ".tiff", True)
-            elif file_writer == "ometiff":
-                image_res = (image.GetSpacing()[0], image.GetSpacing()[1])
-                image_name = "{}-{}_registered".format(
-                    self.project_name, edge_key
-                )
-                sitk_to_ometiff(
-                    image,
-                    str(output_path) + "ome.tiff",
-                    image_name=image_name,
-                    channel_names=im_data["channel_names"],
-                    image_res=image_res,
-                )
+        tfregimage = TransformRegImage(
+            output_path.stem,
+            im_data["image_filepath"],
+            im_data["image_res"],
+            transform_data=transformations,
+            channel_names=im_data.get("channel_names"),
+            channel_colors=im_data.get("channel_colors"),
+        )
+        im_fp = tfregimage.transform_image(
+            str(self.output_dir), output_type=file_writer, tile_size=512
+        )
 
-        elif file_writer == "zarr":
-            im_data_zarr = {
-                "zarr_store_dir": str(output_path) + ".zarr",
-                "channel_names": im_data["channel_names"],
-                "channel_colors": im_data["channel_colors"],
-            }
+        return im_fp
 
-            zarr_image_fp = apply_transform_dict(
-                im_data["image_fp"],
-                im_data["image_res"],
-                transformations,
-                writer="zarr",
-                **im_data_zarr,
-            )
-
-            return zarr_image_fp
-
-    def transform_images(self, file_writer="sitk", transform_non_reg=True):
+    def transform_images(self, file_writer="ome.tiff", transform_non_reg=True):
         """
         Transform and write images to disk after registration. Also transforms all attachment images
 
@@ -716,86 +751,68 @@ class WsiReg2D(object):
             zarr store
         """
 
-        if file_writer == "zarr":
-            zarr_paths = []
-        else:
-            zarr_paths = []
+        image_fps = []
 
         if all(
             [reg_edge.get("registered") for reg_edge in self.reg_graph_edges]
         ):
             for key in self.reg_paths.keys():
-
-                if file_writer == "zarr":
-                    zarr_paths.append(
-                        self._transform_image(key, file_writer=file_writer)
-                    )
-                elif file_writer == "sitk" or file_writer == "ometiff":
-                    self._transform_image(key, file_writer=file_writer)
+                self._transform_image(key, file_writer=file_writer)
 
             for (
                 modality,
                 attachment_modality,
             ) in self.attachment_images.items():
 
-                if file_writer == "zarr":
-                    zarr_paths.append(
-                        self._transform_image(
-                            modality,
-                            file_writer=file_writer,
-                            attachment=True,
-                            attachment_modality=attachment_modality,
-                        )
-                    )
-                elif file_writer == "sitk" or file_writer == "ometiff":
-                    self._transform_image(
-                        modality,
-                        file_writer=file_writer,
-                        attachment=True,
-                        attachment_modality=attachment_modality,
-                    )
-
+                im_fp = self._transform_image(
+                    modality,
+                    file_writer=file_writer,
+                    attachment=True,
+                    attachment_modality=attachment_modality,
+                )
+                image_fps.append(im_fp)
         if transform_non_reg is True:
             # preprocess and save unregistered nodes
             nonreg_keys = self._find_nonreg_modalities()
 
             for key in nonreg_keys:
-                zarr_paths.append(
-                    self._transform_nonreg_image(key, file_writer=file_writer)
-                )
+                self._transform_nonreg_image(key, file_writer=file_writer)
 
-        return zarr_paths
+        return image_fps
 
     def transform_shapes(self):
         """
         Transform all attached shapes and write out shape data to geoJSON.
         """
-        for k, v in self.shape_sets:
-            set_data = v
-            attachment_modality = self.shape_sets["attachment_modality"]
+        for set_name, set_data in self.shape_sets.items():
+            attachment_modality = set_data["attachment_modality"]
 
             final_modality = self.reg_paths[attachment_modality][-1]
 
             print(
-                "transforming shapes associated with {} to {}".format(
-                    attachment_modality, final_modality
+                "transforming shape set {} associated with {} to {}".format(
+                    set_name, attachment_modality, final_modality
                 )
             )
 
-            rs = RegShapes(set_data["shape_files"])
+            rs = RegShapes(
+                set_data["shape_files"], source_res=set_data["image_res"]
+            )
             rs.transform_shapes(
-                set_data["image_res"],
                 self.transformations[attachment_modality],
             )
 
             output_path = (
                 self.output_dir
-                / "{}-{}_to_{}_transformed_shapes.json".format(
-                    self.project_name, attachment_modality, final_modality
+                / "{}-{}-{}_to_{}-transformed_shapes.json".format(
+                    self.project_name,
+                    set_name,
+                    attachment_modality,
+                    final_modality,
                 )
             )
 
-            rs.save_shape_data(output_path)
+            rs.save_shape_data(output_path, transformed=True)
 
     def save_transformations(self):
         """
@@ -843,9 +860,14 @@ class WsiReg2D(object):
         if reg_config.get("modalities") is not None:
             for key, val in reg_config["modalities"].items():
 
+                image_filepath = (
+                    val.get("image_filepath")
+                    if val.get("image_filepath") is not None
+                    else val.get("image_filepath")
+                )
                 self.add_modality(
                     key,
-                    val.get("image_filepath"),
+                    image_filepath,
                     image_res=val.get("image_res"),
                     channel_names=val.get("channel_names"),
                     channel_colors=val.get("channel_colors"),
@@ -884,10 +906,25 @@ class WsiReg2D(object):
         if reg_config.get("attachment_shapes") is not None:
 
             for key, val in reg_config["attachment_shapes"].items():
-                print(val.get("attachment_modality"))
                 self.add_attachment_shapes(
                     val.get("attachment_modality"), key, val.get("shape_files")
                 )
+
+        if reg_config.get("reg_graph_edges") is not None:
+            self._reg_graph_edges = reg_config["reg_graph_edges"]
+            if all([re.get("registered") for re in self.reg_graph_edges]):
+                self.transformations = self.reg_graph_edges
+
+    def reset_registered_modality(self, modalities):
+        edge_keys = [
+            r.get("modalities").get("source") for r in self.reg_graph_edges
+        ]
+        if isinstance(modalities, str):
+            modalities = [modalities]
+
+        for modality in modalities:
+            modality_idx = edge_keys.index(modality)
+            self.reg_graph_edges[modality_idx]["registered"] = False
 
 
 if __name__ == "__main__":
@@ -918,12 +955,15 @@ if __name__ == "__main__":
         "--fw",
         type=str,
         nargs=1,
-        help="how to write output registered images: ometiff, zarr, sitk (default: ometiff)",
+        help="how to write output registered images: ome.tiff, ome.zarr (default: ome.tiff)",
     )
 
     args = parser.parse_args()
     config_filepath = args.config_filepath[0]
-    file_writer = args.fw[0]
+    if args.fw is None:
+        file_writer = "ome.tiff"
+    else:
+        file_writer = args.fw[0]
 
     reg_graph = config_to_WsiReg2D(config_filepath)
     reg_graph.add_data_from_config(config_filepath)

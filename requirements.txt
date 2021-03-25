@@ -1,10 +1,14 @@
 numpy
 opencv-python
+tifffile>=2020.10.1
 czifile
-tifffile>=2020.7.24
 imagecodecs
 lxml
 geojson
 pyYAML
 zarr
+toolz
 dask
+fsspec
+itk-elastix
+SimpleITK

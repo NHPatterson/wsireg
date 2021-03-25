@@ -10,7 +10,8 @@ with open('README.rst') as readme_file:
 with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
-requirements = []
+with open('requirements.txt') as f:
+    requirements = f.read().splitlines()
 
 setup_requirements = [
     'pytest-runner',
@@ -23,7 +24,7 @@ test_requirements = [
 setup(
     author="Nathan Heath Patterson",
     author_email='heath.patterson@vanderbilt.edu',
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Science/Research',
@@ -45,6 +46,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/nhpatterson/wsireg',
-    version='0.0.1',
+    version='0.2.0',
     zip_safe=False,
 )

@@ -13,7 +13,7 @@ DEFAULT_REG_PARAM_MAPS = {
         "HowToCombineTransforms": ['Compose'],
         "ImageSampler": ["Random"],
         "Interpolator": ['LinearInterpolator'],
-        "MaximumNumberOfIterations": ['400'],
+        "MaximumNumberOfIterations": ['200'],
         "MaximumNumberOfSamplingAttempts": [
             '10',
         ],
@@ -63,7 +63,7 @@ DEFAULT_REG_PARAM_MAPS = {
         "HowToCombineTransforms": ['Compose'],
         "ImageSampler": ['Random'],
         "Interpolator": ['LinearInterpolator'],
-        "MaximumNumberOfIterations": ['800'],
+        "MaximumNumberOfIterations": ['200'],
         "MaximumNumberOfSamplingAttempts": [
             '10',
         ],
@@ -113,7 +113,7 @@ DEFAULT_REG_PARAM_MAPS = {
         "HowToCombineTransforms": ['Compose'],
         "ImageSampler": ['Random'],
         "Interpolator": ['LinearInterpolator'],
-        "MaximumNumberOfIterations": ['800'],
+        "MaximumNumberOfIterations": ['200'],
         "MaximumNumberOfSamplingAttempts": [
             '10',
         ],
@@ -186,7 +186,7 @@ DEFAULT_REG_PARAM_MAPS = {
         "HowToCombineTransforms": ['Compose'],
         "ImageSampler": ['Random'],
         "Interpolator": ['LinearInterpolator'],
-        "MaximumNumberOfIterations": ['100'],
+        "MaximumNumberOfIterations": ['200'],
         "MaximumNumberOfSamplingAttempts": [
             '10',
         ],
@@ -266,12 +266,15 @@ DEFAULT_REG_PARAM_MAPS = {
 
 test_rig = DEFAULT_REG_PARAM_MAPS["rigid"].copy()
 test_aff = DEFAULT_REG_PARAM_MAPS["affine"].copy()
+test_sim = DEFAULT_REG_PARAM_MAPS["similarity"].copy()
 test_nl = DEFAULT_REG_PARAM_MAPS["nl"].copy()
 
-test_rig["MaximumNumberOfIterations"] = ["50"]
-test_aff["MaximumNumberOfIterations"] = ["50"]
-test_nl["MaximumNumberOfIterations"] = ["50"]
+test_rig["MaximumNumberOfIterations"] = ["10"]
+test_aff["MaximumNumberOfIterations"] = ["10"]
+test_sim["MaximumNumberOfIterations"] = ["10"]
+test_nl["MaximumNumberOfIterations"] = ["10"]
 
 DEFAULT_REG_PARAM_MAPS["rigid_test"] = test_rig
 DEFAULT_REG_PARAM_MAPS["affine_test"] = test_aff
+DEFAULT_REG_PARAM_MAPS["similarity_test"] = test_sim
 DEFAULT_REG_PARAM_MAPS["nl_test"] = test_nl
