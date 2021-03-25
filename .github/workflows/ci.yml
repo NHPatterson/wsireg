@@ -1,0 +1,80 @@
+name: testpackage
+
+on: [push, pull_request]
+
+jobs:
+  style:
+    runs-on: ubuntu-latest
+    name: "Verify code style"
+
+    steps:
+      - uses: actions/checkout@master
+      - name: Set up Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.8
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip  # || pip3 install --upgrade pip
+          pip install -r requirements/requirements-dev.txt
+      - name: Change directory
+        run: |
+          cd wsireg
+      - name: Lint with flake8
+        run: |
+          flake8 --ignore E203,W503,E501,C901,E231,W293,E722 wsireg
+      - name: check black
+        run: |
+          black wsireg
+
+  tests:
+    strategy:
+      max-parallel: 2
+      matrix:
+        python-version: [3.8]
+
+    runs-on: windows-latest
+    name: "pytests"
+
+    steps:
+      - uses: actions/checkout@master
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements/requirements.txt
+          pip install -r requirements/requirements-dev.txt
+      - name: Test with pytest
+        run: |
+          pytest wsireg/tests
+
+  install-dev:
+    name: "check windows install"
+    runs-on: windows-latest
+
+    steps:
+      - uses: "actions/checkout@v2"
+      - uses: "actions/setup-python@v1"
+        with:
+          python-version: "3.8"
+      - name: Install
+        run: |
+          python setup.py develop
+          python -c 'import wsireg; print(wsireg.__version__)'
+
+  install-ubuntu:
+    name: "check ubuntu install"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: "actions/checkout@v2"
+      - uses: "actions/setup-python@v1"
+        with:
+          python-version: "3.8"
+      - name: Install
+        run: |
+          python setup.py develop
+          python -c 'import wsireg; print(wsireg.__version__)'
