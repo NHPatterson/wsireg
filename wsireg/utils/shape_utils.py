@@ -248,7 +248,7 @@ def invert_nonlinear_transforms(
             "this can take some time"
         )
         for nl_idx in nl_idxs:
-            tform = elx_transform_data[4]
+            tform = itk_transforms[nl_idx]
             tform_to_dfield = sitk.TransformToDisplacementFieldFilter()
             tform_to_dfield.SetOutputSpacing(
                 [float(p) for p in tform["Spacing"]]
