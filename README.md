@@ -1,5 +1,14 @@
 # wsireg
-Multi-modal or mono-modal whole slide image registration in a graph structure for complex registration tasks using `elastix`.
+### Multi-modal whole slide image registration
+[![Python Version](https://img.shields.io/pypi/pyversions/wsireg.svg)](https://python.org)
+[![PyPI version](https://badge.fury.io/py/wsireg.svg)](https://badge.fury.io/py/wsireg)
+[![testpage Actions Status](https://github.com/nhpatterson/wsireg/actions/workflows/ci.yml/badge.svg)](https://github.com/nhpatterson/wsireg/actions)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/python/black)
+[![Documentation Status](https://readthedocs.org/projects/wsireg/badge/?version=latest)](http://wsireg.readthedocs.io/?badge=latest)
+
+**wsireg** performs multi-modal or mono-modal whole slide image registration in a graph structure for complex registration tasks using `elastix`.
+
+
 
 ## Features
 * Graph based approach to defining modalities and arbitrary transformation paths between associated images
@@ -21,8 +30,10 @@ pip install wsireg
 ```
 
 ## Usage
-### Python usage
-Example registering two images
+
+_coming soon_ : For detailed usage and example data, see [wsireg-examples](https://github.com/nhpatterson/wsireg-examples)
+
+Example registering two images.
 ```python
 from wsireg.wsireg2d import WsiReg2D
 
@@ -63,7 +74,6 @@ reg_graph.save_transformations()
 reg_graph.transform_images(file_writer="ome.tiff")
 ```
 This will register the images and save them in the project output directory as tiled, pyramidal OME-TIFF. Original data types are respected for images.
-### Command line with .yaml configuration
 
 ## Future support
 * Complete support for masking and cropping based on masks
