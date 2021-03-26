@@ -43,8 +43,16 @@ def gj_to_np(gj: dict):
             pts.append(np.squeeze(np.array(geo)))
         pts = np.vstack(pts)
 
-    else:
+    elif gj.get("geometry").get("type") == "Polygon":
         pts = np.squeeze(np.asarray(gj.get("geometry").get("coordinates")))
+    elif gj.get("geometry").get("type") == "Point":
+        pts = np.expand_dims(
+            np.asarray(gj.get("geometry").get("coordinates")), 0
+        )
+    elif gj.get("geometry").get("type") == "MultiPoint":
+        pts = np.asarray(gj.get("geometry").get("coordinates"))
+    elif gj.get("geometry").get("type") == "LineString":
+        pts = np.asarray(gj.get("geometry").get("coordinates"))
 
     if gj.get("properties").get("classification") is None:
         shape_name = "unnamed"
@@ -426,9 +434,22 @@ def insert_transformed_pts_gj(gj_data: list, np_data: list):
     shape_gj : dict
         dict of GeoJSON information with updated coordinate information
     """
+
     gj_data_t = deepcopy(gj_data)
     for sh, gj in zip(np_data, gj_data_t):
-        gj.get("geometry").update({"coordinates": [sh["array"].tolist()]})
+        shape_type = gj.get("geometry").get("type")
+
+        if shape_type == "Polygon":
+            gj.get("geometry").update({"coordinates": [sh["array"].tolist()]})
+        elif shape_type == "Point":
+            gj.get("geometry").update(
+                {"coordinates": np.squeeze(sh["array"]).tolist()}
+            )
+        elif shape_type == "MultiPoint":
+            gj.get("geometry").update({"coordinates": sh["array"].tolist()})
+        elif shape_type == "LineString":
+            gj.get("geometry").update({"coordinates": sh["array"].tolist()})
+
     return gj_data_t
 
 
