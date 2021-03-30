@@ -865,13 +865,16 @@ class WsiReg2D(object):
                     if val.get("image_filepath") is not None
                     else val.get("image_filepath")
                 )
+
+                preprocessing = "None" if val.get("preprocessing") is None else val.get("preprocessing")
+
                 self.add_modality(
                     key,
                     image_filepath,
                     image_res=val.get("image_res"),
                     channel_names=val.get("channel_names"),
                     channel_colors=val.get("channel_colors"),
-                    prepro_dict=val.get("preprocessing"),
+                    prepro_dict=preprocessing,
                     mask=val.get("mask"),
                 )
         else:
