@@ -3,7 +3,8 @@ import yaml
 from pathlib import Path
 import json
 import SimpleITK as sitk
-from wsireg.reg_image import RegImage, TransformRegImage
+from wsireg.reg_image.loader import reg_image_loader
+from wsireg.reg_image import MergeRegImage
 from wsireg.utils.reg_utils import (
     register_2d_images_itkelx,
     sitk_pmap_to_dict,
@@ -98,6 +99,9 @@ class WsiReg2D(object):
 
         self._shape_sets = {}
         self._shape_set_names = []
+
+        self.merge_modalities = {}
+        self.original_size_transforms = {}
 
         if config is not None:
             self.add_data_from_config(config)
@@ -400,6 +404,10 @@ class WsiReg2D(object):
         cache_transform_fp = cache_im_fp.parent / "{}_init_tforms.json".format(
             cache_im_fp.stem
         )
+        cache_osize_tform_fp = (
+            self.image_cache
+            / "{}_orig_size_tform.json".format(cache_im_fp.stem)
+        )
 
         if cache_im_fp.exists() is True:
             im_fp = str(cache_im_fp)
@@ -413,7 +421,12 @@ class WsiReg2D(object):
         else:
             im_initial_transforms = None
 
-        return im_fp, im_initial_transforms, im_from_cache
+        if cache_osize_tform_fp.exists() is True:
+            osize_tform = json_to_pmap_dict(cache_osize_tform_fp)
+        else:
+            osize_tform = None
+
+        return im_fp, im_initial_transforms, im_from_cache, osize_tform
 
     def _prepare_modality(self, modality_name, reg_edge, src_or_tgt):
         mod_data = self.modalities[modality_name].copy()
@@ -434,6 +447,7 @@ class WsiReg2D(object):
                 mod_data["preprocessing"],
                 None,
                 mod_data["mask"],
+                None,
             )
         else:
 
@@ -441,9 +455,12 @@ class WsiReg2D(object):
                 mod_data["image_filepath"],
                 mod_data["transforms"],
                 im_from_cache,
+                original_size_transform,
             ) = self._check_cache_modality(modality_name)
 
             if im_from_cache is True:
+                if mod_data["preprocessing"].get("use_mask") is False:
+                    mod_data["mask"] = None
                 mod_data["preprocessing"] = None
 
             return (
@@ -452,6 +469,7 @@ class WsiReg2D(object):
                 mod_data["preprocessing"],
                 mod_data["transforms"],
                 mod_data["mask"],
+                original_size_transform,
             )
 
     def _cache_images(self, modality_name, reg_image):
@@ -462,6 +480,10 @@ class WsiReg2D(object):
             cache_im_fp.stem
         )
 
+        cache_osize_tform_fp = (
+            self.image_cache
+            / "{}_orig_size_tform.json".format(cache_im_fp.stem)
+        )
         if cache_im_fp.is_file() is False:
             sitk.WriteImage(reg_image.image, str(cache_im_fp), True)
 
@@ -473,14 +495,34 @@ class WsiReg2D(object):
                 sitk.WriteImage(reg_image.mask, str(cache_mask_im_fp), True)
 
         if cache_transform_fp.is_file() is False:
-            pmap_dict_to_json(reg_image.transforms, str(cache_transform_fp))
+            pmap_dict_to_json(
+                reg_image.pre_reg_transforms, str(cache_transform_fp)
+            )
+
+        if (
+            cache_osize_tform_fp.is_file() is False
+            and reg_image.original_size_transform is not None
+        ):
+            pmap_dict_to_json(
+                reg_image.original_size_transform, str(cache_osize_tform_fp)
+            )
 
     def _find_nonreg_modalities(self):
         registered_modalities = [
             edge.get("modalities").get("source")
             for edge in self.reg_graph_edges
         ]
-        return list(set(self.modality_names).difference(registered_modalities))
+        non_reg_modalities = list(
+            set(self.modality_names).difference(registered_modalities)
+        )
+
+        # remove attachment modalities
+        for attachment_modality in self.attachment_images.keys():
+            non_reg_modalities.pop(
+                non_reg_modalities.index(attachment_modality)
+            )
+
+        return non_reg_modalities
 
     def save_config(self, registered=False):
         ts = time.strftime('%Y%m%d-%H%M%S')
@@ -516,6 +558,7 @@ class WsiReg2D(object):
             "reg_graph_edges": self.reg_graph_edges
             if status == "registered"
             else None,
+            "original_size_transforms": self.original_size_transforms,
         }
 
         output_path = (
@@ -554,6 +597,7 @@ class WsiReg2D(object):
                     src_prepro,
                     src_transforms,
                     src_mask,
+                    src_original_size_transform,
                 ) = self._prepare_modality(src_name, reg_edge, "source")
 
                 (
@@ -562,23 +606,34 @@ class WsiReg2D(object):
                     tgt_prepro,
                     tgt_transforms,
                     tgt_mask,
+                    tgt_original_size_transform,
                 ) = self._prepare_modality(tgt_name, reg_edge, "target")
 
-                src_reg_image = RegImage(
+                src_reg_image = reg_image_loader(
                     src_reg_image_fp,
                     src_res,
-                    src_prepro,
-                    src_transforms,
+                    preprocessing=src_prepro,
+                    pre_reg_transforms=src_transforms,
                     mask=src_mask,
                 )
 
-                tgt_reg_image = RegImage(
+                tgt_reg_image = reg_image_loader(
                     tgt_reg_image_fp,
                     tgt_res,
-                    tgt_prepro,
-                    tgt_transforms,
+                    preprocessing=tgt_prepro,
+                    pre_reg_transforms=tgt_transforms,
                     mask=tgt_mask,
                 )
+
+                src_reg_image.read_reg_image()
+                tgt_reg_image.read_reg_image()
+                if (
+                    tgt_original_size_transform is None
+                    and tgt_reg_image.original_size_transform is not None
+                ):
+                    tgt_original_size_transform = (
+                        tgt_reg_image.original_size_transform
+                    )
 
                 if self.cache_images is True:
                     if reg_edge.get("override_prepro") is not None:
@@ -626,15 +681,20 @@ class WsiReg2D(object):
                 )
 
                 reg_tforms = [sitk_pmap_to_dict(tf) for tf in reg_tforms]
+
                 if src_transforms is not None:
-                    initial_transforms = src_reg_image.transforms[0]
+                    initial_transforms = src_transforms[0]
                 else:
-                    initial_transforms = src_reg_image.transforms
+                    initial_transforms = src_reg_image.pre_reg_transforms
 
                 reg_edge["transforms"] = {
                     'initial': initial_transforms,
                     'registration': reg_tforms,
                 }
+
+                self.original_size_transforms.update(
+                    {tgt_name: tgt_original_size_transform}
+                )
 
                 reg_edge["registered"] = True
                 pmap_dict_to_json(
@@ -651,6 +711,9 @@ class WsiReg2D(object):
     @transformations.setter
     def transformations(self, reg_graph_edges):
         self._transformations = self._collate_transformations(reg_graph_edges)
+
+    def add_merge_modalities(self, merge_name, modalities):
+        self.merge_modalities.update({merge_name: modalities})
 
     def _collate_transformations(self, reg_graph_edges):
         transforms = {}
@@ -690,16 +753,17 @@ class WsiReg2D(object):
         else:
             transformations = None
 
-        tfregimage = TransformRegImage(
-            output_path.stem,
+        tfregimage = reg_image_loader(
             im_data["image_filepath"],
             im_data["image_res"],
-            transform_data=transformations,
             channel_names=im_data.get("channel_names"),
             channel_colors=im_data.get("channel_colors"),
         )
         im_fp = tfregimage.transform_image(
-            str(output_path.parent), output_type=file_writer, tile_size=512
+            output_path.stem,
+            transform_data=transformations,
+            file_writer=file_writer,
+            output_dir=str(self.output_dir),
         )
         return im_fp
 
@@ -726,16 +790,19 @@ class WsiReg2D(object):
             edge_key,
             final_modality,
         )
-        tfregimage = TransformRegImage(
-            output_path.stem,
+        original_size_transform = self.original_size_transforms[final_modality]
+        transformations.update({"999999": [original_size_transform]})
+        tfregimage = reg_image_loader(
             im_data["image_filepath"],
             im_data["image_res"],
-            transform_data=transformations,
             channel_names=im_data.get("channel_names"),
             channel_colors=im_data.get("channel_colors"),
         )
         im_fp = tfregimage.transform_image(
-            str(self.output_dir), output_type=file_writer, tile_size=512
+            output_path.stem,
+            transform_data=transformations,
+            file_writer=file_writer,
+            output_dir=str(self.output_dir),
         )
 
         return im_fp
@@ -750,14 +817,35 @@ class WsiReg2D(object):
             output type to use, sitk writes a single resolution tiff, "zarr" writes an ome-zarr multiscale
             zarr store
         """
-
         image_fps = []
 
         if all(
             [reg_edge.get("registered") for reg_edge in self.reg_graph_edges]
         ):
-            for key in self.reg_paths.keys():
-                self._transform_image(key, file_writer=file_writer)
+            # prepare workflow
+            merge_modalities = []
+            if len(self.merge_modalities.keys()) > 0:
+                for k, v in self.merge_modalities.items():
+                    merge_modalities.extend(v)
+
+            reg_path_keys = list(self.reg_paths.keys())
+            nonreg_keys = self._find_nonreg_modalities()
+
+            for merge_mod in merge_modalities:
+                try:
+                    m_idx = reg_path_keys.index(merge_mod)
+                    reg_path_keys.pop(m_idx)
+                except ValueError:
+                    continue
+                try:
+                    m_idx = nonreg_keys.index(merge_mod)
+                    nonreg_keys.pop(m_idx)
+                except ValueError:
+                    continue
+
+            for key in reg_path_keys:
+                im_fp = self._transform_image(key, file_writer=file_writer)
+                image_fps.append(im_fp)
 
             for (
                 modality,
@@ -771,12 +859,50 @@ class WsiReg2D(object):
                     attachment_modality=attachment_modality,
                 )
                 image_fps.append(im_fp)
+
+        for merge_name, sub_images in self.merge_modalities.items():
+            im_fps = []
+            im_res = []
+            im_ch_names = []
+            transformations = []
+            for sub_image in sub_images:
+                im_data = self.modalities[sub_image]
+                im_fps.append(im_data["image_filepath"])
+                im_res.append(im_data["image_res"])
+                im_ch_names.append(im_data.get("channel_names"))
+                try:
+                    transformations.append(self.transformations[sub_image])
+                except KeyError:
+                    transformations.append(None)
+
+            output_path = self.output_dir / "{}-{}_merged-registered".format(
+                self.project_name,
+                merge_name,
+            )
+
+            tfregimage = MergeRegImage(
+                im_fps,
+                im_res,
+                channel_names=im_ch_names,
+            )
+
+            im_fp = tfregimage.transform_image(
+                output_path.stem,
+                sub_images,
+                transform_data=transformations,
+                file_writer=file_writer,
+                output_dir=str(self.output_dir),
+            )
+            image_fps.append(im_fp)
+
         if transform_non_reg is True:
             # preprocess and save unregistered nodes
-            nonreg_keys = self._find_nonreg_modalities()
-
             for key in nonreg_keys:
-                self._transform_nonreg_image(key, file_writer=file_writer)
+                im_fp = self._transform_nonreg_image(
+                    key, file_writer=file_writer
+                )
+
+                image_fps.append(im_fp)
 
         return image_fps
 
@@ -866,7 +992,11 @@ class WsiReg2D(object):
                     else val.get("image_filepath")
                 )
 
-                preprocessing = "None" if val.get("preprocessing") is None else val.get("preprocessing")
+                preprocessing = (
+                    "None"
+                    if val.get("preprocessing") is None
+                    else val.get("preprocessing")
+                )
 
                 self.add_modality(
                     key,
@@ -917,6 +1047,10 @@ class WsiReg2D(object):
             self._reg_graph_edges = reg_config["reg_graph_edges"]
             if all([re.get("registered") for re in self.reg_graph_edges]):
                 self.transformations = self.reg_graph_edges
+
+        if reg_config.get("merge_modalities") is not None:
+            for mn, mm in reg_config["merge_modalities"]:
+                self.add_merge_modalities(mn, mm)
 
     def reset_registered_modality(self, modalities):
         edge_keys = [
