@@ -269,6 +269,23 @@ def grayscale(rgb):
     return result.astype(np.uint8)
 
 
+def tile_grayscale(rgb):
+    """
+    convert RGB image data to greyscale
+
+    Parameters
+    ----------
+    rgb: np.ndarray
+        image data
+    Returns
+    -------
+    image:np.ndarray
+        returns 8-bit greyscale image for 24-bit RGB image
+    """
+    result = np.dot(rgb[..., :3], [0.299, 0.587, 0.114])
+    return np.expand_dims(result.astype(np.uint8), axis=-1)
+
+
 class CziRegImageReader(CziFile):
     """
     Sub-class of CziFile with added functionality to only read certain channels
@@ -380,6 +397,107 @@ class CziRegImageReader(CziFile):
             out.flush()
         return out
 
+    def sub_asarray_rgb(
+        self,
+        resize=True,
+        order=0,
+        out=None,
+        max_workers=None,
+        channel_idx=None,
+        as_uint8=False,
+        greyscale=False,
+    ):
+
+        """Return image data from file(s) as numpy array.
+
+        Parameters
+        ----------
+        resize : bool
+            If True (default), resize sub/supersampled subblock data.
+        order : int
+            The order of spline interpolation used to resize sub/supersampled
+            subblock data. Default is 0 (nearest neighbor).
+        out : numpy.ndarray, str, or file-like object; optional
+            Buffer where image data will be saved.
+            If numpy.ndarray, a writable array of compatible dtype and shape.
+            If str or open file, the file name or file object used to
+            create a memory-map to an array stored in a binary file on disk.
+        max_workers : int
+            Maximum number of threads to read and decode subblock data.
+            By default up to half the CPU cores are used.
+        channel_idx : int or list of int
+            The indices of the channels to extract
+        as_uint8 : bool
+            byte-scale image data to np.uint8 data type
+
+        Parameters
+        ----------
+        out:np.ndarray
+            image read with selected parameters as np.ndarray
+        """
+
+        out_shape = list(self.shape)
+        start = list(self.start)
+        ch_dim_idx = self.axes.index('0')
+
+        if channel_idx is not None:
+            if isinstance(channel_idx, int):
+                channel_idx = [channel_idx]
+            out_shape[ch_dim_idx] = len(channel_idx)
+
+        if greyscale is True:
+            out_shape[ch_dim_idx] = 1
+
+        if as_uint8 is True:
+            out_dtype = np.uint8
+        else:
+            out_dtype = self.dtype
+
+        print("out shape:", tuple(out_shape))
+
+        if out is None:
+            out = create_output(None, tuple(out_shape), out_dtype)
+
+        if max_workers is None:
+            max_workers = multiprocessing.cpu_count() - 1
+
+        def func(
+            directory_entry, resize=resize, order=order, start=start, out=out
+        ):
+            """Read, decode, and copy subblock data."""
+            subblock = directory_entry.data_segment()
+            dvstart = list(directory_entry.start)
+            tile = subblock.data(resize=resize, order=order)
+
+            if greyscale is True:
+                tile = tile_grayscale(tile)
+
+            if channel_idx is not None:
+                tile = tile[:, :, :, :, :, channel_idx]
+
+            index = tuple(
+                slice(i - j, i - j + k)
+                for i, j, k in zip(tuple(dvstart), tuple(start), tile.shape)
+            )
+
+            try:
+                out[index] = tile
+            except ValueError as e:
+                warnings.warn(str(e))
+
+        if max_workers > 1:
+            self._fh.lock = True
+            with ThreadPoolExecutor(max_workers) as executor:
+                executor.map(func, self.filtered_subblock_directory)
+            self._fh.lock = None
+        else:
+            for directory_entry in self.filtered_subblock_directory:
+                func(directory_entry)
+
+        if hasattr(out, "flush"):
+            out.flush()
+        return out
+
 
 def tf_get_largest_series(image_filepath):
     """
@@ -411,7 +529,10 @@ def tf_get_largest_series(image_filepath):
         )
     else:
         largest_series = np.argmax(
-            [np.prod(np.asarray(series.shape)) for series in tf_im.series]
+            [
+                np.prod(np.asarray(series.shape), dtype=np.int64)
+                for series in tf_im.series
+            ]
         )
     return largest_series
 
@@ -523,7 +644,7 @@ def read_image(image_filepath, preprocessing):
     return image
 
 
-def sitk_image_info(image_filepath):
+def get_sitk_image_info(image_filepath):
     """
     Get image info for files only ready by SimpleITK
 
@@ -600,10 +721,24 @@ def get_im_info(image_filepath):
         reader = "tifffile"
 
     else:
-        im_dims, im_dtype = sitk_image_info(image_filepath)
+        im_dims, im_dtype = get_sitk_image_info(image_filepath)
         reader = "sitk"
 
     return im_dims, im_dtype, reader
+
+
+def get_tifffile_info(image_filepath):
+    largest_series = tf_get_largest_series(image_filepath)
+    zarr_im = zarr.open(
+        imread(image_filepath, aszarr=True, series=largest_series)
+    )
+    zarr_im = zarr_get_base_pyr_layer(zarr_im)
+    im_dims = np.squeeze(zarr_im.shape)
+    if len(im_dims) == 2:
+        im_dims = np.concatenate([[1], im_dims])
+    im_dtype = zarr_im.dtype
+
+    return im_dims, im_dtype
 
 
 def tf_zarr_read_single_ch(image_filepath, channel_idx, is_rgb):
@@ -878,13 +1013,13 @@ def prepare_ome_zarr_group(
     return grp, n_pyr_levels, pyr_levels
 
 
-def get_final_tform_info(final_tform):
+def get_final_tform_info(final_transform):
     """
     Extract size and spacing information from wsireg's final transformation elastix data
 
     Parameters
     ----------
-    final_tform:itk.Transform
+    final_transform:itk.Transform
         itk.Transform with added attributes containing transform data
 
     Returns
@@ -895,10 +1030,13 @@ def get_final_tform_info(final_tform):
     x_spacing: float
 
     """
-    x_size, y_size = final_tform.OutputSize[0], final_tform.OutputSize[1]
+    x_size, y_size = (
+        final_transform.OutputSize[0],
+        final_transform.OutputSize[1],
+    )
     x_spacing, y_spacing = (
-        final_tform.OutputSpacing[0],
-        final_tform.OutputSpacing[1],
+        final_transform.OutputSpacing[0],
+        final_transform.OutputSpacing[1],
     )
     return int(y_size), int(x_size), float(y_spacing), float(x_spacing)
 
@@ -956,10 +1094,10 @@ def prepare_ome_xml_str(
     return omexml.tostring().encode("utf8")
 
 
-def get_final_yx_from_tform(tform_reg_im):
-    if tform_reg_im.final_tform is not None:
+def get_final_yx_from_tform(tform_reg_im, final_transform):
+    if final_transform is not None:
         y_size, x_size, y_spacing, x_spacing = get_final_tform_info(
-            tform_reg_im.final_tform
+            final_transform
         )
     else:
         y_size, x_size = (
@@ -1038,37 +1176,29 @@ def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size):
     return f"{output_file_name}.ome.zarr"
 
 
-def transform_plane(tform_reg_im):
-    if isinstance(tform_reg_im.image, sitk.Image) is False:
-        tform_reg_im.image = sitk.GetImageFromArray(
-            tform_reg_im.image, isVector=False
-        )
+def transform_plane(image, final_transform, composite_transform):
 
-    tform_reg_im.image.SetSpacing(
-        (tform_reg_im.image_res, tform_reg_im.image_res)
+    image = sitk_transform_image(
+        image,
+        final_transform,
+        composite_transform,
     )
 
-    tform_reg_im.preprocess_reg_image_spatial(
-        tform_reg_im.spatial_prepro, tform_reg_im.transforms
-    )
-    tform_reg_im.image = sitk_transform_image(
-        tform_reg_im.image,
-        tform_reg_im.final_tform,
-        tform_reg_im.composite_transform,
-    )
-
-    return tform_reg_im
+    return image
 
 
 def transform_to_ome_tiff(
     tform_reg_im,
+    image_name,
     output_dir,
+    final_transform,
+    composite_transform,
     tile_size=512,
     write_pyramid=True,
 ):
 
     y_size, x_size, y_spacing, x_spacing = get_final_yx_from_tform(
-        tform_reg_im
+        tform_reg_im, final_transform
     )
 
     n_ch = (
@@ -1078,10 +1208,10 @@ def transform_to_ome_tiff(
     )
     pyr_levels, pyr_shapes = get_pyramid_info(y_size, x_size, n_ch, tile_size)
     n_pyr_levels = len(pyr_levels)
-    output_file_name = str(Path(output_dir) / tform_reg_im.image_name)
+    output_file_name = str(Path(output_dir) / image_name)
     channel_names = format_channel_names(tform_reg_im.channel_names, n_ch)
 
-    if tform_reg_im.transform_data is not None:
+    if final_transform is not None:
         PhysicalSizeY = y_spacing
         PhysicalSizeX = x_spacing
     else:
@@ -1098,135 +1228,270 @@ def transform_to_ome_tiff(
         PhysicalSizeY=PhysicalSizeY,
         PhysicalSizeXUnit="µm",
         PhysicalSizeYUnit="µm",
-        Name=tform_reg_im.image_name,
+        Name=image_name,
         Channel=None if tform_reg_im.is_rgb else {"Name": channel_names},
     )
     subifds = n_pyr_levels - 1 if write_pyramid is True else None
 
     rgb_im_data = []
 
-    if tform_reg_im.reader in ["tifffile", "czi", "sitk"]:
-        if tform_reg_im.reader == "sitk":
-            full_image = sitk.ReadImage(tform_reg_im.image_filepath)
+    if tform_reg_im.reader == "sitk":
+        full_image = sitk.ReadImage(tform_reg_im.image_filepath)
 
-        print(f"saving to {output_file_name}.ome.tiff")
-        with TiffWriter(f"{output_file_name}.ome.tiff", bigtiff=True) as tif:
-            for channel_idx in range(n_ch):
-                if tform_reg_im.reader == "tifffile":
-                    tform_reg_im.image = tf_zarr_read_single_ch(
-                        tform_reg_im.image_filepath,
-                        channel_idx,
-                        tform_reg_im.is_rgb,
-                    )
-                    tform_reg_im.image = np.squeeze(tform_reg_im.image)
-
-                elif tform_reg_im.reader == "czi":
-                    tform_reg_im.image = czi_read_single_ch(
-                        tform_reg_im.image_filepath, channel_idx
-                    )
-                    tform_reg_im.image = np.squeeze(tform_reg_im.image)
-                elif tform_reg_im.reader == "sitk":
-                    if tform_reg_im.is_rgb:
-                        tform_reg_im.image = sitk.VectorIndexSelectionCast(
-                            full_image
-                        )
-                    elif len(full_image.GetSize()) > 2:
-                        tform_reg_im.image = full_image[:, :, channel_idx]
-                    else:
-                        tform_reg_im.image = full_image
-
-                if tform_reg_im.composite_transform is not None:
-                    tform_reg_im = transform_plane(tform_reg_im)
-
+    print(f"saving to {output_file_name}.ome.tiff")
+    with TiffWriter(f"{output_file_name}.ome.tiff", bigtiff=True) as tif:
+        for channel_idx in range(n_ch):
+            if tform_reg_im.reader != "sitk":
+                image = tform_reg_im.read_single_channel(channel_idx)
+                image = np.squeeze(image)
+                image = sitk.GetImageFromArray(image)
+                image.SetSpacing(
+                    (tform_reg_im.image_res, tform_reg_im.image_res)
+                )
+            else:
                 if tform_reg_im.is_rgb:
-                    rgb_im_data.append(tform_reg_im.image)
+                    image = sitk.VectorIndexSelectionCast(
+                        full_image, channel_idx
+                    )
+                elif len(full_image.GetSize()) > 2:
+                    image = full_image[:, :, channel_idx]
                 else:
-                    print("saving")
-                    if isinstance(tform_reg_im.image, sitk.Image):
-                        tform_reg_im.image = sitk.GetArrayFromImage(
-                            tform_reg_im.image
-                        )
+                    image = full_image
 
-                    options = dict(
-                        tile=(tile_size, tile_size),
-                        compression="jpeg"
-                        if tform_reg_im.is_rgb
-                        else "deflate",
-                        photometric="rgb"
-                        if tform_reg_im.is_rgb
-                        else "minisblack",
-                        metadata=None,
-                    )
-                    # write OME-XML to the ImageDescription tag of the first page
-                    description = omexml if channel_idx == 0 else None
-                    # write channel data
-                    tif.write(
-                        tform_reg_im.image,
-                        subifds=subifds,
-                        description=description,
-                        **options,
-                    )
-
-                    print(
-                        f"channel {channel_idx} shape: {tform_reg_im.image.shape}"
-                    )
-                    if write_pyramid:
-                        for pyr_idx in range(1, n_pyr_levels):
-                            resize_shape = (
-                                pyr_levels[pyr_idx][0],
-                                pyr_levels[pyr_idx][1],
-                            )
-                            tform_reg_im.image = cv2.resize(
-                                tform_reg_im.image,
-                                resize_shape,
-                                cv2.INTER_LINEAR,
-                            )
-                            print(
-                                f"pyr {pyr_idx} : channel {channel_idx} shape: {tform_reg_im.image.shape}"
-                            )
-
-                            tif.write(
-                                tform_reg_im.image, **options, subfiletype=1
-                            )
+            if composite_transform is not None:
+                image = transform_plane(
+                    image, final_transform, composite_transform
+                )
 
             if tform_reg_im.is_rgb:
-                rgb_im_data = sitk.Compose(rgb_im_data)
-                rgb_im_data = sitk.GetArrayFromImage(rgb_im_data)
+                rgb_im_data.append(image)
+            else:
+                print("saving")
+                if isinstance(image, sitk.Image):
+                    image = sitk.GetArrayFromImage(image)
 
                 options = dict(
                     tile=(tile_size, tile_size),
-                    compression="jpeg" if tform_reg_im.is_rgb else None,
+                    compression="jpeg" if tform_reg_im.is_rgb else "deflate",
                     photometric="rgb" if tform_reg_im.is_rgb else "minisblack",
                     metadata=None,
                 )
                 # write OME-XML to the ImageDescription tag of the first page
-                description = omexml
-
+                description = omexml if channel_idx == 0 else None
                 # write channel data
+                print(f" writing channel {channel_idx} - shape: {image.shape}")
                 tif.write(
-                    rgb_im_data,
+                    image,
                     subifds=subifds,
                     description=description,
                     **options,
                 )
 
-                print(f"RGB shape: {rgb_im_data.shape}")
                 if write_pyramid:
                     for pyr_idx in range(1, n_pyr_levels):
                         resize_shape = (
                             pyr_levels[pyr_idx][0],
                             pyr_levels[pyr_idx][1],
                         )
-                        rgb_im_data = cv2.resize(
-                            rgb_im_data, resize_shape, cv2.INTER_LINEAR
+                        image = cv2.resize(
+                            image,
+                            resize_shape,
+                            cv2.INTER_LINEAR,
                         )
                         print(
-                            f"pyr {pyr_idx} : RGB , shape: {rgb_im_data.shape}"
+                            f"pyr {pyr_idx} : channel {channel_idx} shape: {image.shape}"
                         )
 
-                        tif.write(rgb_im_data, **options, subfiletype=1)
+                        tif.write(image, **options, subfiletype=1)
+
+        if tform_reg_im.is_rgb:
+            rgb_im_data = sitk.Compose(rgb_im_data)
+            rgb_im_data = sitk.GetArrayFromImage(rgb_im_data)
+
+            options = dict(
+                tile=(tile_size, tile_size),
+                compression="jpeg" if tform_reg_im.is_rgb else None,
+                photometric="rgb" if tform_reg_im.is_rgb else "minisblack",
+                metadata=None,
+            )
+            # write OME-XML to the ImageDescription tag of the first page
+            description = omexml
+
+            # write channel data
+            tif.write(
+                rgb_im_data,
+                subifds=subifds,
+                description=description,
+                **options,
+            )
+
+            print(f"RGB shape: {rgb_im_data.shape}")
+            if write_pyramid:
+                for pyr_idx in range(1, n_pyr_levels):
+                    resize_shape = (
+                        pyr_levels[pyr_idx][0],
+                        pyr_levels[pyr_idx][1],
+                    )
+                    rgb_im_data = cv2.resize(
+                        rgb_im_data, resize_shape, cv2.INTER_LINEAR
+                    )
+                    print(f"pyr {pyr_idx} : RGB , shape: {rgb_im_data.shape}")
+
+                    tif.write(rgb_im_data, **options, subfiletype=1)
 
     return f"{output_file_name}.ome.tiff"
+
+
+def transform_to_ome_tiff_merge(
+    tform_reg_im,
+    image_name,
+    output_dir,
+    final_transform,
+    composite_transform,
+    tile_size=512,
+    write_pyramid=True,
+):
+
+    y_size, x_size, y_spacing, x_spacing = get_final_yx_from_tform(
+        tform_reg_im.images[0], final_transform[0]
+    )
+
+    n_ch = tform_reg_im.n_ch
+    pyr_levels, pyr_shapes = get_pyramid_info(y_size, x_size, n_ch, tile_size)
+    n_pyr_levels = len(pyr_levels)
+    output_file_name = str(Path(output_dir) / image_name)
+    channel_names = format_channel_names(tform_reg_im.channel_names, n_ch)
+
+    if final_transform is not None:
+        PhysicalSizeY = y_spacing
+        PhysicalSizeX = x_spacing
+    else:
+        PhysicalSizeY = tform_reg_im.image_res
+        PhysicalSizeX = tform_reg_im.image_res
+
+    omexml = prepare_ome_xml_str(
+        y_size,
+        x_size,
+        n_ch,
+        tform_reg_im.images[0].im_dtype,
+        tform_reg_im.images[0].is_rgb,
+        PhysicalSizeX=PhysicalSizeX,
+        PhysicalSizeY=PhysicalSizeY,
+        PhysicalSizeXUnit="µm",
+        PhysicalSizeYUnit="µm",
+        Name=image_name,
+        Channel={"Name": channel_names},
+    )
+    subifds = n_pyr_levels - 1 if write_pyramid is True else None
+
+    print(f"saving to {output_file_name}.ome.tiff")
+    with TiffWriter(f"{output_file_name}.ome.tiff", bigtiff=True) as tif:
+        for m_idx, merge_image in enumerate(tform_reg_im.images):
+            merge_n_ch = merge_image.n_ch
+            for channel_idx in range(merge_n_ch):
+                image = merge_image.read_single_channel(channel_idx)
+                image = np.squeeze(image)
+                image = sitk.GetImageFromArray(image)
+                image.SetSpacing(
+                    (merge_image.image_res, merge_image.image_res)
+                )
+
+            if composite_transform[m_idx] is not None:
+                image = transform_plane(
+                    image, final_transform[m_idx], composite_transform[m_idx]
+                )
+
+            print("saving")
+            if isinstance(image, sitk.Image):
+                image = sitk.GetArrayFromImage(image)
+
+            options = dict(
+                tile=(tile_size, tile_size),
+                compression="jpeg" if merge_image.is_rgb else "deflate",
+                photometric="rgb" if merge_image.is_rgb else "minisblack",
+                metadata=None,
+            )
+            # write OME-XML to the ImageDescription tag of the first page
+            description = omexml if channel_idx == 0 else None
+            # write channel data
+            print(f" writing channel {channel_idx} - shape: {image.shape}")
+            tif.write(
+                image,
+                subifds=subifds,
+                description=description,
+                **options,
+            )
+
+            if write_pyramid:
+                for pyr_idx in range(1, n_pyr_levels):
+                    resize_shape = (
+                        pyr_levels[pyr_idx][0],
+                        pyr_levels[pyr_idx][1],
+                    )
+                    image = cv2.resize(
+                        image,
+                        resize_shape,
+                        cv2.INTER_LINEAR,
+                    )
+                    print(
+                        f"pyr {pyr_idx} : channel {channel_idx} shape: {image.shape}"
+                    )
+
+                    tif.write(image, **options, subfiletype=1)
+
+        return f"{output_file_name}.ome.tiff"
+
+
+def compute_mask_to_bbox(mask, mask_padding=100):
+    mask.SetSpacing((1, 1))
+    mask_size = mask.GetSize()
+    mask = sitk.Threshold(mask, 1, 255)
+    mask = sitk.ConnectedComponent(mask)
+
+    labstats = sitk.LabelShapeStatisticsImageFilter()
+    labstats.SetBackgroundValue(0)
+    labstats.ComputePerimeterOff()
+    labstats.ComputeFeretDiameterOff()
+    labstats.ComputeOrientedBoundingBoxOff()
+    labstats.Execute(mask)
+
+    bb_points = []
+    for label in labstats.GetLabels():
+        x1, y1, xw, yh = labstats.GetBoundingBox(label)
+        x2, y2 = x1 + xw, y1 + yh
+        lab_points = np.asarray([[x1, y1], [x2, y2]])
+        bb_points.append(lab_points)
+
+    bb_points = np.concatenate(bb_points)
+    x_min = np.min(bb_points[:, 0])
+    y_min = np.min(bb_points[:, 1])
+    x_max = np.max(bb_points[:, 0])
+    y_max = np.max(bb_points[:, 1])
+
+    if (x_min - mask_padding) < 0:
+        x_min = 0
+    else:
+        x_min -= mask_padding
+
+    if (y_min - mask_padding) < 0:
+        y_min = 0
+    else:
+        y_min -= mask_padding
+
+    if (x_max + mask_padding) > mask_size[0]:
+        x_max = mask_size[0]
+    else:
+        x_max += mask_padding
+
+    if (y_max + mask_padding) > mask_size[1]:
+        y_max = mask_size[1]
+    else:
+        y_max += mask_padding
+
+    x_width = x_max - x_min
+    y_height = y_max - y_min
+
+    return (x_min, y_min, x_width, y_height)
 
 
 def sitk_vect_to_gs(image):
@@ -1310,7 +1575,7 @@ def std_prepro():
     STD_PREPRO = {
         'image_type': 'FL',
         'ch_indices': None,
-        'as_uint8': False,
+        'as_uint8': True,
         'downsample': 1,
         'max_int_proj': sitk_max_int_proj,
         'inv_int': sitk_inv_int,
