@@ -3,6 +3,7 @@ import json
 import numpy as np
 import itk
 import SimpleITK as sitk
+from wsireg.utils.reg_utils import json_to_pmap_dict
 from wsireg.utils.itk_im_conversions import (
     sitk_image_to_itk_image,
     itk_image_to_sitk_image,
@@ -385,6 +386,60 @@ def gen_rigid_tform_rot(image, spacing, angle):
     return tform
 
 
+def gen_rigid_translation(
+    image, spacing, translation_x, translation_y, size_x, size_y
+):
+    """
+    generate a SimpleElastix transformation parameter Map to rotate image by angle
+    Parameters
+    ----------
+    image : sitk.Image
+        SimpleITK image that will be rotated
+    spacing : float
+        Physical spacing of the SimpleITK image
+
+    Returns
+    -------
+    SimpleITK.ParameterMap of rotation transformation (EulerTransform)
+    """
+    tform = BASE_RIG_TFORM.copy()
+    image.SetSpacing((spacing, spacing))
+    bound_w, bound_h = compute_rot_bound(image, angle=0)
+
+    rot_cent_pt = image.TransformContinuousIndexToPhysicalPoint(
+        ((bound_w - 1) / 2, (bound_h - 1) / 2)
+    )
+    (
+        translation_x,
+        translation_y,
+    ) = image.TransformContinuousIndexToPhysicalPoint(
+        (float(translation_x), float(translation_y))
+    )
+    # c_x, c_y = (image.GetSize()[0] - 1) / 2, (image.GetSize()[1] - 1) / 2
+
+    tform["Spacing"] = [str(spacing), str(spacing)]
+    tform["Size"] = [str(size_x), str(size_y)]
+    tform["CenterOfRotationPoint"] = [str(rot_cent_pt[0]), str(rot_cent_pt[1])]
+    tform["TransformParameters"] = [
+        str(0),
+        str(translation_x),
+        str(translation_y),
+    ]
+
+    return tform
+
+
+def gen_rig_to_original(original_size, crop_transform):
+    crop_transform["Size"] = [str(original_size[0]), str(original_size[1])]
+    tform_params = [float(t) for t in crop_transform["TransformParameters"]]
+    crop_transform["TransformParameters"] = [
+        str(0),
+        str(tform_params[1] * -1),
+        str(tform_params[2] * -1),
+    ]
+    return crop_transform
+
+
 def gen_aff_tform_flip(image, spacing, flip="h"):
     """
     generate a SimpleElastix transformation parameter Map to horizontally or vertically flip image
@@ -561,6 +616,18 @@ def wsireg_transforms_to_itk_composite(parameter_data):
     composite_tform = make_composite_itk(itk_tforms)
 
     return composite_tform, itk_tforms
+
+
+def prepare_wsireg_transform_data(transform_data):
+    if isinstance(transform_data, str) is True:
+        transform_data = json_to_pmap_dict(transform_data)
+    if transform_data is not None:
+        (
+            composite_transform,
+            itk_transforms,
+        ) = wsireg_transforms_to_itk_composite(transform_data)
+        final_tform = itk_transforms[-1]
+    return composite_transform, itk_transforms, final_tform
 
 
 def wsireg_transforms_to_resampler(final_tform):
