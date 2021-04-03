@@ -671,7 +671,7 @@ def get_sitk_image_info(image_filepath):
     im_dtype = np.dtype(SITK_TO_NP_DTYPE.get(reader.GetPixelID()))
     is_vector = sitk.GetPixelIDValueAsString(reader.GetPixelID())
 
-    if is_vector in "vector":
+    if "vector" in is_vector:
         im_dims = np.append(im_dims, 3)
     elif len(im_dims) == 3:
         im_dims = im_dims[[2, 0, 1]]
@@ -1241,6 +1241,7 @@ def transform_to_ome_tiff(
     print(f"saving to {output_file_name}.ome.tiff")
     with TiffWriter(f"{output_file_name}.ome.tiff", bigtiff=True) as tif:
         for channel_idx in range(n_ch):
+            print(f"transforming : {channel_idx}")
             if tform_reg_im.reader != "sitk":
                 image = tform_reg_im.read_single_channel(channel_idx)
                 image = np.squeeze(image)
@@ -1262,6 +1263,7 @@ def transform_to_ome_tiff(
                 image = transform_plane(
                     image, final_transform, composite_transform
                 )
+                print(f"transformed : {channel_idx}")
 
             if tform_reg_im.is_rgb:
                 rgb_im_data.append(image)
