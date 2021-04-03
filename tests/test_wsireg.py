@@ -160,6 +160,7 @@ def test_wsireg_run_reg(data_out_dir, disk_im_gry):
         "mod1", "mod2", reg_params=["rigid_test", "affine_test"]
     )
     wsi_reg.register_images()
-    wsi_reg.transform_images(transform_non_reg=True)
-    assert Path(f"{str(data_out_dir)}/test_proj-mod1_to_mod2_registered.ome.tiff").exists() is True
-    assert Path(f"{str(data_out_dir)}/test_proj-mod2_registered.ome.tiff").exists() is True
+    im_fps = wsi_reg.transform_images(transform_non_reg=True)
+
+    assert Path(im_fps[0]).exists() is True
+    assert Path(im_fps[1]).exists() is True
