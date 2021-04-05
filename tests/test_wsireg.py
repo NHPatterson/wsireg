@@ -1,7 +1,8 @@
 import pytest
-from wsireg.wsireg2d import WsiReg2D
 import numpy as np
 from pathlib import Path
+from wsireg.wsireg2d import WsiReg2D
+from wsireg.reg_image.loader import reg_image_loader
 
 
 @pytest.fixture(scope="session")
@@ -164,3 +165,145 @@ def test_wsireg_run_reg(data_out_dir, disk_im_gry):
 
     assert Path(im_fps[0]).exists() is True
     assert Path(im_fps[1]).exists() is True
+
+
+@pytest.mark.usefixtures("disk_im_gry")
+def test_wsireg_run_reg_with_crop(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        prepro_dict={"mask_bbox": [512, 512, 512, 512]},
+    )
+
+    wsi_reg.add_reg_path(
+        "mod1", "mod2", reg_params=["rigid_test", "affine_test"]
+    )
+    wsi_reg.register_images()
+    # not cropped
+    im_fps = wsi_reg.transform_images(
+        transform_non_reg=True, to_original_size=True
+    )
+    registered_image_nocrop = reg_image_loader(im_fps[0], 1)
+    unregistered_image_nocrop = reg_image_loader(im_fps[1], 1)
+
+    # crop image
+    im_fps = wsi_reg.transform_images(
+        transform_non_reg=True, to_original_size=False
+    )
+    registered_image_crop = reg_image_loader(im_fps[0], 1)
+    unregistered_image_crop = reg_image_loader(im_fps[1], 1)
+
+    assert registered_image_nocrop.im_dims[1:] == (2048, 2048)
+    assert unregistered_image_nocrop.im_dims[1:] == (2048, 2048)
+    assert registered_image_crop.im_dims[1:] == (512, 512)
+    assert unregistered_image_crop.im_dims[1:] == (512, 512)
+
+
+@pytest.mark.usefixtures("disk_im_gry")
+def test_wsireg_run_reg_with_flip_crop(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        prepro_dict={"mask_bbox": [512, 512, 512, 512], "flip": "h"},
+    )
+
+    wsi_reg.add_reg_path(
+        "mod1", "mod2", reg_params=["rigid_test", "affine_test"]
+    )
+    wsi_reg.register_images()
+    # not cropped
+    im_fps = wsi_reg.transform_images(
+        transform_non_reg=True, to_original_size=True
+    )
+    registered_image_nocrop = reg_image_loader(im_fps[0], 1)
+    unregistered_image_nocrop = reg_image_loader(im_fps[1], 1)
+
+    # crop image
+    im_fps = wsi_reg.transform_images(
+        transform_non_reg=True, to_original_size=False
+    )
+    registered_image_crop = reg_image_loader(im_fps[0], 1)
+    unregistered_image_crop = reg_image_loader(im_fps[1], 1)
+
+    assert registered_image_nocrop.im_dims[1:] == (2048, 2048)
+    assert unregistered_image_nocrop.im_dims[1:] == (2048, 2048)
+    assert registered_image_crop.im_dims[1:] == (512, 512)
+    assert unregistered_image_crop.im_dims[1:] == (512, 512)
+
+
+@pytest.mark.usefixtures("disk_im_gry")
+def test_wsireg_run_reg_with_crop_merge(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_modality(
+        "mod3",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        prepro_dict={"mask_bbox": [512, 512, 512, 512]},
+    )
+
+    wsi_reg.add_reg_path("mod1", "mod3", reg_params=["rigid_test"])
+    wsi_reg.add_reg_path("mod2", "mod3", reg_params=["rigid_test"])
+    wsi_reg.register_images()
+    wsi_reg.add_merge_modalities("merge", ["mod1", "mod2", "mod3"])
+    # not cropped
+    im_fps = wsi_reg.transform_images(
+        transform_non_reg=True, to_original_size=True
+    )
+    registered_image_nocrop = reg_image_loader(im_fps[0], 1)
+
+    # crop image
+    im_fps = wsi_reg.transform_images(
+        transform_non_reg=True, to_original_size=False
+    )
+    registered_image_crop = reg_image_loader(im_fps[0], 1)
+
+    assert registered_image_nocrop.im_dims[1:] == (2048, 2048)
+    assert registered_image_crop.im_dims[1:] == (512, 512)
