@@ -1201,6 +1201,10 @@ def transform_to_ome_tiff(
         tform_reg_im, final_transform
     )
 
+    # protect against too large tile size
+    while y_size / tile_size <= 1 or x_size / tile_size <= 1:
+        tile_size = tile_size // 2
+
     n_ch = (
         tform_reg_im.im_dims[2]
         if tform_reg_im.is_rgb
@@ -1357,6 +1361,10 @@ def transform_to_ome_tiff_merge(
     y_size, x_size, y_spacing, x_spacing = get_final_yx_from_tform(
         tform_reg_im.images[0], final_transform[0]
     )
+
+    # protect against too large tile size
+    while y_size / tile_size <= 1 or x_size / tile_size <= 1:
+        tile_size = tile_size // 2
 
     n_ch = tform_reg_im.n_ch
     pyr_levels, pyr_shapes = get_pyramid_info(y_size, x_size, n_ch, tile_size)
