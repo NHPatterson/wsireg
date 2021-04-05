@@ -1,6 +1,7 @@
 import time
 import yaml
 from pathlib import Path
+from copy import deepcopy
 import json
 import SimpleITK as sitk
 from wsireg.reg_image.loader import reg_image_loader
@@ -733,7 +734,9 @@ class WsiReg2D(object):
 
         return transforms
 
-    def _transform_nonreg_image(self, modality_key, file_writer="ome.tiff"):
+    def _transform_nonreg_image(
+        self, modality_key, file_writer="ome.tiff", to_original_size=True
+    ):
         print(
             "transforming non-registered modality : {} ".format(modality_key)
         )
@@ -741,16 +744,31 @@ class WsiReg2D(object):
             self.project_name, modality_key
         )
         im_data = self.modalities[modality_key]
+        transformations = {"initial": None, "registered": None}
 
         if (
             im_data.get("preprocessing").get("rot_cc") is not None
             or im_data.get("preprocessing").get("flip") is not None
+            or im_data.get("preprocessing").get("mask_to_bbox") is True
+            or im_data.get("preprocessing").get("mask_bbox") is not None
         ):
-            transformations = {
-                "initial": self._check_cache_modality(modality_key)[1][0],
-                "registered": None,
-            }
-        else:
+
+            transformations.update(
+                {
+                    "initial": self._check_cache_modality(modality_key)[1][0],
+                    "registered": None,
+                }
+            )
+
+        if to_original_size is True:
+            transformations.update(
+                {"registered": self.original_size_transforms.get(modality_key)}
+            )
+
+        if (
+            transformations.get("initial") is None
+            and transformations.get("registered") is None
+        ):
             transformations = None
 
         tfregimage = reg_image_loader(
@@ -773,15 +791,18 @@ class WsiReg2D(object):
         file_writer="ome.tiff",
         attachment=False,
         attachment_modality=None,
+        to_original_size=True,
     ):
         im_data = self.modalities[edge_key]
 
         if attachment is True:
             final_modality = self.reg_paths[attachment_modality][-1]
-            transformations = self.transformations[attachment_modality]
+            transformations = deepcopy(
+                self.transformations[attachment_modality]
+            )
         else:
             final_modality = self.reg_paths[edge_key][-1]
-            transformations = self.transformations[edge_key]
+            transformations = deepcopy(self.transformations[edge_key])
 
         print("transforming {} to {}".format(edge_key, final_modality))
 
@@ -790,8 +811,15 @@ class WsiReg2D(object):
             edge_key,
             final_modality,
         )
-        original_size_transform = self.original_size_transforms[final_modality]
-        transformations.update({"999999": [original_size_transform]})
+        if (
+            self.original_size_transforms.get(final_modality) is not None
+            and to_original_size is True
+        ):
+            original_size_transform = self.original_size_transforms[
+                final_modality
+            ]
+            transformations.update({"orig": [original_size_transform]})
+
         tfregimage = reg_image_loader(
             im_data["image_filepath"],
             im_data["image_res"],
@@ -807,7 +835,12 @@ class WsiReg2D(object):
 
         return im_fp
 
-    def transform_images(self, file_writer="ome.tiff", transform_non_reg=True):
+    def transform_images(
+        self,
+        file_writer="ome.tiff",
+        transform_non_reg=True,
+        to_original_size=True,
+    ):
         """
         Transform and write images to disk after registration. Also transforms all attachment images
 
@@ -836,15 +869,19 @@ class WsiReg2D(object):
                     m_idx = reg_path_keys.index(merge_mod)
                     reg_path_keys.pop(m_idx)
                 except ValueError:
-                    continue
+                    pass
                 try:
                     m_idx = nonreg_keys.index(merge_mod)
                     nonreg_keys.pop(m_idx)
                 except ValueError:
-                    continue
+                    pass
 
             for key in reg_path_keys:
-                im_fp = self._transform_image(key, file_writer=file_writer)
+                im_fp = self._transform_image(
+                    key,
+                    file_writer=file_writer,
+                    to_original_size=to_original_size,
+                )
                 image_fps.append(im_fp)
 
             for (
@@ -857,6 +894,7 @@ class WsiReg2D(object):
                     file_writer=file_writer,
                     attachment=True,
                     attachment_modality=attachment_modality,
+                    to_original_size=to_original_size,
                 )
                 image_fps.append(im_fp)
 
@@ -865,15 +903,44 @@ class WsiReg2D(object):
             im_res = []
             im_ch_names = []
             transformations = []
+            final_modalities = []
             for sub_image in sub_images:
                 im_data = self.modalities[sub_image]
                 im_fps.append(im_data["image_filepath"])
                 im_res.append(im_data["image_res"])
                 im_ch_names.append(im_data.get("channel_names"))
+
                 try:
-                    transformations.append(self.transformations[sub_image])
+                    transforms = deepcopy(self.transformations[sub_image])
                 except KeyError:
-                    transformations.append(None)
+                    transforms = None
+
+                try:
+                    final_modalities.append(self.reg_paths[sub_image][-1])
+                except KeyError:
+                    final_modalities.append(sub_image)
+                    transforms = {
+                        "initial": self._check_cache_modality(sub_image)[1][0]
+                    }
+
+                transformations.append(transforms)
+
+            if all(final_modalities):
+                final_modality = final_modalities[0]
+            else:
+                raise ValueError("final modalities do not match on merge")
+
+            if (
+                self.original_size_transforms.get(final_modality) is not None
+                and to_original_size is True
+            ):
+                original_size_transform = self.original_size_transforms[
+                    final_modality
+                ]
+                for transformation in transformations:
+                    if transformation is None:
+                        transformation = {}
+                    transformation.update({"orig": [original_size_transform]})
 
             output_path = self.output_dir / "{}-{}_merged-registered".format(
                 self.project_name,
@@ -899,7 +966,9 @@ class WsiReg2D(object):
             # preprocess and save unregistered nodes
             for key in nonreg_keys:
                 im_fp = self._transform_nonreg_image(
-                    key, file_writer=file_writer
+                    key,
+                    file_writer=file_writer,
+                    to_original_size=to_original_size,
                 )
 
                 image_fps.append(im_fp)
