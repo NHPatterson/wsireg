@@ -141,13 +141,12 @@ class RegImage:
         #             self.mask, self.image_res, imported_transforms
         #         )
         #     transforms.append(imported_transforms)
-
+        original_size = image.GetSize()
         if spatial_preprocessing is not None:
             if (
                 self.mask is not None
                 and spatial_preprocessing.get("mask_to_bbox") is not None
             ):
-                original_size = self.mask.GetSize()
                 if spatial_preprocessing.get("mask_to_bbox") is True:
                     print("computing mask bounding box")
                     mask_bbox = compute_mask_to_bbox(self.mask)
