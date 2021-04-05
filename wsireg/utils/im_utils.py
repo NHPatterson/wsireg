@@ -243,8 +243,12 @@ def guess_rgb(shape):
     """
     ndim = len(shape)
     last_dim = shape[-1]
+    if ndim > 2 and last_dim < 5:
+        rgb = True
+    else:
+        rgb = False
 
-    return ndim > 2 and last_dim < 5
+    return rgb
 
 
 def grayscale(rgb):
@@ -452,8 +456,6 @@ class CziRegImageReader(CziFile):
             out_dtype = np.uint8
         else:
             out_dtype = self.dtype
-
-        print("out shape:", tuple(out_shape))
 
         if out is None:
             out = create_output(None, tuple(out_shape), out_dtype)
