@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from pathlib import Path
 from wsireg.wsireg2d import WsiReg2D
-from wsireg.reg_image.loader import reg_image_loader
+from wsireg.reg_images.loader import reg_image_loader
 
 
 @pytest.fixture(scope="session")
@@ -24,7 +24,7 @@ def test_WsiReg2D_instantiation(data_out_dir):
 
 
 def test_wsireg2d_add_modality_w_fp(data_out_dir, data_im_fp):
-    wsi_reg = WsiReg2D("test_proj", str(data_out_dir))
+    wsi_reg = WsiReg2D("test_proj1", str(data_out_dir))
     img_fp1 = str(data_im_fp)
     wsi_reg.add_modality(
         "test_mod",
@@ -44,7 +44,7 @@ def test_wsireg2d_add_modality_w_fp(data_out_dir, data_im_fp):
 
 @pytest.mark.usefixtures("im_mch_np")
 def test_wsireg2d_add_modality_w_np(data_out_dir, im_mch_np):
-    wsi_reg = WsiReg2D("test_proj", str(data_out_dir))
+    wsi_reg = WsiReg2D("test_proj2", str(data_out_dir))
     wsi_reg.add_modality(
         "test_mod",
         im_mch_np,
@@ -64,7 +64,7 @@ def test_wsireg2d_add_modality_w_np(data_out_dir, im_mch_np):
 
 
 def test_wsireg2d_add_modality_check_names(data_out_dir, data_im_fp):
-    wsi_reg = WsiReg2D("test_proj", str(data_out_dir))
+    wsi_reg = WsiReg2D("test_proj3", str(data_out_dir))
     img_fp1 = str(data_im_fp)
     modality_name1 = "test_mod1"
     modality_name2 = "test_mod2"
@@ -89,7 +89,7 @@ def test_wsireg2d_add_modality_check_names(data_out_dir, data_im_fp):
 
 
 def test_wsireg2d_add_reg_path_single(data_out_dir, data_im_fp):
-    wsi_reg = WsiReg2D("test_proj", str(data_out_dir))
+    wsi_reg = WsiReg2D("test_proj4", str(data_out_dir))
     img_fp1 = str(data_im_fp)
     modality_name1 = "test_mod1"
     modality_name2 = "test_mod2"
@@ -117,7 +117,7 @@ def test_wsireg2d_add_reg_path_single(data_out_dir, data_im_fp):
 
 
 def test_wsireg2d_add_modality_duplicated_error(data_out_dir, data_im_fp):
-    wsi_reg = WsiReg2D("test_proj", str(data_out_dir))
+    wsi_reg = WsiReg2D("test_proj5", str(data_out_dir))
     img_fp1 = str(data_im_fp)
     wsi_reg.add_modality(
         "test_mod",
@@ -138,7 +138,7 @@ def test_wsireg2d_add_modality_duplicated_error(data_out_dir, data_im_fp):
 
 @pytest.mark.usefixtures("disk_im_gry")
 def test_wsireg_run_reg(data_out_dir, disk_im_gry):
-    wsi_reg = WsiReg2D("test_proj", str(data_out_dir))
+    wsi_reg = WsiReg2D("test_proj6", str(data_out_dir))
     img_fp1 = str(disk_im_gry)
 
     wsi_reg.add_modality(
@@ -169,7 +169,7 @@ def test_wsireg_run_reg(data_out_dir, disk_im_gry):
 
 @pytest.mark.usefixtures("disk_im_gry")
 def test_wsireg_run_reg_with_crop(data_out_dir, disk_im_gry):
-    wsi_reg = WsiReg2D("test_proj", str(data_out_dir))
+    wsi_reg = WsiReg2D("test_proj7", str(data_out_dir))
     img_fp1 = str(disk_im_gry)
 
     wsi_reg.add_modality(
@@ -215,7 +215,7 @@ def test_wsireg_run_reg_with_crop(data_out_dir, disk_im_gry):
 
 @pytest.mark.usefixtures("disk_im_gry")
 def test_wsireg_run_reg_with_flip_crop(data_out_dir, disk_im_gry):
-    wsi_reg = WsiReg2D("test_proj", str(data_out_dir))
+    wsi_reg = WsiReg2D("test_proj8", str(data_out_dir))
     img_fp1 = str(disk_im_gry)
 
     wsi_reg.add_modality(
@@ -261,7 +261,7 @@ def test_wsireg_run_reg_with_flip_crop(data_out_dir, disk_im_gry):
 
 @pytest.mark.usefixtures("disk_im_gry")
 def test_wsireg_run_reg_with_crop_merge(data_out_dir, disk_im_gry):
-    wsi_reg = WsiReg2D("test_proj", str(data_out_dir))
+    wsi_reg = WsiReg2D("test_proj9", str(data_out_dir))
     img_fp1 = str(disk_im_gry)
 
     wsi_reg.add_modality(
