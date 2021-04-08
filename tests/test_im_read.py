@@ -207,6 +207,7 @@ def test_huron_read_rgb_bf_preprocess():
     ri.read_reg_image()
     assert ri.image.GetNumberOfComponentsPerPixel() == 1
 
+
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_huron_read_rgb_bf_preprocess():
     image_fp = os.path.join(PRIVATE_DIR, "huron_rgb.tif")
@@ -214,6 +215,7 @@ def test_huron_read_rgb_bf_preprocess():
     ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
     ri.read_reg_image()
     assert ri.image.GetNumberOfComponentsPerPixel() == 1
+
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_ometiff_read_rgb():
@@ -231,6 +233,7 @@ def test_ometiff_read_rgb_default_preprocess():
     ri = reg_image_loader(image_fp, 1)
     ri.read_reg_image()
     assert ri.image.GetNumberOfComponentsPerPixel() == 1
+
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_ometiff_read_mc():
@@ -251,6 +254,7 @@ def test_ometiff_read_mc_default_preprocess():
     ri = reg_image_loader(image_fp, 1)
     ri.read_reg_image()
     assert ri.image.GetNumberOfComponentsPerPixel() == 1
+
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_czi_read_mc_read_channels():

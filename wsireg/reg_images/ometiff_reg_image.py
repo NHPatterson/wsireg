@@ -67,16 +67,19 @@ class OmeTiffRegImage(RegImage):
         else:
             series_metadata = self.ome_metadata.get("OME").get("Image")
 
-
         im_dims, im_dtype = get_tifffile_info(self.image_filepath)
 
         if isinstance(series_metadata.get("Pixels").get("Channel"), list):
             samples_per_pixel = (
-                series_metadata.get("Pixels").get("Channel")[0].get("SamplesPerPixel")
+                series_metadata.get("Pixels")
+                .get("Channel")[0]
+                .get("SamplesPerPixel")
             )
         else:
             samples_per_pixel = (
-                series_metadata.get("Pixels").get("Channel").get("SamplesPerPixel")
+                series_metadata.get("Pixels")
+                .get("Channel")
+                .get("SamplesPerPixel")
             )
 
         is_rgb = guess_rgb(im_dims)
@@ -89,7 +92,7 @@ class OmeTiffRegImage(RegImage):
             self.is_rgb = True
             self.is_rgb_interleaved = True
         else:
-            self.is_rgb =  False
+            self.is_rgb = False
             self.is_rgb_interleaved = False
 
         return im_dims, im_dtype

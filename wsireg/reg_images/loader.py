@@ -6,7 +6,7 @@ from wsireg.reg_images import (
     SitkRegImage,
     TiffFileRegImage,
     NumpyRegImage,
-    OmeTiffRegImage
+    OmeTiffRegImage,
 )
 from wsireg.utils.im_utils import TIFFFILE_EXTS
 
