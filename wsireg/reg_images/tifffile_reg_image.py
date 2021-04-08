@@ -1,15 +1,19 @@
-import numpy as np
+import warnings
 import SimpleITK as sitk
-from wsireg.reg_image.reg_image import RegImage
+from tifffile import TiffFile
+from wsireg.reg_images.reg_image import RegImage
 from wsireg.utils.im_utils import (
     std_prepro,
     guess_rgb,
-    get_sitk_image_info,
-    sitk_vect_to_gs,
+    get_tifffile_info,
+    tf_get_largest_series,
+    tifffile_dask_backend,
+    tifffile_zarr_backend,
+    tf_zarr_read_single_ch,
 )
 
 
-class SitkRegImage(RegImage):
+class TiffFileRegImage(RegImage):
     def __init__(
         self,
         image_fp,
@@ -23,7 +27,8 @@ class SitkRegImage(RegImage):
         self.image_filepath = image_fp
         self.image_res = image_res
         self.image = None
-        self.reader = "sitk"
+        self.tf = TiffFile(self.image_filepath)
+        self.reader = "tifffile"
 
         (
             self.im_dims,
@@ -34,7 +39,6 @@ class SitkRegImage(RegImage):
         self.is_rgb = guess_rgb(self.im_dims)
 
         self.n_ch = self.im_dims[2] if self.is_rgb else self.im_dims[0]
-
         self.mask = self.read_mask(mask)
 
         if preprocessing is None:
@@ -50,30 +54,35 @@ class SitkRegImage(RegImage):
         self.original_size_transform = None
 
     def _get_image_info(self):
+        if len(self.tf.series) > 1:
+            warnings.warn(
+                "The tiff contains multiple series, "
+                "the largest series will be read by default"
+            )
 
-        im_dims, im_dtype = get_sitk_image_info(self.image_filepath)
+        im_dims, im_dtype = get_tifffile_info(self.image_filepath)
 
         return im_dims, im_dtype
 
     def read_reg_image(self):
-        image = sitk.ReadImage(self.image_filepath)
+        largest_series = tf_get_largest_series(self.image_filepath)
 
-        if image.GetNumberOfComponentsPerPixel() >= 3:
-            if self.preprocessing is not None:
-                image = sitk_vect_to_gs(image)
+        try:
+            image = tifffile_dask_backend(
+                self.image_filepath, largest_series, self.preprocessing
+            )
+        except ValueError:
+            image = tifffile_zarr_backend(
+                self.image_filepath, largest_series, self.preprocessing
+            )
 
         if (
-            self.preprocessing.get("as_uint8") is True
-            and image.GetPixelID() != 1
+            self.preprocessing is not None
+            and self.preprocessing.get('as_uint8') is True
+            and image.GetPixelID() != sitk.sitkUInt8
         ):
-            image = sitk.Cast(sitk.RescaleIntensity(image), sitk.sitkUInt8)
-
-        if (
-            self.preprocessing.get("ch_indices") is not None
-            and image.GetDepth() > 0
-        ):
-            chs = np.asarray(self.preprocessing.get('ch_indices'))
-            image = image[:, :, chs]
+            image = sitk.RescaleIntensity(image)
+            image = sitk.Cast(image, sitk.sitkUInt8)
 
         image, spatial_preprocessing = self.preprocess_reg_image_intensity(
             image, self.preprocessing
@@ -104,3 +113,14 @@ class SitkRegImage(RegImage):
         else:
             self.image = image
             self.pre_reg_transforms = None
+
+    def read_single_channel(self, channel_idx: int):
+        if channel_idx > (self.n_ch - 1):
+            warnings.warn(
+                "channel_idx exceeds number of channels, reading channel at channel_idx == 0"
+            )
+            channel_idx = 0
+        image = tf_zarr_read_single_ch(
+            self.image_filepath, channel_idx, self.is_rgb
+        )
+        return image

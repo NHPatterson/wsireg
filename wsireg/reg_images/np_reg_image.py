@@ -1,22 +1,17 @@
 import warnings
 import SimpleITK as sitk
-from tifffile import TiffFile
-from wsireg.reg_image.reg_image import RegImage
+import numpy as np
+from wsireg.reg_images import RegImage
 from wsireg.utils.im_utils import (
     std_prepro,
     guess_rgb,
-    get_tifffile_info,
-    tf_get_largest_series,
-    tifffile_dask_backend,
-    tifffile_zarr_backend,
-    tf_zarr_read_single_ch,
 )
 
 
-class TiffFileRegImage(RegImage):
+class NumpyRegImage(RegImage):
     def __init__(
         self,
-        image_fp,
+        image,
         image_res,
         mask=None,
         pre_reg_transforms=None,
@@ -24,11 +19,10 @@ class TiffFileRegImage(RegImage):
         channel_names=None,
         channel_colors=None,
     ):
-        self.image_filepath = image_fp
+        self.image_filepath = "numpy"
         self.image_res = image_res
-        self.image = None
-        self.tf = TiffFile(self.image_filepath)
-        self.reader = "tifffile"
+        self.image = image
+        self.reader = "numpy"
 
         (
             self.im_dims,
@@ -39,6 +33,7 @@ class TiffFileRegImage(RegImage):
         self.is_rgb = guess_rgb(self.im_dims)
 
         self.n_ch = self.im_dims[2] if self.is_rgb else self.im_dims[0]
+
         self.mask = self.read_mask(mask)
 
         if preprocessing is None:
@@ -54,27 +49,28 @@ class TiffFileRegImage(RegImage):
         self.original_size_transform = None
 
     def _get_image_info(self):
-        if len(self.tf.series) > 1:
-            warnings.warn(
-                "The tiff contains multiple series, "
-                "the largest series will be read by default"
-            )
-
-        im_dims, im_dtype = get_tifffile_info(self.image_filepath)
+        im_dims = np.squeeze(self.image.shape)
+        if len(im_dims) == 2:
+            im_dims = np.concatenate([[1], im_dims])
+        im_dtype = self.image.dtype
 
         return im_dims, im_dtype
 
     def read_reg_image(self):
-        largest_series = tf_get_largest_series(self.image_filepath)
 
-        try:
-            image = tifffile_dask_backend(
-                self.image_filepath, largest_series, self.preprocessing
-            )
-        except ValueError:
-            image = tifffile_zarr_backend(
-                self.image_filepath, largest_series, self.preprocessing
-            )
+        if self.is_rgb == True:  # noqa: E712
+            self.image = np.dot(
+                self.image[..., :3], [0.299, 0.587, 0.114]
+            ).astype(np.uint8)
+
+        if self.preprocessing.get("ch_indices") is not None:
+            chs = np.asarray(self.preprocessing.get('ch_indices'))
+            if self.is_rgb == False:  # noqa: E712
+                self.image = self.image[chs, :, :]
+
+        self.image = np.squeeze(self.image)
+
+        image = sitk.GetImageFromArray(self.image)
 
         if (
             self.preprocessing is not None
@@ -120,7 +116,12 @@ class TiffFileRegImage(RegImage):
                 "channel_idx exceeds number of channels, reading channel at channel_idx == 0"
             )
             channel_idx = 0
-        image = tf_zarr_read_single_ch(
-            self.image_filepath, channel_idx, self.is_rgb
-        )
+        if self.n_ch > 1:
+            if self.is_rgb:
+                image = self.image[:, :, channel_idx]
+            else:
+                image = self.image[channel_idx, :, :]
+        else:
+            image = self.image
+
         return image

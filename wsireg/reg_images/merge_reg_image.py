@@ -1,6 +1,6 @@
 import numpy as np
-from wsireg.reg_image.loader import reg_image_loader
-from wsireg.reg_image import RegImage
+from wsireg.reg_images.loader import reg_image_loader
+from wsireg.reg_images.reg_image import RegImage
 from wsireg.utils.tform_utils import (
     prepare_wsireg_transform_data,
 )

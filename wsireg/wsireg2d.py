@@ -4,8 +4,8 @@ from pathlib import Path
 from copy import deepcopy
 import json
 import SimpleITK as sitk
-from wsireg.reg_image.loader import reg_image_loader
-from wsireg.reg_image import MergeRegImage
+from wsireg.reg_images.loader import reg_image_loader
+from wsireg.reg_images import MergeRegImage
 from wsireg.utils.reg_utils import (
     register_2d_images_itkelx,
     sitk_pmap_to_dict,

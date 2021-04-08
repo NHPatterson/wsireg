@@ -1,10 +1,12 @@
 from pathlib import Path
 import numpy as np
-from wsireg.reg_image import (
+from tifffile import TiffFile
+from wsireg.reg_images import (
     CziRegImage,
     SitkRegImage,
     TiffFileRegImage,
     NumpyRegImage,
+    OmeTiffRegImage
 )
 from wsireg.utils.im_utils import TIFFFILE_EXTS
 
@@ -31,15 +33,26 @@ def reg_image_loader(
 
     image_ext = Path(image_fp).suffix
     if image_ext in TIFFFILE_EXTS:
-        reg_image = TiffFileRegImage(
-            image_fp,
-            image_res,
-            mask,
-            pre_reg_transforms,
-            preprocessing,
-            channel_names,
-            channel_colors,
-        )
+        if TiffFile(image_fp).is_ome:
+            reg_image = OmeTiffRegImage(
+                image_fp,
+                image_res,
+                mask,
+                pre_reg_transforms,
+                preprocessing,
+                channel_names,
+                channel_colors,
+            )
+        else:
+            reg_image = TiffFileRegImage(
+                image_fp,
+                image_res,
+                mask,
+                pre_reg_transforms,
+                preprocessing,
+                channel_names,
+                channel_colors,
+            )
     elif image_ext == ".czi":
         reg_image = CziRegImage(
             image_fp,

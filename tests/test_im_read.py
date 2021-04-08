@@ -1,6 +1,8 @@
 import pytest
 import os
-from wsireg.utils.im_utils import read_image, std_prepro
+import numpy as np
+from wsireg.reg_images.loader import reg_image_loader
+from wsireg.utils.im_utils import std_prepro
 import SimpleITK as sitk
 
 # private data logic borrowed from https://github.com/cgohlke/tifffile/tests/test_tifffile.py
@@ -15,144 +17,287 @@ if not os.path.exists(PRIVATE_DIR):
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_czi_read_as_uint8():
-    image_fp = os.path.join(PRIVATE_DIR, "testczi_useczifile.czi")
-    prepro = std_prepro()
-    prepro.update({"as_uint8": True})
-    image = read_image(image_fp, preprocessing=prepro)
-    assert image.GetNumberOfComponentsPerPixel() == 1
-    assert len(image.GetSize()) == 3
-    assert image.GetPixelID() == sitk.sitkUInt8
+def test_czi_read_rgb():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_rgb.czi")
+    ri = reg_image_loader(image_fp, 1)
+    assert len(ri.im_dims) == 3
+    assert ri.im_dims[2] == 3
+    assert ri.im_dtype == np.uint8
+    assert ri.is_rgb is True
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_czi_read_as_uint8_ch_indices_1ch():
-    image_fp = os.path.join(PRIVATE_DIR, "testczi_useczifile.czi")
-    prepro = std_prepro()
-    prepro.update({"as_uint8": True, "ch_indices": [0]})
-    image = read_image(image_fp, preprocessing=prepro)
-    assert image.GetNumberOfComponentsPerPixel() == 1
-    assert len(image.GetSize()) == 2
-    assert image.GetPixelID() == sitk.sitkUInt8
-    assert image.GetDepth() == 0
+def test_czi_read_rgb_default_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_rgb.czi")
+    ri = reg_image_loader(image_fp, 1)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_czi_read_as_uint8_ch_indices_2ch():
-    image_fp = os.path.join(PRIVATE_DIR, "testczi_useczifile.czi")
-    prepro = std_prepro()
-    prepro.update({"as_uint8": True, "ch_indices": [0, 1]})
-    image = read_image(image_fp, preprocessing=prepro)
-    assert image.GetNumberOfComponentsPerPixel() == 1
-    assert len(image.GetSize()) == 3
-    assert image.GetPixelID() == sitk.sitkUInt8
-    assert image.GetDepth() == 2
+def test_czi_read_rgb_bf_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_rgb.czi")
+    preprocessing = {"image_type": "BF"}
+    ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_imagescope_tif_gs():
-    image_fp = os.path.join(PRIVATE_DIR, "testimagescope_tif.tif")
-    prepro = std_prepro()
-    prepro.update({"as_uint8": True})
-    image = read_image(image_fp, preprocessing=prepro)
-    assert image.GetNumberOfComponentsPerPixel() == 1
-    assert len(image.GetSize()) == 2
-    assert image.GetPixelID() == sitk.sitkUInt8
-    assert image.GetDepth() == 0
+def test_czi_read_mc():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
+    ri = reg_image_loader(image_fp, 1)
+    assert len(ri.im_dims) == 3
+    assert ri.im_dims[0] == 4
+    assert ri.im_dims[2] > 3
+    assert ri.im_dtype == np.uint16
+    assert ri.is_rgb is False
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_mc_tif():
-    image_fp = os.path.join(PRIVATE_DIR, "testim_4ch_16bit.tiff")
-    prepro = std_prepro()
-    image = read_image(image_fp, preprocessing=prepro)
-    assert image.GetNumberOfComponentsPerPixel() == 1
-    assert len(image.GetSize()) == 3
-    assert image.GetPixelID() == sitk.sitkUInt16
-    assert image.GetDepth() == 4
+def test_czi_read_mc_default_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
+    ri = reg_image_loader(image_fp, 1)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.image.GetPixelID() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_mc_tif_1ch():
-    image_fp = os.path.join(PRIVATE_DIR, "testim_4ch_16bit.tiff")
-    prepro = std_prepro()
-    prepro.update({"as_uint8": True, "ch_indices": [0]})
-    image = read_image(image_fp, preprocessing=prepro)
-    assert image.GetNumberOfComponentsPerPixel() == 1
-    assert len(image.GetSize()) == 2
-    assert image.GetPixelID() == sitk.sitkUInt8
-    assert image.GetDepth() == 0
+def test_czi_read_mc_fl_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
+    preprocessing = {"image_type": "FL", "as_uint8": True}
+    ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.image.GetPixelID() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_mc_tif_2ch():
-    image_fp = os.path.join(PRIVATE_DIR, "testim_4ch_16bit.tiff")
-    prepro = std_prepro()
-    prepro.update({"as_uint8": True, "ch_indices": [0, 1]})
-    image = read_image(image_fp, preprocessing=prepro)
-    assert image.GetNumberOfComponentsPerPixel() == 1
-    assert len(image.GetSize()) == 3
-    assert image.GetPixelID() == sitk.sitkUInt8
-    assert image.GetDepth() == 2
+def test_czi_read_mc_std_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
+    preprocessing = std_prepro()
+    ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.image.GetPixelID() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_rgb_tif_std_prepro():
-    image_fp = os.path.join(PRIVATE_DIR, "testim_rgb_8bit.tif")
-    prepro = std_prepro()
-    image = read_image(image_fp, preprocessing=prepro)
-    assert image.GetNumberOfComponentsPerPixel() == 1
-    assert len(image.GetSize()) == 2
-    assert image.GetPixelID() == sitk.sitkUInt8
-    assert image.GetDepth() == 0
+def test_czi_read_mc_selectch_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
+    preprocessing = {"ch_indices": [0]}
+    ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.image.GetPixelID() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_rgb_tif_no_prepro():
-    image_fp = os.path.join(PRIVATE_DIR, "testim_rgb_8bit.tif")
-    image = read_image(image_fp, preprocessing=None)
-    assert image.GetNumberOfComponentsPerPixel() == 3
-    assert len(image.GetSize()) == 2
-    assert image.GetPixelID() == sitk.sitkVectorUInt8
-    assert image.GetDepth() == 0
+def test_czi_read_mc_selectch_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
+    preprocessing = {"ch_indices": 0}
+    ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.image.GetPixelID() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_rgb_tif_no_prepro():
-    image_fp = os.path.join(PRIVATE_DIR, "testim_rgb_8bit.tif")
-    image = read_image(image_fp, preprocessing=None)
-    assert image.GetNumberOfComponentsPerPixel() == 3
-    assert len(image.GetSize()) == 2
-    assert image.GetPixelID() == sitk.sitkVectorUInt8
-    assert image.GetDepth() == 0
+def test_czi_read_mc_read_channels():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
+    ri = reg_image_loader(image_fp, 1)
+    ch0 = ri.read_single_channel(0)
+    ch1 = ri.read_single_channel(1)
+    ch2 = ri.read_single_channel(2)
+    ch3 = ri.read_single_channel(3)
+
+    assert np.squeeze(ch0).shape == ri.im_dims[1:]
+    assert np.squeeze(ch1).shape == ri.im_dims[1:]
+    assert np.squeeze(ch2).shape == ri.im_dims[1:]
+    assert np.squeeze(ch3).shape == ri.im_dims[1:]
+    assert np.ndim(ch0) == 6
+    assert np.ndim(ch1) == 6
+    assert np.ndim(ch2) == 6
+    assert np.ndim(ch3) == 6
+    assert np.array_equal(ch0, ch1) is False
+    assert np.array_equal(ch0, ch2) is False
+    assert np.array_equal(ch0, ch3) is False
+    assert np.array_equal(ch1, ch2) is False
+    assert np.array_equal(ch1, ch3) is False
+    assert np.array_equal(ch2, ch3) is False
+    assert ch0.dtype == np.uint16
+    assert ch1.dtype == np.uint16
+    assert ch2.dtype == np.uint16
+    assert ch3.dtype == np.uint16
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_rgb_jpg_std_prepro():
-    image_fp = os.path.join(PRIVATE_DIR, "testimagescope_jpg.jpg")
-    prepro = std_prepro()
-    image = read_image(image_fp, preprocessing=prepro)
-    assert image.GetNumberOfComponentsPerPixel() == 1
-    assert len(image.GetSize()) == 2
-    assert image.GetPixelID() == sitk.sitkUInt8
-    assert image.GetDepth() == 0
+def test_czi_read_rgb_read_channels():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_rgb.czi")
+    ri = reg_image_loader(image_fp, 1)
+    ch0 = ri.read_single_channel(0)
+    ch1 = ri.read_single_channel(1)
+    ch2 = ri.read_single_channel(2)
+
+    assert np.squeeze(ch0).shape == ri.im_dims[:2]
+    assert np.squeeze(ch1).shape == ri.im_dims[:2]
+    assert np.squeeze(ch2).shape == ri.im_dims[:2]
+    assert np.ndim(ch0) == 6
+    assert np.ndim(ch1) == 6
+    assert np.ndim(ch2) == 6
+    assert np.array_equal(ch0, ch1) is False
+    assert np.array_equal(ch0, ch2) is False
+    assert np.array_equal(ch1, ch2) is False
+    assert ch0.dtype == np.uint8
+    assert ch1.dtype == np.uint8
+    assert ch2.dtype == np.uint8
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_rgb_jpg_std_prepro_f():
-    image_fp = os.path.join(PRIVATE_DIR, "testimagescope_jpg.jpg")
-    image = read_image(image_fp, preprocessing=None)
-    assert image.GetNumberOfComponentsPerPixel() == 3
-    assert len(image.GetSize()) == 2
-    assert image.GetPixelID() == sitk.sitkVectorUInt8
-    assert image.GetDepth() == 0
+def test_scn_read_rgb():
+    image_fp = os.path.join(PRIVATE_DIR, "scn_rgb.scn")
+    ri = reg_image_loader(image_fp, 1)
+    assert len(ri.im_dims) == 3
+    assert ri.im_dims[2] == 3
+    assert ri.im_dtype == np.uint8
+    assert ri.is_rgb is True
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_rgb_huron_std_prepro_f():
-    image_fp = os.path.join(PRIVATE_DIR, "testhuron.tif")
-    image = read_image(image_fp, preprocessing=None)
-    assert image.GetNumberOfComponentsPerPixel() == 3
-    assert len(image.GetSize()) == 2
-    assert image.GetPixelID() == sitk.sitkVectorUInt8
-    assert image.GetDepth() == 0
+def test_scn_read_rgb_default_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "scn_rgb.scn")
+    ri = reg_image_loader(image_fp, 1)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+def test_scn_read_rgb_bf_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "scn_rgb.scn")
+    preprocessing = {"image_type": "BF"}
+    ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+def test_huron_read_rgb():
+    image_fp = os.path.join(PRIVATE_DIR, "huron_rgb.tif")
+    ri = reg_image_loader(image_fp, 1)
+    assert len(ri.im_dims) == 3
+    assert ri.im_dims[2] == 3
+    assert ri.im_dtype == np.uint8
+    assert ri.is_rgb is True
+
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+def test_huron_read_rgb_default_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "huron_rgb.tif")
+    ri = reg_image_loader(image_fp, 1)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+def test_huron_read_rgb_bf_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "huron_rgb.tif")
+    preprocessing = {"image_type": "BF"}
+    ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+def test_huron_read_rgb_bf_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "huron_rgb.tif")
+    preprocessing = {"image_type": "BF"}
+    ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+def test_ometiff_read_rgb():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_rgb.ome.tiff")
+    ri = reg_image_loader(image_fp, 1)
+    assert len(ri.im_dims) == 3
+    assert ri.im_dtype == np.uint8
+    assert ri.is_rgb is True
+    assert ri.is_rgb_interleaved is False
+
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+def test_ometiff_read_rgb_default_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_rgb.ome.tiff")
+    ri = reg_image_loader(image_fp, 1)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+def test_ometiff_read_mc():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.ome.tiff")
+    ri = reg_image_loader(image_fp, 1)
+
+    assert len(ri.im_dims) == 3
+    assert ri.im_dims[0] == 4
+    assert ri.im_dims[2] > 3
+    assert ri.im_dtype == np.uint16
+    assert ri.is_rgb is False
+    assert ri.is_rgb_interleaved is False
+
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+def test_ometiff_read_mc_default_preprocess():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.ome.tiff")
+    ri = reg_image_loader(image_fp, 1)
+    ri.read_reg_image()
+    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+def test_czi_read_mc_read_channels():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.ome.tiff")
+    ri = reg_image_loader(image_fp, 1)
+    ch0 = ri.read_single_channel(0)
+    ch1 = ri.read_single_channel(1)
+    ch2 = ri.read_single_channel(2)
+    ch3 = ri.read_single_channel(3)
+
+    assert np.squeeze(ch0).shape == ri.im_dims[1:]
+    assert np.squeeze(ch1).shape == ri.im_dims[1:]
+    assert np.squeeze(ch2).shape == ri.im_dims[1:]
+    assert np.squeeze(ch3).shape == ri.im_dims[1:]
+    assert np.ndim(ch0) == 2
+    assert np.ndim(ch1) == 2
+    assert np.ndim(ch2) == 2
+    assert np.ndim(ch3) == 2
+    assert np.array_equal(ch0, ch1) is False
+    assert np.array_equal(ch0, ch2) is False
+    assert np.array_equal(ch0, ch3) is False
+    assert np.array_equal(ch1, ch2) is False
+    assert np.array_equal(ch1, ch3) is False
+    assert np.array_equal(ch2, ch3) is False
+    assert ch0.dtype == np.uint16
+    assert ch1.dtype == np.uint16
+    assert ch2.dtype == np.uint16
+    assert ch3.dtype == np.uint16
+
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+def test_czi_read_rgb_read_channels():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_rgb.ome.tiff")
+    ri = reg_image_loader(image_fp, 1)
+    ch0 = ri.read_single_channel(0)
+    ch1 = ri.read_single_channel(1)
+    ch2 = ri.read_single_channel(2)
+
+    assert np.squeeze(ch0).shape == ri.im_dims[1:]
+    assert np.squeeze(ch1).shape == ri.im_dims[1:]
+    assert np.squeeze(ch2).shape == ri.im_dims[1:]
+    assert np.ndim(ch0) == 2
+    assert np.ndim(ch1) == 2
+    assert np.ndim(ch2) == 2
+    assert np.array_equal(ch0, ch1) is False
+    assert np.array_equal(ch0, ch2) is False
+    assert np.array_equal(ch1, ch2) is False
+    assert ch0.dtype == np.uint8
+    assert ch1.dtype == np.uint8
+    assert ch2.dtype == np.uint8

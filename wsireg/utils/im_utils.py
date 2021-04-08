@@ -16,7 +16,9 @@ from tifffile import (
 from czifile import CziFile
 import zarr
 import dask.array as da
-from wsireg.utils.tform_utils import sitk_transform_image
+from wsireg.utils.tform_utils import (
+    sitk_transform_image,
+)
 
 
 TIFFFILE_EXTS = [".scn", ".tif", ".tiff", ".ndpi"]
@@ -82,7 +84,9 @@ def zarr_get_base_pyr_layer(zarr_store):
     return zarr_im
 
 
-def tifffile_zarr_backend(image_filepath, largest_series, preprocessing):
+def tifffile_zarr_backend(
+    image_filepath, largest_series, preprocessing, force_rgb=None
+):
     """
     Read image with tifffile and use zarr to read data into memory
 
@@ -108,12 +112,21 @@ def tifffile_zarr_backend(image_filepath, largest_series, preprocessing):
     zarr_store = zarr.open(zarr_series)
     zarr_im = zarr_get_base_pyr_layer(zarr_store)
 
-    if guess_rgb(zarr_im.shape):
+    if force_rgb is None:
+        is_rgb = guess_rgb(zarr_im.shape)
+        is_interleaved = True if is_rgb else False
+    elif force_rgb is True and guess_rgb(zarr_im.shape) is False:
+        is_rgb = True
+        is_interleaved = False
+
+    if is_rgb:
         if preprocessing is not None:
-            image = grayscale(zarr_im)
+            image = grayscale(zarr_im, is_interleaved=is_interleaved)
             image = sitk.GetImageFromArray(image)
         else:
             image = zarr_im[:]
+            if is_interleaved is False:
+                image = np.rollaxis(image, 0, 3)
             image = sitk.GetImageFromArray(image, isVector=True)
 
     elif len(zarr_im.shape) == 2:
@@ -134,7 +147,9 @@ def tifffile_zarr_backend(image_filepath, largest_series, preprocessing):
     return image
 
 
-def tifffile_dask_backend(image_filepath, largest_series, preprocessing):
+def tifffile_dask_backend(
+    image_filepath, largest_series, preprocessing, force_rgb=None
+):
     """
     Read image with tifffile and use dask to read data into memory
 
@@ -160,13 +175,22 @@ def tifffile_dask_backend(image_filepath, largest_series, preprocessing):
     zarr_store = zarr.open(zarr_series)
 
     dask_im = da.squeeze(da.from_zarr(zarr_get_base_pyr_layer(zarr_store)))
+    if force_rgb is None:
+        is_rgb = guess_rgb(dask_im.shape)
+        is_interleaved = True if is_rgb else False
+    elif force_rgb is True and guess_rgb(dask_im.shape) is False:
+        is_rgb = True
+        is_interleaved = False
 
-    if guess_rgb(dask_im.shape):
+    if is_rgb:
         if preprocessing is not None:
-            image = grayscale(dask_im).compute()
+            image = grayscale(dask_im, is_interleaved=is_interleaved).compute()
+
             image = sitk.GetImageFromArray(image)
         else:
             image = dask_im.compute()
+            if is_interleaved is False:
+                image = np.rollaxis(image, 0, 3)
             image = sitk.GetImageFromArray(image, isVector=True)
 
     elif len(dask_im.shape) == 2:
@@ -251,7 +275,7 @@ def guess_rgb(shape):
     return rgb
 
 
-def grayscale(rgb):
+def grayscale(rgb, is_interleaved=False):
     """
     convert RGB image data to greyscale
 
@@ -264,11 +288,23 @@ def grayscale(rgb):
     image:np.ndarray
         returns 8-bit greyscale image for 24-bit RGB image
     """
-    result = (
-        (rgb[..., 0] * 0.2125)
-        + (rgb[..., 1] * 0.7154)
-        + (rgb[..., 2] * 0.0721)
-    )
+    if is_interleaved is True:
+        result = (
+            (rgb[..., 0] * 0.2125)
+            + (rgb[..., 1] * 0.7154)
+            + (rgb[..., 2] * 0.0721)
+        )
+    else:
+        result = (
+            (
+                rgb[
+                    0,
+                ]
+                * 0.2125
+            )
+            + (rgb[1, ...] * 0.7154)
+            + (rgb[2, ...] * 0.0721)
+        )
 
     return result.astype(np.uint8)
 
@@ -743,7 +779,9 @@ def get_tifffile_info(image_filepath):
     return im_dims, im_dtype
 
 
-def tf_zarr_read_single_ch(image_filepath, channel_idx, is_rgb):
+def tf_zarr_read_single_ch(
+    image_filepath, channel_idx, is_rgb, is_rgb_interleaved=False
+):
     """
     Reads a single channel using zarr or dask in combination with tifffile
 
@@ -768,7 +806,7 @@ def tf_zarr_read_single_ch(image_filepath, channel_idx, is_rgb):
     zarr_im = zarr_get_base_pyr_layer(zarr_im)
     try:
         im = da.squeeze(da.from_zarr(zarr_im))
-        if is_rgb:
+        if is_rgb and is_rgb_interleaved is True:
             im = im[:, :, channel_idx].compute()
         elif len(im.shape) > 2:
             im = im[channel_idx, :, :].compute()
@@ -777,7 +815,7 @@ def tf_zarr_read_single_ch(image_filepath, channel_idx, is_rgb):
 
     except ValueError:
         im = zarr_im
-        if is_rgb is True:
+        if is_rgb is True and is_rgb_interleaved is True:
             im = im[:, :, channel_idx]
         elif len(im.shape) > 2:
             im = im[channel_idx, :, :].compute()

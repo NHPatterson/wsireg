@@ -1,5 +1,5 @@
 import pytest
-from wsireg.reg_image.loader import reg_image_loader
+from wsireg.reg_images.loader import reg_image_loader
 import SimpleITK as sitk
 import itk
 

@@ -1,17 +1,17 @@
-import warnings
-import SimpleITK as sitk
 import numpy as np
-from wsireg.reg_image import RegImage
+import SimpleITK as sitk
+from wsireg.reg_images import RegImage
 from wsireg.utils.im_utils import (
     std_prepro,
     guess_rgb,
+    CziRegImageReader,
 )
 
 
-class NumpyRegImage(RegImage):
+class CziRegImage(RegImage):
     def __init__(
         self,
-        image,
+        image_fp,
         image_res,
         mask=None,
         pre_reg_transforms=None,
@@ -19,21 +19,23 @@ class NumpyRegImage(RegImage):
         channel_names=None,
         channel_colors=None,
     ):
-        self.image_filepath = "numpy"
+        self.image_filepath = image_fp
         self.image_res = image_res
-        self.image = image
-        self.reader = "numpy"
+        self.image = None
+        self.czi = CziRegImageReader(self.image_filepath)
+        self.reader = "czi"
 
         (
+            self.ch_dim_idx,
+            self.y_dim_idx,
+            self.x_dim_idx,
             self.im_dims,
             self.im_dtype,
         ) = self._get_image_info()
 
         self.im_dims = tuple(self.im_dims)
         self.is_rgb = guess_rgb(self.im_dims)
-
         self.n_ch = self.im_dims[2] if self.is_rgb else self.im_dims[0]
-
         self.mask = self.read_mask(mask)
 
         if preprocessing is None:
@@ -49,37 +51,47 @@ class NumpyRegImage(RegImage):
         self.original_size_transform = None
 
     def _get_image_info(self):
-        im_dims = np.squeeze(self.image.shape)
-        if len(im_dims) == 2:
-            im_dims = np.concatenate([[1], im_dims])
-        im_dtype = self.image.dtype
+        # if RGB need to get 0
+        if self.czi.shape[-1] > 1:
+            ch_dim_idx = self.czi.axes.index('0')
+        else:
+            ch_dim_idx = self.czi.axes.index('C')
+        y_dim_idx = self.czi.axes.index('Y')
+        x_dim_idx = self.czi.axes.index('X')
+        if self.czi.shape[-1] > 1:
+            im_dims = np.array(self.czi.shape)[
+                [y_dim_idx, x_dim_idx, ch_dim_idx]
+            ]
+        else:
+            im_dims = np.array(self.czi.shape)[
+                [ch_dim_idx, y_dim_idx, x_dim_idx]
+            ]
 
-        return im_dims, im_dtype
+        im_dtype = self.czi.dtype
+
+        return ch_dim_idx, y_dim_idx, x_dim_idx, im_dims, im_dtype
 
     def read_reg_image(self):
+        scene_idx = self.czi.axes.index('S')
 
-        if self.is_rgb == True:  # noqa: E712
-            self.image = np.dot(
-                self.image[..., :3], [0.299, 0.587, 0.114]
-            ).astype(np.uint8)
+        if self.czi.shape[scene_idx] > 1:
+            raise ValueError('multi scene czis not allowed at this time')
+        if self.is_rgb is False:
+            if self.preprocessing is None:
+                image = self.czi.asarray()
+            else:
+                image = self.czi.sub_asarray(
+                    channel_idx=self.preprocessing['ch_indices'],
+                    as_uint8=self.preprocessing['as_uint8'],
+                )
+        else:
+            if self.preprocessing is None:
+                image = self.czi.asarray()
+            else:
+                image = self.czi.sub_asarray_rgb(greyscale=True)
 
-        if self.preprocessing.get("ch_indices") is not None:
-            chs = np.asarray(self.preprocessing.get('ch_indices'))
-            if self.is_rgb == False:  # noqa: E712
-                self.image = self.image[chs, :, :]
-
-        self.image = np.squeeze(self.image)
-
-        image = sitk.GetImageFromArray(self.image)
-
-        if (
-            self.preprocessing is not None
-            and self.preprocessing.get('as_uint8') is True
-            and image.GetPixelID() != sitk.sitkUInt8
-        ):
-            image = sitk.RescaleIntensity(image)
-            image = sitk.Cast(image, sitk.sitkUInt8)
-
+        image = np.squeeze(image)
+        image = sitk.GetImageFromArray(image)
         image, spatial_preprocessing = self.preprocess_reg_image_intensity(
             image, self.preprocessing
         )
@@ -111,17 +123,13 @@ class NumpyRegImage(RegImage):
             self.pre_reg_transforms = None
 
     def read_single_channel(self, channel_idx: int):
-        if channel_idx > (self.n_ch - 1):
-            warnings.warn(
-                "channel_idx exceeds number of channels, reading channel at channel_idx == 0"
+        if self.is_rgb is False:
+            image = self.czi.sub_asarray(
+                channel_idx=[channel_idx],
             )
-            channel_idx = 0
-        if self.n_ch > 1:
-            if self.is_rgb:
-                image = self.image[:, :, channel_idx]
-            else:
-                image = self.image[channel_idx, :, :]
         else:
-            image = self.image
+            image = self.czi.sub_asarray_rgb(
+                channel_idx=[channel_idx], greyscale=False
+            )
 
         return image
