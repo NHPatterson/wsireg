@@ -85,6 +85,8 @@ class WsiReg2D(object):
         self.image_cache = self.output_dir / ".imcache_{}".format(project_name)
         self.cache_images = cache_images
 
+        self.pairwise = False
+
         self._modalities = {}
         self._modality_names = []
         self._reg_paths = {}
@@ -372,8 +374,12 @@ class WsiReg2D(object):
 
         for k, v in reg_paths.items():
             tform_path = self.find_path(k, v[-1])
+            if self.pairwise is True:
+                tform_path_modalities = tform_path[:1]
+            else:
+                tform_path_modalities = tform_path
             transform_edges = []
-            for modality in tform_path:
+            for modality in tform_path_modalities:
                 for edge in self.reg_graph_edges:
                     edge_modality = edge["modalities"]['source']
                     if modality == edge_modality:

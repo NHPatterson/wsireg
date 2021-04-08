@@ -167,6 +167,7 @@ class RegImage:
                 )
 
                 if self.mask is not None:
+                    self.mask.SetSpacing((self.image_res, self.image_res))
                     self.mask = transform_2d_image_itkelx(
                         self.mask, [translation_transform]
                     )
