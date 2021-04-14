@@ -133,9 +133,9 @@ class MergeRegImage(RegImage):
         ]
 
         spacing_check = [
-            t.OutputSpacing for t in final_transforms if t is not None
+            t.output_spacing for t in final_transforms if t is not None
         ]
-        size_check = [t.OutputSize for t in final_transforms if t is not None]
+        size_check = [t.output_size for t in final_transforms if t is not None]
         no_transform_check = [
             idx for idx, t in enumerate(final_transforms) if t is None
         ]
