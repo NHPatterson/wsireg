@@ -13,7 +13,9 @@ from wsireg.utils.reg_utils import (
     json_to_pmap_dict,
 )
 from wsireg.reg_shapes import RegShapes
+from wsireg.reg_transform import RegTransform
 from wsireg.utils.config_utils import parse_check_reg_config
+from wsireg.utils.tform_conversion import get_elastix_transforms
 
 
 class WsiReg2D(object):
@@ -70,7 +72,6 @@ class WsiReg2D(object):
         project_name: str,
         output_dir: str,
         cache_images=True,
-        reload_data=False,
         config=None,
     ):
 
@@ -556,16 +557,28 @@ class WsiReg2D(object):
                 }
             )
 
+        reg_graph_edges = deepcopy(self.reg_graph_edges)
+
+        [rge.pop("reg_transforms", None) for rge in reg_graph_edges]
+
         config = {
             "project_name": self.project_name,
             "output_dir": str(self.output_dir),
             "cache_images": self.cache_images,
             "modalities": self.modalities,
             "reg_paths": reg_paths,
-            "reg_graph_edges": self.reg_graph_edges
+            "reg_graph_edges": reg_graph_edges
             if status == "registered"
             else None,
-            "original_size_transforms": self.original_size_transforms,
+            "original_size_transforms": self.original_size_transforms
+            if status == "registered"
+            else None,
+            "attachment_shapes": self.shape_sets
+            if len(self._shape_sets) > 0
+            else None,
+            "attachment_images": self.attachment_images
+            if len(self.attachment_images) > 0
+            else None,
         }
 
         output_path = (
@@ -717,19 +730,32 @@ class WsiReg2D(object):
 
     @transformations.setter
     def transformations(self, reg_graph_edges):
-        self._transformations = self._collate_transformations(reg_graph_edges)
+        self._transformations = self._collate_transformations()
 
     def add_merge_modalities(self, merge_name, modalities):
         self.merge_modalities.update({merge_name: modalities})
 
-    def _collate_transformations(self, reg_graph_edges):
+    def _generate_reg_transforms(self):
+        self._reg_graph_edges["reg_transforms"]
+
+    def _collate_transformations(self):
         transforms = {}
+        for reg_edge in self.reg_graph_edges:
+            reg_edge["reg_transforms"] = {
+                'initial': [
+                    RegTransform(t) for t in reg_edge["transforms"]["initial"]
+                ],
+                'registration': [
+                    RegTransform(t)
+                    for t in reg_edge["transforms"]["registration"]
+                ],
+            }
         edge_modality_pairs = [v['modalities'] for v in self.reg_graph_edges]
         for modality, tform_edges in self.transform_paths.items():
             for idx, tform_edge in enumerate(tform_edges):
                 reg_edge_tforms = self.reg_graph_edges[
                     edge_modality_pairs.index(tform_edge)
-                ]["transforms"]
+                ]["reg_transforms"]
                 if idx == 0:
                     transforms[modality] = {
                         'initial': reg_edge_tforms['initial'],
@@ -737,7 +763,6 @@ class WsiReg2D(object):
                     }
                 else:
                     transforms[modality][idx] = reg_edge_tforms['registration']
-
         return transforms
 
     def _transform_nonreg_image(
@@ -924,10 +949,14 @@ class WsiReg2D(object):
                 try:
                     final_modalities.append(self.reg_paths[sub_image][-1])
                 except KeyError:
+                    initial_transforms = self._check_cache_modality(sub_image)[
+                        1
+                    ][0]
+                    initial_transforms = [
+                        RegTransform(t) for t in initial_transforms
+                    ]
                     final_modalities.append(sub_image)
-                    transforms = {
-                        "initial": self._check_cache_modality(sub_image)[1][0]
-                    }
+                    transforms = {"initial": initial_transforms}
 
                 transformations.append(transforms)
 
@@ -946,7 +975,9 @@ class WsiReg2D(object):
                 for transformation in transformations:
                     if transformation is None:
                         transformation = {}
-                    transformation.update({"orig": [original_size_transform]})
+                    transformation.update(
+                        {"orig": [RegTransform(original_size_transform)]}
+                    )
 
             output_path = self.output_dir / "{}-{}_merged-registered".format(
                 self.project_name,
@@ -1031,9 +1062,10 @@ class WsiReg2D(object):
                     final_modality,
                 )
             )
+            out_transforms = get_elastix_transforms(self.transformations[key])
 
             with open(output_path, 'w') as fp:
-                json.dump(self.transformations[key], fp, indent=4)
+                json.dump(out_transforms, fp, indent=4)
 
         for (
             modality,
@@ -1139,7 +1171,7 @@ class WsiReg2D(object):
             self.reg_graph_edges[modality_idx]["registered"] = False
 
 
-if __name__ == "__main__":
+def main():
     import argparse
 
     def config_to_WsiReg2D(config_filepath):
@@ -1186,3 +1218,9 @@ if __name__ == "__main__":
 
     if reg_graph.shape_sets:
         reg_graph.transform_shapes()
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main())
