@@ -7,7 +7,6 @@ import cv2
 import geojson
 from wsireg.utils.tform_utils import (
     wsireg_transforms_to_itk_composite,
-    collate_wsireg_transforms,
 )
 
 GJ_SHAPE_TYPE = {
@@ -223,9 +222,7 @@ def scale_shape_coordinates(poly: dict, scale_factor: float):
     return poly
 
 
-def invert_nonlinear_transforms(
-    itk_transforms: list, elx_transform_data: list
-):
+def invert_nonlinear_transforms(itk_transforms: list):
     """
     Check list of sequential ITK transforms for non-linear (i.e., bspline) transforms
     Transformations need to be inverted to transform from moving to fixed space as transformations
@@ -238,40 +235,27 @@ def invert_nonlinear_transforms(
     ----------
     itk_transforms:list
         list of itk.Transform
-    elx_transform_data: list
-        list of dict containing elastix transformation parameters
+
     Returns
     -------
     itk_transforms:list
         list of itk.Transform where any non-linear transforms are replaced with an inverted displacement field
     """
-    tform_linear = [t.IsLinear() for t in itk_transforms]
+    tform_linear = [t.is_linear for t in itk_transforms]
 
     if all(tform_linear):
         return itk_transforms
     else:
         nl_idxs = np.where(np.array(tform_linear) == 0)[0]
-        print(
-            f"transform(s) at index {[n for n in nl_idxs]} is(are) non-linear, inverting displacement field(s)\n"
-            "this can take some time"
-        )
         for nl_idx in nl_idxs:
-            tform = elx_transform_data[nl_idx]
-            tform_to_dfield = sitk.TransformToDisplacementFieldFilter()
-            tform_to_dfield.SetOutputSpacing(
-                [float(p) for p in tform["Spacing"]]
-            )
-            tform_to_dfield.SetOutputOrigin(
-                [float(p) for p in tform["Origin"]]
-            )
-            tform_to_dfield.SetOutputDirection(
-                [float(p) for p in tform["Direction"]]
-            )
-            tform_to_dfield.SetSize([int(p) for p in tform["Size"]])
-            dfield = tform_to_dfield.Execute(itk_transforms[nl_idx])
-            dfield = sitk.InvertDisplacementField(dfield)
-            dfield = sitk.DisplacementFieldTransform(dfield)
-            itk_transforms[nl_idx] = dfield
+            if itk_transforms[nl_idx].inverse_transform is None:
+                print(
+                    f"transform at index {nl_idx} is non-linear and the inverse has not been computed\n"
+                    "inverting displacement field(s)...\n"
+                    "this can take some time"
+                )
+                itk_transforms[nl_idx].compute_inverse_nonlinear()
+
     return itk_transforms
 
 
@@ -295,11 +279,8 @@ def prepare_pt_transformation_data(transformations):
     composite, itk_transforms = wsireg_transforms_to_itk_composite(
         transformations
     )
-    elx_transform_data = collate_wsireg_transforms(transformations)
-    itk_pt_transforms = invert_nonlinear_transforms(
-        itk_transforms, elx_transform_data
-    )
-    target_res = float(elx_transform_data[-1]["Spacing"][0])
+    itk_pt_transforms = invert_nonlinear_transforms(itk_transforms)
+    target_res = float(itk_pt_transforms[-1].output_spacing[0])
     return itk_pt_transforms, target_res
 
 
@@ -348,17 +329,9 @@ def itk_transform_pts(
             pt = pt * source_res
         for idx, t in enumerate(itk_transforms):
             if idx == 0:
-                t_pt = (
-                    t.GetInverse().TransformPoint(pt)
-                    if t.IsLinear()
-                    else t.TransformPoint(pt)
-                )
+                t_pt = t.inverse_transform.TransformPoint(pt)
             else:
-                t_pt = (
-                    t.GetInverse().TransformPoint(t_pt)
-                    if t.IsLinear()
-                    else t.TransformPoint(t_pt)
-                )
+                t_pt = t.inverse_transform.TransformPoint(t_pt)
         t_pt = np.array(t_pt)
         if output_idx is True:
             t_pt *= 1 / target_res
