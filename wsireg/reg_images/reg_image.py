@@ -260,12 +260,11 @@ class RegImage:
         if transform_data is not None:
             (
                 itk_composite,
-                itk_transforms,
+                _,
                 final_transform,
             ) = prepare_wsireg_transform_data(transform_data)
         else:
-            itk_composite, itk_transforms, final_transform = None, None, None
-
+            itk_composite, _, final_transform = None, None, None
 
         if file_writer.lower() == "ome.zarr" or file_writer.lower() == "zarr":
             im_fp = transform_to_ome_zarr(

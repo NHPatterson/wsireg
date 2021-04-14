@@ -853,7 +853,9 @@ class WsiReg2D(object):
             original_size_transform = self.original_size_transforms[
                 final_modality
             ]
-            transformations.update({"orig": [RegTransform(original_size_transform)]})
+            transformations.update(
+                {"orig": [RegTransform(original_size_transform)]}
+            )
 
         tfregimage = reg_image_loader(
             im_data["image_filepath"],
