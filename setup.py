@@ -43,6 +43,11 @@ setup(
     name='wsireg',
     packages=find_packages(include=['wsireg', 'wsireg.*']),
     setup_requires=setup_requirements,
+    entry_points={
+        "console_scripts": [
+            "wsireg2d = wsireg.wsireg2d:main",
+        ]
+    },
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/nhpatterson/wsireg',
