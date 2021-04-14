@@ -1071,12 +1071,12 @@ def get_final_tform_info(final_transform):
 
     """
     x_size, y_size = (
-        final_transform.OutputSize[0],
-        final_transform.OutputSize[1],
+        final_transform.output_size[0],
+        final_transform.output_size[1],
     )
     x_spacing, y_spacing = (
-        final_transform.OutputSpacing[0],
-        final_transform.OutputSpacing[1],
+        final_transform.output_spacing[0],
+        final_transform.output_spacing[1],
     )
     return int(y_size), int(x_size), float(y_spacing), float(x_spacing)
 
