@@ -741,10 +741,14 @@ class WsiReg2D(object):
     def _collate_transformations(self):
         transforms = {}
         for reg_edge in self.reg_graph_edges:
-            reg_edge["reg_transforms"] = {
-                'initial': [
+            if reg_edge["transforms"]["initial"] is not None:
+                initial_transforms = [
                     RegTransform(t) for t in reg_edge["transforms"]["initial"]
-                ],
+                ]
+            else:
+                initial_transforms = []
+            reg_edge["reg_transforms"] = {
+                'initial': initial_transforms,
                 'registration': [
                     RegTransform(t)
                     for t in reg_edge["transforms"]["registration"]
@@ -849,7 +853,7 @@ class WsiReg2D(object):
             original_size_transform = self.original_size_transforms[
                 final_modality
             ]
-            transformations.update({"orig": [original_size_transform]})
+            transformations.update({"orig": [RegTransform(original_size_transform)]})
 
         tfregimage = reg_image_loader(
             im_data["image_filepath"],
