@@ -1,10 +1,26 @@
 import json
+import numpy as np
 import SimpleITK as sitk
 import itk
 from wsireg.parameter_maps.reg_params import DEFAULT_REG_PARAM_MAPS
 from wsireg.utils.itk_im_conversions import (
     itk_image_to_sitk_image,
 )
+
+NP_TO_SITK_DTYPE = {
+    np.dtype(np.int8): 0,
+    np.dtype(np.uint8): 1,
+    np.dtype(np.int16): 2,
+    np.dtype(np.uint16): 3,
+    np.dtype(np.int32): 4,
+    np.dtype(np.uint32): 5,
+    np.dtype(np.int64): 6,
+    np.dtype(np.uint64): 7,
+    np.dtype(np.float32): 8,
+    np.dtype(np.float64): 9,
+    np.dtype(np.complex64): 10,
+    np.dtype(np.complex64): 11,
+}
 
 
 def sitk_pmap_to_dict(pmap):
@@ -232,7 +248,8 @@ def register_2d_images_itkelx(
     else:
         image = selx.GetOutput()
         image = itk_image_to_sitk_image(image)
-        image = sitk.Cast(image, source_image.pixel_id)
+        pixel_id = NP_TO_SITK_DTYPE[source_image.im_dtype]
+        image = sitk.Cast(image, pixel_id)
         return tform_list, image
 
 

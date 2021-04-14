@@ -3,6 +3,7 @@ import json
 import numpy as np
 import itk
 import SimpleITK as sitk
+from wsireg.utils.reg_utils import json_to_pmap_dict
 from wsireg.utils.itk_im_conversions import (
     sitk_image_to_itk_image,
     itk_image_to_sitk_image,
@@ -11,6 +12,7 @@ from wsireg.parameter_maps.transformations import (
     BASE_RIG_TFORM,
     BASE_AFF_TFORM,
 )
+from wsireg.reg_transform import RegTransform
 
 
 NUMERIC_ELX_PARAMETERS = {
@@ -385,6 +387,60 @@ def gen_rigid_tform_rot(image, spacing, angle):
     return tform
 
 
+def gen_rigid_translation(
+    image, spacing, translation_x, translation_y, size_x, size_y
+):
+    """
+    generate a SimpleElastix transformation parameter Map to rotate image by angle
+    Parameters
+    ----------
+    image : sitk.Image
+        SimpleITK image that will be rotated
+    spacing : float
+        Physical spacing of the SimpleITK image
+
+    Returns
+    -------
+    SimpleITK.ParameterMap of rotation transformation (EulerTransform)
+    """
+    tform = BASE_RIG_TFORM.copy()
+    image.SetSpacing((spacing, spacing))
+    bound_w, bound_h = compute_rot_bound(image, angle=0)
+
+    rot_cent_pt = image.TransformContinuousIndexToPhysicalPoint(
+        ((bound_w - 1) / 2, (bound_h - 1) / 2)
+    )
+    (
+        translation_x,
+        translation_y,
+    ) = image.TransformContinuousIndexToPhysicalPoint(
+        (float(translation_x), float(translation_y))
+    )
+    # c_x, c_y = (image.GetSize()[0] - 1) / 2, (image.GetSize()[1] - 1) / 2
+
+    tform["Spacing"] = [str(spacing), str(spacing)]
+    tform["Size"] = [str(size_x), str(size_y)]
+    tform["CenterOfRotationPoint"] = [str(rot_cent_pt[0]), str(rot_cent_pt[1])]
+    tform["TransformParameters"] = [
+        str(0),
+        str(translation_x),
+        str(translation_y),
+    ]
+
+    return tform
+
+
+def gen_rig_to_original(original_size, crop_transform):
+    crop_transform["Size"] = [str(original_size[0]), str(original_size[1])]
+    tform_params = [float(t) for t in crop_transform["TransformParameters"]]
+    crop_transform["TransformParameters"] = [
+        str(0),
+        str(tform_params[1] * -1),
+        str(tform_params[2] * -1),
+    ]
+    return crop_transform
+
+
 def gen_aff_tform_flip(image, spacing, flip="h"):
     """
     generate a SimpleElastix transformation parameter Map to horizontally or vertically flip image
@@ -424,88 +480,11 @@ def gen_aff_tform_flip(image, spacing, flip="h"):
     return tform
 
 
-def euler_elx_to_itk2d(tform):
-    euler2d = sitk.Euler2DTransform()
-
-    center = [float(p) for p in tform['CenterOfRotationPoint']]
-    euler2d.SetFixedParameters(center)
-    elx_parameters = [float(p) for p in tform['TransformParameters']]
-    euler2d.SetParameters(elx_parameters)
-
-    return euler2d
-
-
-def similarity_elx_to_itk2d(tform):
-    similarity2d = sitk.Similarity2DTransform()
-
-    center = [float(p) for p in tform['CenterOfRotationPoint']]
-    similarity2d.SetFixedParameters(center)
-    elx_parameters = [float(p) for p in tform['TransformParameters']]
-    similarity2d.SetParameters(elx_parameters)
-
-    return similarity2d
-
-
-def affine_elx_to_itk2d(tform):
-    im_dimension = len(tform["Size"])
-    affine2d = sitk.AffineTransform(im_dimension)
-
-    center = [float(p) for p in tform['CenterOfRotationPoint']]
-    affine2d.SetFixedParameters(center)
-    elx_parameters = [float(p) for p in tform['TransformParameters']]
-    affine2d.SetParameters(elx_parameters)
-
-    return affine2d
-
-
-def bspline_elx_to_itk2d(tform):
-    im_dimension = len(tform["Size"])
-
-    bspline2d = sitk.BSplineTransform(im_dimension, 3)
-    bspline2d.SetTransformDomainOrigin(
-        [float(p) for p in tform['Origin']]
-    )  # from fixed image
-    bspline2d.SetTransformDomainPhysicalDimensions(
-        [int(p) for p in tform['Size']]
-    )  # from fixed image
-    bspline2d.SetTransformDomainDirection(
-        [float(p) for p in tform['Direction']]
-    )  # from fixed image
-
-    fixedParams = [int(p) for p in tform['GridSize']]
-    fixedParams += [float(p) for p in tform['GridOrigin']]
-    fixedParams += [float(p) for p in tform['GridSpacing']]
-    fixedParams += [float(p) for p in tform['GridDirection']]
-    bspline2d.SetFixedParameters(fixedParams)
-    bspline2d.SetParameters([float(p) for p in tform['TransformParameters']])
-    return bspline2d
-
-
-def convert_to_itk(tform):
-
-    if tform["Transform"][0] == "AffineTransform":
-        itk_tform = affine_elx_to_itk2d(tform)
-    elif tform["Transform"][0] == "SimilarityTransform":
-        itk_tform = similarity_elx_to_itk2d(tform)
-    elif tform["Transform"][0] == "EulerTransform":
-        itk_tform = euler_elx_to_itk2d(tform)
-    elif tform["Transform"][0] == "BSplineTransform":
-        itk_tform = bspline_elx_to_itk2d(tform)
-
-    itk_tform.OutputSpacing = [float(p) for p in tform["Spacing"]]
-    itk_tform.OutputDirection = [float(p) for p in tform["Direction"]]
-    itk_tform.OutputOrigin = [float(p) for p in tform["Origin"]]
-    itk_tform.OutputSize = [int(p) for p in tform["Size"]]
-    itk_tform.ResampleInterpolator = tform["ResampleInterpolator"][0]
-
-    return itk_tform
-
-
 def make_composite_itk(itk_tforms):
 
     itk_composite = sitk.CompositeTransform(2)
     for t in itk_tforms:
-        itk_composite.AddTransform(t)
+        itk_composite.AddTransform(t.itk_transform)
     return itk_composite
 
 
@@ -551,26 +530,41 @@ def collate_wsireg_transforms(parameter_data):
         item for sublist in parameter_data_list for item in sublist
     ]
 
+    if all([isinstance(t, dict) for t in flat_pmap_list]):
+        flat_pmap_list = [RegTransform(t) for t in flat_pmap_list]
+
     return flat_pmap_list
 
 
 def wsireg_transforms_to_itk_composite(parameter_data):
 
-    flat_pmap_list = collate_wsireg_transforms(parameter_data)
-    itk_tforms = [convert_to_itk(t) for t in flat_pmap_list]
-    composite_tform = make_composite_itk(itk_tforms)
+    reg_transforms = collate_wsireg_transforms(parameter_data)
+    composite_tform = make_composite_itk(reg_transforms)
 
-    return composite_tform, itk_tforms
+    return composite_tform, reg_transforms
+
+
+def prepare_wsireg_transform_data(transform_data):
+    if isinstance(transform_data, str) is True:
+        transform_data = json_to_pmap_dict(transform_data)
+
+    if transform_data is not None:
+        (
+            composite_transform,
+            itk_transforms,
+        ) = wsireg_transforms_to_itk_composite(transform_data)
+        final_tform = itk_transforms[-1]
+    return composite_transform, itk_transforms, final_tform
 
 
 def wsireg_transforms_to_resampler(final_tform):
     resampler = sitk.ResampleImageFilter()
-    resampler.SetOutputOrigin(final_tform.OutputOrigin)
-    resampler.SetSize(final_tform.OutputSize)
-    resampler.SetOutputDirection(final_tform.OutputDirection)
-    resampler.SetOutputSpacing(final_tform.OutputSpacing)
+    resampler.SetOutputOrigin(final_tform.output_origin)
+    resampler.SetSize(final_tform.output_size)
+    resampler.SetOutputDirection(final_tform.output_direction)
+    resampler.SetOutputSpacing(final_tform.output_spacing)
     interpolator = ELX_TO_ITK_INTERPOLATORS.get(
-        final_tform.ResampleInterpolator
+        final_tform.resample_interpolator
     )
     resampler.SetInterpolator(interpolator)
     return resampler
