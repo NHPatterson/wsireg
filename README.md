@@ -76,10 +76,9 @@ reg_graph.transform_images(file_writer="ome.tiff")
 This will register the images and save them in the project output directory as tiled, pyramidal OME-TIFF. Original data types are respected for images.
 
 ## Future support
-* Complete support for masking and cropping based on masks
+* (More) Memory-efficient transformation
 * 3D registration
 * Automatic image conversion using `bioformats`
 * Use of registration libraries besides `elastix`
-* Memory-efficient transformation
 * Deeper OME metadata
 
