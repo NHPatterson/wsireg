@@ -1,26 +1,26 @@
 # wsireg config template
 
 # required
-project_name : basic
-output_dir : /data/
+project_name: basic
+output_dir: /data/
 
 # defaults to true
-cache_images : true
+cache_images: true
 
 # add image modalities, must have unique names
 modalities:
     test_modality1:
         # required
-        image_filepath : /data/test_filepath1.tif
+        image_filepath: /data/test_filepath1.tif
         # required
-        image_res : 0.65
+        image_res: 0.65
 
         # defaults to image_type : FL
-        prepro_dict:
+        preprocessing:
             image_type: FL
-            ch_indices : None
-            as_uint8 : true
-            contrast_enhance : None
+            ch_indices: None
+            as_uint8: true
+            contrast_enhance: None
         channel_names:
             - test name 1
             - test name 2
@@ -29,13 +29,13 @@ modalities:
             - test color 2
 
     test_modality2:
-        image_filepath : /data/test_filepath2.tif
-        image_res : 0.65
-        prepro_dict :
-            image_type : BF
-            ch_indices : None
-            as_uint8 : None
-            contrast_enhance : None
+        image_filepath: /data/test_filepath2.tif
+        image_res: 0.65
+        preprocessing:
+            image_type: BF
+            ch_indices: None
+            as_uint8: None
+            contrast_enhance: None
         channel_names:
             - test name 1
             - test name 2
@@ -47,21 +47,21 @@ modalities:
 reg_paths:
     reg_path1:
         # required
-        src_modality_name : test_modality1
+        src_modality_name: test_modality1
 
         # required
-        tgt_modality_name : test_modality2
+        tgt_modality_name: test_modality2
 
-        # defaults to None
-        thru_modality : None
+        # defaults to None (helps define path of registration)
+        thru_modality: None
 
         # defaults to rigid (should be set!)
-        reg_params :
+        reg_params:
             - rigid
             - nl
 
         # defaults to None
-        override_prepro : None
+        override_prepro: None
 
 # add image that will be transformed in the graph but not registered in it
 attachment_images:
@@ -70,9 +70,9 @@ attachment_images:
         #required
         attachment_modality: test_modality1
         # required
-        image_filepath : /data/test_filepath.tif
+        image_filepath: /data/test_filepath.tif
         # required
-        image_res : 0.65
+        image_res: 0.65
         channel_names:
             - test name 1
             - test name 2
@@ -87,7 +87,7 @@ attachment_shapes:
         #required
         attachment_modality: test_modality1
         # required
-        shape_files :
+        shape_files:
             - /data/test_shapes1.json
             - /data/test_shapes2.json
 
