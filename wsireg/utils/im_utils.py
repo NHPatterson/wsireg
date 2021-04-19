@@ -1149,7 +1149,7 @@ def get_final_yx_from_tform(tform_reg_im, final_transform):
     return y_size, x_size, y_spacing, x_spacing
 
 
-def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size):
+def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size=512):
 
     y_size, x_size = get_final_yx_from_tform(tform_reg_im)
 
