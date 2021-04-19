@@ -85,6 +85,7 @@ class RegImage:
                 preprocessing.pop(spat_key, None)
 
         # remove read time preprocessing
+        preprocessing.pop("set_rgb", None)
         preprocessing.pop("ch_indices", None)
         preprocessing.pop("as_uint8", None)
 

@@ -31,6 +31,7 @@ class NumpyRegImage(RegImage):
 
         self.im_dims = tuple(self.im_dims)
         self.is_rgb = guess_rgb(self.im_dims)
+        self.is_rgb_interleaved = guess_rgb(self.im_dims)
 
         self.n_ch = self.im_dims[2] if self.is_rgb else self.im_dims[0]
 
@@ -41,6 +42,15 @@ class NumpyRegImage(RegImage):
         else:
             self.preprocessing = std_prepro()
             self.preprocessing.update(preprocessing)
+
+        if self.preprocessing.get("set_rgb") is True:
+            if self.is_rgb is False:
+                self.is_rgb = True
+                self.is_rgb_interleaved = False
+        elif self.preprocessing.get("set_rgb") is False:
+            if self.is_rgb is True:
+                self.is_rgb = False
+                self.is_rgb_interleaved = True
 
         self.pre_reg_transforms = pre_reg_transforms
 
@@ -58,7 +68,15 @@ class NumpyRegImage(RegImage):
 
     def read_reg_image(self):
 
-        if self.is_rgb == True:  # noqa: E712
+        if (
+            self.is_rgb is True and self.is_rgb_interleaved is True
+        ):
+            self.image = np.dot(
+                self.image[..., :3], [0.299, 0.587, 0.114]
+            ).astype(np.uint8)
+
+        elif self.is_rgb_interleaved is False and self.is_rgb is True:
+            self.image = np.moveaxis(self.image, 0, -1)
             self.image = np.dot(
                 self.image[..., :3], [0.299, 0.587, 0.114]
             ).astype(np.uint8)
@@ -70,27 +88,28 @@ class NumpyRegImage(RegImage):
 
         self.image = np.squeeze(self.image)
 
-        image = sitk.GetImageFromArray(self.image)
+        self.image = sitk.GetImageFromArray(self.image)
 
         if (
             self.preprocessing is not None
             and self.preprocessing.get('as_uint8') is True
-            and image.GetPixelID() != sitk.sitkUInt8
+            and self.image.GetPixelID() != sitk.sitkUInt8
         ):
-            image = sitk.RescaleIntensity(image)
-            image = sitk.Cast(image, sitk.sitkUInt8)
+            self.image = sitk.RescaleIntensity(self.image)
+            self.image = sitk.Cast(self.image, sitk.sitkUInt8)
 
-        image, spatial_preprocessing = self.preprocess_reg_image_intensity(
-            image, self.preprocessing
-        )
+        (
+            self.image,
+            spatial_preprocessing,
+        ) = self.preprocess_reg_image_intensity(self.image, self.preprocessing)
 
-        if image.GetDepth() >= 1:
+        if self.image.GetDepth() >= 1:
             raise ValueError(
                 "preprocessing did not result in a single image plane\n"
                 "multi-channel or 3D image return"
             )
 
-        if image.GetNumberOfComponentsPerPixel() > 1:
+        if self.image.GetNumberOfComponentsPerPixel() > 1:
             raise ValueError(
                 "preprocessing did not result in a single image plane\n"
                 "multi-component / RGB(A) image returned"
@@ -104,10 +123,10 @@ class NumpyRegImage(RegImage):
                 self.image,
                 self.pre_reg_transforms,
             ) = self.preprocess_reg_image_spatial(
-                image, spatial_preprocessing, self.pre_reg_transforms
+                self.image, spatial_preprocessing, self.pre_reg_transforms
             )
         else:
-            self.image = image
+            self.image = self.image
             self.pre_reg_transforms = None
 
     def read_single_channel(self, channel_idx: int):
@@ -117,7 +136,7 @@ class NumpyRegImage(RegImage):
             )
             channel_idx = 0
         if self.n_ch > 1:
-            if self.is_rgb:
+            if self.is_rgb and self.is_rgb_interleaved is True:
                 image = self.image[:, :, channel_idx]
             else:
                 image = self.image[channel_idx, :, :]

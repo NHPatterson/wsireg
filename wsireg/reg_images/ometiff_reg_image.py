@@ -48,6 +48,15 @@ class OmeTiffRegImage(RegImage):
             self.preprocessing = std_prepro()
             self.preprocessing.update(preprocessing)
 
+        if self.preprocessing.get("set_rgb") is True:
+            if self.is_rgb is False:
+                self.is_rgb = True
+                self.is_rgb_interleaved = False
+        elif self.preprocessing.get("set_rgb") is False:
+            if self.is_rgb is True:
+                self.is_rgb = False
+                self.is_rgb_interleaved = True
+
         self.pre_reg_transforms = pre_reg_transforms
 
         self.channel_names = channel_names
