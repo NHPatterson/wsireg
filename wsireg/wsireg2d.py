@@ -811,6 +811,7 @@ class WsiReg2D(object):
             im_data["image_res"],
             channel_names=im_data.get("channel_names"),
             channel_colors=im_data.get("channel_colors"),
+            preprocessing=im_data.get("preprocessing"),
         )
         im_fp = tfregimage.transform_image(
             output_path.stem,
@@ -862,6 +863,7 @@ class WsiReg2D(object):
             im_data["image_res"],
             channel_names=im_data.get("channel_names"),
             channel_colors=im_data.get("channel_colors"),
+            preprocessing=im_data.get("preprocessing"),
         )
         im_fp = tfregimage.transform_image(
             output_path.stem,
