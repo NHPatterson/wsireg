@@ -272,3 +272,27 @@ def test_reg_image_loader_to_itk(im_gry_np, mask_np):
     assert reg_image.image.GetSpacing() == (0.65, 0.65)
     assert isinstance(reg_image.mask, itk.Image) is True
     assert reg_image.mask.GetSpacing() == (0.65, 0.65)
+
+
+@pytest.mark.usefixtures("im_mch_np_uint8")
+def test_reg_image_loader_np_8bit_force_rgb(im_mch_np_uint8):
+    reg_image = reg_image_loader(
+        im_mch_np_uint8, 0.65, preprocessing={"set_rgb": True}
+    )
+    reg_image.read_reg_image()
+    assert reg_image.image.GetSpacing() == (0.65, 0.65)
+    assert reg_image.image.GetNumberOfComponentsPerPixel() == 1
+    assert reg_image.is_rgb is True
+    assert reg_image.is_rgb_interleaved is False
+
+
+@pytest.mark.usefixtures("im_mch_np_uint8")
+def test_reg_image_loader_np_8bit_force_rgb_off(im_mch_np_uint8):
+    reg_image = reg_image_loader(
+        im_mch_np_uint8, 0.65, preprocessing={"set_rgb": False}
+    )
+    reg_image.read_reg_image()
+    assert reg_image.image.GetSpacing() == (0.65, 0.65)
+    assert reg_image.image.GetNumberOfComponentsPerPixel() == 1
+    assert reg_image.is_rgb is False
+    assert reg_image.is_rgb_interleaved is False
