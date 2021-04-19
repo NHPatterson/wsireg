@@ -5,6 +5,7 @@ from wsireg.reg_images import RegImage
 from wsireg.utils.im_utils import (
     std_prepro,
     guess_rgb,
+    read_array,
 )
 
 
@@ -53,24 +54,13 @@ class NumpyRegImage(RegImage):
         if len(im_dims) == 2:
             im_dims = np.concatenate([[1], im_dims])
         im_dtype = self.image.dtype
-
         return im_dims, im_dtype
 
     def read_reg_image(self):
 
-        if self.is_rgb == True:  # noqa: E712
-            self.image = np.dot(
-                self.image[..., :3], [0.299, 0.587, 0.114]
-            ).astype(np.uint8)
-
-        if self.preprocessing.get("ch_indices") is not None:
-            chs = np.asarray(self.preprocessing.get('ch_indices'))
-            if self.is_rgb == False:  # noqa: E712
-                self.image = self.image[chs, :, :]
-
-        self.image = np.squeeze(self.image)
-
-        image = sitk.GetImageFromArray(self.image)
+        image = read_array(
+            self.image, preprocessing=self.preprocessing, force_rgb=self.is_rgb
+        )
 
         if (
             self.preprocessing is not None
@@ -124,4 +114,4 @@ class NumpyRegImage(RegImage):
         else:
             image = self.image
 
-        return image
+        return np.asarray(image)
