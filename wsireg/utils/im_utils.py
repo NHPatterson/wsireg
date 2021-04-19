@@ -1140,11 +1140,22 @@ def get_final_yx_from_tform(tform_reg_im, final_transform):
             final_transform
         )
     else:
-        y_size, x_size = (
-            (tform_reg_im.im_dims[0], tform_reg_im.im_dims[1])
-            if tform_reg_im.is_rgb
-            else (tform_reg_im.im_dims[1], tform_reg_im.im_dims[2])
-        )
+        if tform_reg_im.is_rgb is True:
+            if (
+                tform_reg_im.is_rgb_interleaved is None
+                or tform_reg_im.is_rgb_interleaved is True
+            ):
+                y_size, x_size = (
+                    tform_reg_im.im_dims[0],
+                    tform_reg_im.im_dims[1],
+                )
+            elif tform_reg_im.is_rgb_interleaved is False:
+                y_size, x_size = (
+                    tform_reg_im.im_dims[1],
+                    tform_reg_im.im_dims[2],
+                )
+        else:
+            y_size, x_size = (tform_reg_im.im_dims[1], tform_reg_im.im_dims[2])
         y_spacing, x_spacing = None, None
     return y_size, x_size, y_spacing, x_spacing
 
@@ -1245,11 +1256,8 @@ def transform_to_ome_tiff(
     while y_size / tile_size <= 1 or x_size / tile_size <= 1:
         tile_size = tile_size // 2
 
-    n_ch = (
-        tform_reg_im.im_dims[2]
-        if tform_reg_im.is_rgb
-        else tform_reg_im.im_dims[0]
-    )
+    n_ch = tform_reg_im.n_ch
+
     pyr_levels, pyr_shapes = get_pyramid_info(y_size, x_size, n_ch, tile_size)
     n_pyr_levels = len(pyr_levels)
     output_file_name = str(Path(output_dir) / image_name)
