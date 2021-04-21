@@ -136,7 +136,7 @@ class NumpyRegImage(RegImage):
             )
             channel_idx = 0
         if self.n_ch > 1:
-            if self.is_rgb and self.is_rgb_interleaved is True:
+            if self.is_rgb and self.is_rgb_interleaved:
                 image = self.image[:, :, channel_idx]
             else:
                 image = self.image[channel_idx, :, :]
