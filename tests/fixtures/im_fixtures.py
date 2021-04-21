@@ -1,5 +1,7 @@
 import pytest
 import numpy as np
+import dask.array as da
+import zarr
 from tifffile import imwrite
 
 
@@ -23,6 +25,46 @@ def im_mch_np():
 @pytest.fixture
 def im_rgb_np():
     return np.random.randint(0, 255, (2048, 2048, 3), dtype=np.uint8)
+
+
+@pytest.fixture
+def dask_im_gry_np():
+    return da.from_array(
+        np.random.randint(0, 255, (2048, 2048), dtype=np.uint16)
+    )
+
+
+@pytest.fixture
+def dask_im_mch_np():
+    return da.from_array(
+        np.random.randint(0, 255, (3, 2048, 2048), dtype=np.uint16)
+    )
+
+
+@pytest.fixture
+def dask_im_rgb_np():
+    return da.from_array(
+        np.random.randint(0, 255, (2048, 2048, 3), dtype=np.uint8)
+    )
+
+
+@pytest.fixture
+def zarr_im_gry_np():
+    return zarr.array(np.random.randint(0, 255, (2048, 2048), dtype=np.uint16))
+
+
+@pytest.fixture
+def zarr_im_mch_np():
+    return zarr.array(
+        np.random.randint(0, 255, (3, 2048, 2048), dtype=np.uint16)
+    )
+
+
+@pytest.fixture
+def zarr_im_rgb_np():
+    return zarr.array(
+        np.random.randint(0, 255, (2048, 2048, 3), dtype=np.uint8)
+    )
 
 
 @pytest.fixture
