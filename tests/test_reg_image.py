@@ -2,6 +2,7 @@ import pytest
 from wsireg.reg_images.loader import reg_image_loader
 import SimpleITK as sitk
 import itk
+import numpy as np
 
 
 @pytest.mark.usefixtures("disk_im_mch")
@@ -272,3 +273,75 @@ def test_reg_image_loader_to_itk(im_gry_np, mask_np):
     assert reg_image.image.GetSpacing() == (0.65, 0.65)
     assert isinstance(reg_image.mask, itk.Image) is True
     assert reg_image.mask.GetSpacing() == (0.65, 0.65)
+
+
+@pytest.mark.usefixtures("dask_im_rgb_np")
+def test_reg_image_loader_dask_rgb(dask_im_rgb_np):
+    reg_image = reg_image_loader(dask_im_rgb_np, 0.65)
+    reg_image.read_reg_image()
+    assert len(reg_image.im_dims) == 3
+    assert reg_image.im_dims[-1] == 3
+    assert reg_image.is_rgb
+    assert reg_image.n_ch == 3
+    assert reg_image.image.GetSpacing() == (0.65, 0.65)
+    assert reg_image.image.GetNumberOfComponentsPerPixel() == 1
+
+
+@pytest.mark.usefixtures("dask_im_gry_np")
+def test_reg_image_loader_dask_gry(dask_im_gry_np):
+    reg_image = reg_image_loader(dask_im_gry_np, 0.65)
+    reg_image.read_reg_image()
+    assert len(reg_image.im_dims) == 3
+    assert reg_image.im_dims[0] == 1
+    assert reg_image.is_rgb is False
+    assert reg_image.n_ch == 1
+    assert reg_image.image.GetSpacing() == (0.65, 0.65)
+    assert reg_image.image.GetNumberOfComponentsPerPixel() == 1
+
+
+@pytest.mark.usefixtures("dask_im_mch_np")
+def test_reg_image_loader_dask_mch(dask_im_mch_np):
+    reg_image = reg_image_loader(dask_im_mch_np, 0.65)
+    reg_image.read_reg_image()
+    assert len(reg_image.im_dims) == 3
+    assert reg_image.im_dims[0] == 3
+    assert reg_image.is_rgb is False
+    assert reg_image.n_ch == 3
+    assert reg_image.image.GetSpacing() == (0.65, 0.65)
+    assert reg_image.image.GetNumberOfComponentsPerPixel() == 1
+
+
+@pytest.mark.usefixtures("zarr_im_rgb_np")
+def test_reg_image_loader_zarr_rgb(zarr_im_rgb_np):
+    reg_image = reg_image_loader(zarr_im_rgb_np, 0.65)
+    reg_image.read_reg_image()
+    assert len(reg_image.im_dims) == 3
+    assert reg_image.im_dims[-1] == 3
+    assert reg_image.is_rgb
+    assert reg_image.n_ch == 3
+    assert reg_image.image.GetSpacing() == (0.65, 0.65)
+    assert reg_image.image.GetNumberOfComponentsPerPixel() == 1
+
+
+@pytest.mark.usefixtures("zarr_im_gry_np")
+def test_reg_image_loader_zarr_gry(zarr_im_gry_np):
+    reg_image = reg_image_loader(zarr_im_gry_np, 0.65)
+    reg_image.read_reg_image()
+    assert len(reg_image.im_dims) == 3
+    assert reg_image.im_dims[0] == 1
+    assert reg_image.is_rgb is False
+    assert reg_image.n_ch == 1
+    assert reg_image.image.GetSpacing() == (0.65, 0.65)
+    assert reg_image.image.GetNumberOfComponentsPerPixel() == 1
+
+
+@pytest.mark.usefixtures("zarr_im_mch_np")
+def test_reg_image_loader_zarr_mch(zarr_im_mch_np):
+    reg_image = reg_image_loader(zarr_im_mch_np, 0.65)
+    reg_image.read_reg_image()
+    assert len(reg_image.im_dims) == 3
+    assert reg_image.im_dims[0] == 3
+    assert reg_image.is_rgb is False
+    assert reg_image.n_ch == 3
+    assert reg_image.image.GetSpacing() == (0.65, 0.65)
+    assert reg_image.image.GetNumberOfComponentsPerPixel() == 1
