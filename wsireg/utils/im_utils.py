@@ -23,6 +23,8 @@ from wsireg.utils.tform_utils import (
 
 TIFFFILE_EXTS = [".scn", ".tif", ".tiff", ".ndpi"]
 
+ARRAYLIKE_CLASSES = (np.ndarray, da.core.Array, zarr.Array)
+
 SITK_TO_NP_DTYPE = {
     0: np.int8,
     1: np.uint8,
@@ -84,6 +86,50 @@ def zarr_get_base_pyr_layer(zarr_store):
     return zarr_im
 
 
+def ensure_dask_array(image):
+    if isinstance(image, da.core.Array):
+        return image
+
+    if isinstance(image, zarr.Array):
+        return da.from_zarr(image)
+
+    # handles np.ndarray _and_ other array like objects.
+    return da.from_array(image)
+
+
+def read_preprocess_array(img, preprocessing, force_rgb=None):
+    """Read np.array, zarr.Array, or dask.array image into memory
+    with preprocessing for registration."""
+    is_interleaved = guess_rgb(img.shape)
+    is_rgb = is_interleaved if not force_rgb else force_rgb
+
+    if is_rgb:
+        if preprocessing is not None:
+            image = np.asarray(grayscale(img, is_interleaved=is_interleaved))
+            image = sitk.GetImageFromArray(image)
+        else:
+            image = np.asarray(img)
+            if not is_interleaved:
+                image = np.rollaxis(image, 0, 3)
+            image = sitk.GetImageFromArray(image, isVector=True)
+
+    elif len(img.shape) == 2:
+        image = sitk.GetImageFromArray(np.asarray(img))
+
+    else:
+        if preprocessing is not None:
+            if (
+                preprocessing.get("ch_indices") is not None
+                and len(img.shape) > 2
+            ):
+                chs = tuple(preprocessing.get('ch_indices'))
+                img = img[chs, :, :]
+
+        image = sitk.GetImageFromArray(np.squeeze(np.asarray(img)))
+
+    return image
+
+
 def tifffile_zarr_backend(
     image_filepath, largest_series, preprocessing, force_rgb=None
 ):
@@ -111,40 +157,9 @@ def tifffile_zarr_backend(
     zarr_series = imread(image_filepath, aszarr=True, series=largest_series)
     zarr_store = zarr.open(zarr_series)
     zarr_im = zarr_get_base_pyr_layer(zarr_store)
-
-    if force_rgb is None:
-        is_rgb = guess_rgb(zarr_im.shape)
-        is_interleaved = True if is_rgb else False
-    elif force_rgb is True and guess_rgb(zarr_im.shape) is False:
-        is_rgb = True
-        is_interleaved = False
-
-    if is_rgb:
-        if preprocessing is not None:
-            image = grayscale(zarr_im, is_interleaved=is_interleaved)
-            image = sitk.GetImageFromArray(image)
-        else:
-            image = zarr_im[:]
-            if is_interleaved is False:
-                image = np.rollaxis(image, 0, 3)
-            image = sitk.GetImageFromArray(image, isVector=True)
-
-    elif len(zarr_im.shape) == 2:
-        image = sitk.GetImageFromArray(zarr_im[:])
-
-    else:
-        if preprocessing is not None:
-            if (
-                preprocessing.get("ch_indices") is not None
-                and len(zarr_im.shape) > 2
-            ):
-                chs = tuple(preprocessing.get('ch_indices'))
-                zarr_im = np.squeeze(zarr_im[:])
-                zarr_im = zarr_im[chs, :, :]
-
-        image = sitk.GetImageFromArray(np.squeeze(zarr_im[:]))
-
-    return image
+    return read_preprocess_array(
+        zarr_im, preprocessing=preprocessing, force_rgb=force_rgb
+    )
 
 
 def tifffile_dask_backend(
@@ -173,41 +188,10 @@ def tifffile_dask_backend(
     print("using dask backend")
     zarr_series = imread(image_filepath, aszarr=True, series=largest_series)
     zarr_store = zarr.open(zarr_series)
-
     dask_im = da.squeeze(da.from_zarr(zarr_get_base_pyr_layer(zarr_store)))
-    if force_rgb is None:
-        is_rgb = guess_rgb(dask_im.shape)
-        is_interleaved = True if is_rgb else False
-    elif force_rgb is True and guess_rgb(dask_im.shape) is False:
-        is_rgb = True
-        is_interleaved = False
-
-    if is_rgb:
-        if preprocessing is not None:
-            image = grayscale(dask_im, is_interleaved=is_interleaved).compute()
-
-            image = sitk.GetImageFromArray(image)
-        else:
-            image = dask_im.compute()
-            if is_interleaved is False:
-                image = np.rollaxis(image, 0, 3)
-            image = sitk.GetImageFromArray(image, isVector=True)
-
-    elif len(dask_im.shape) == 2:
-        image = sitk.GetImageFromArray(dask_im.compute())
-
-    else:
-        if preprocessing is not None:
-            if (
-                preprocessing.get("ch_indices") is not None
-                and len(dask_im.shape) > 2
-            ):
-                chs = np.asarray(preprocessing.get('ch_indices'))
-                dask_im = dask_im[chs, :, :]
-
-        image = sitk.GetImageFromArray(np.squeeze(dask_im.compute()))
-
-    return image
+    return read_preprocess_array(
+        dask_im, preprocessing=preprocessing, force_rgb=force_rgb
+    )
 
 
 def sitk_backend(image_filepath, preprocessing):

@@ -1,5 +1,4 @@
 from pathlib import Path
-import numpy as np
 from tifffile import TiffFile
 from wsireg.reg_images import (
     CziRegImage,
@@ -8,11 +7,11 @@ from wsireg.reg_images import (
     NumpyRegImage,
     OmeTiffRegImage,
 )
-from wsireg.utils.im_utils import TIFFFILE_EXTS
+from wsireg.utils.im_utils import TIFFFILE_EXTS, ARRAYLIKE_CLASSES
 
 
 def reg_image_loader(
-    image_fp,
+    image,
     image_res,
     mask=None,
     pre_reg_transforms=None,
@@ -20,9 +19,9 @@ def reg_image_loader(
     channel_names=None,
     channel_colors=None,
 ):
-    if isinstance(image_fp, np.ndarray):
+    if isinstance(image, ARRAYLIKE_CLASSES):
         return NumpyRegImage(
-            image_fp,
+            image,
             image_res,
             mask,
             pre_reg_transforms,
@@ -31,11 +30,11 @@ def reg_image_loader(
             channel_colors,
         )
 
-    image_ext = Path(image_fp).suffix
+    image_ext = Path(image).suffix
     if image_ext in TIFFFILE_EXTS:
-        if TiffFile(image_fp).is_ome:
+        if TiffFile(image).is_ome:
             reg_image = OmeTiffRegImage(
-                image_fp,
+                image,
                 image_res,
                 mask,
                 pre_reg_transforms,
@@ -45,7 +44,7 @@ def reg_image_loader(
             )
         else:
             reg_image = TiffFileRegImage(
-                image_fp,
+                image,
                 image_res,
                 mask,
                 pre_reg_transforms,
@@ -55,7 +54,7 @@ def reg_image_loader(
             )
     elif image_ext == ".czi":
         reg_image = CziRegImage(
-            image_fp,
+            image,
             image_res,
             mask,
             pre_reg_transforms,
@@ -65,7 +64,7 @@ def reg_image_loader(
         )
     else:
         reg_image = SitkRegImage(
-            image_fp,
+            image,
             image_res,
             mask,
             pre_reg_transforms,
