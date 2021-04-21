@@ -1,11 +1,13 @@
 import warnings
 import SimpleITK as sitk
 import numpy as np
+import dask.array as da
 from wsireg.reg_images import RegImage
 from wsireg.utils.im_utils import (
     std_prepro,
     guess_rgb,
-    read_array,
+    read_preprocess_array,
+    ensure_dask_array,
 )
 
 
@@ -22,8 +24,11 @@ class NumpyRegImage(RegImage):
     ):
         self.image_filepath = "numpy"
         self.image_res = image_res
-        self.image = image
         self.reader = "numpy"
+
+        self.image = ensure_dask_array(image)
+
+        self.image = da.squeeze(self.image)
 
         (
             self.im_dims,
@@ -50,7 +55,7 @@ class NumpyRegImage(RegImage):
         self.original_size_transform = None
 
     def _get_image_info(self):
-        im_dims = np.squeeze(self.image.shape)
+        im_dims = self.image.shape
         if len(im_dims) == 2:
             im_dims = np.concatenate([[1], im_dims])
         im_dtype = self.image.dtype
@@ -58,7 +63,7 @@ class NumpyRegImage(RegImage):
 
     def read_reg_image(self):
 
-        image = read_array(
+        image = read_preprocess_array(
             self.image, preprocessing=self.preprocessing, force_rgb=self.is_rgb
         )
 
