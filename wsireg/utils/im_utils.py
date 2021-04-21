@@ -23,6 +23,8 @@ from wsireg.utils.tform_utils import (
 
 TIFFFILE_EXTS = [".scn", ".tif", ".tiff", ".ndpi"]
 
+ARRAYLIKE_CLASSES = (np.ndarray, da.core.Array, zarr.Array)
+
 SITK_TO_NP_DTYPE = {
     0: np.int8,
     1: np.uint8,
@@ -84,8 +86,20 @@ def zarr_get_base_pyr_layer(zarr_store):
     return zarr_im
 
 
-def read_array(img, preprocessing, force_rgb=None):
-    """Read np.array, zarr.Array, or dask.array image into memory."""
+def ensure_dask_array(image):
+    if isinstance(image, da.core.Array):
+        return image
+
+    if isinstance(image, zarr.Array):
+        return da.from_zarr(image)
+
+    # handles np.ndarray _and_ other array like objects.
+    return da.from_array(image)
+
+
+def read_preprocess_array(img, preprocessing, force_rgb=None):
+    """Read np.array, zarr.Array, or dask.array image into memory
+    with preprocessing for registration."""
     is_interleaved = guess_rgb(img.shape)
     is_rgb = is_interleaved if not force_rgb else force_rgb
 
@@ -109,7 +123,6 @@ def read_array(img, preprocessing, force_rgb=None):
                 and len(img.shape) > 2
             ):
                 chs = tuple(preprocessing.get('ch_indices'))
-                img = np.squeeze(np.asarray(img))
                 img = img[chs, :, :]
 
         image = sitk.GetImageFromArray(np.squeeze(np.asarray(img)))
@@ -144,7 +157,7 @@ def tifffile_zarr_backend(
     zarr_series = imread(image_filepath, aszarr=True, series=largest_series)
     zarr_store = zarr.open(zarr_series)
     zarr_im = zarr_get_base_pyr_layer(zarr_store)
-    return read_array(
+    return read_preprocess_array(
         zarr_im, preprocessing=preprocessing, force_rgb=force_rgb
     )
 
@@ -176,7 +189,7 @@ def tifffile_dask_backend(
     zarr_series = imread(image_filepath, aszarr=True, series=largest_series)
     zarr_store = zarr.open(zarr_series)
     dask_im = da.squeeze(da.from_zarr(zarr_get_base_pyr_layer(zarr_store)))
-    return read_array(
+    return read_preprocess_array(
         dask_im, preprocessing=preprocessing, force_rgb=force_rgb
     )
 
