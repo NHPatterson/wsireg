@@ -37,6 +37,7 @@ class TiffFileRegImage(RegImage):
 
         self.im_dims = tuple(self.im_dims)
         self.is_rgb = guess_rgb(self.im_dims)
+        self.is_rgb_interleaved = guess_rgb(self.im_dims)
 
         self.n_ch = self.im_dims[2] if self.is_rgb else self.im_dims[0]
         self.mask = self.read_mask(mask)
@@ -46,6 +47,15 @@ class TiffFileRegImage(RegImage):
         else:
             self.preprocessing = std_prepro()
             self.preprocessing.update(preprocessing)
+
+        if self.preprocessing.get("set_rgb") is True:
+            if self.is_rgb is False:
+                self.is_rgb = True
+                self.is_rgb_interleaved = False
+        elif self.preprocessing.get("set_rgb") is False:
+            if self.is_rgb is True:
+                self.is_rgb = False
+                self.is_rgb_interleaved = True
 
         self.pre_reg_transforms = pre_reg_transforms
 
@@ -67,13 +77,24 @@ class TiffFileRegImage(RegImage):
     def read_reg_image(self):
         largest_series = tf_get_largest_series(self.image_filepath)
 
+        if self.is_rgb is True and self.is_rgb_interleaved is False:
+            force_rgb = True
+        else:
+            force_rgb = None
+
         try:
             image = tifffile_dask_backend(
-                self.image_filepath, largest_series, self.preprocessing
+                self.image_filepath,
+                largest_series,
+                self.preprocessing,
+                force_rgb=force_rgb,
             )
         except ValueError:
             image = tifffile_zarr_backend(
-                self.image_filepath, largest_series, self.preprocessing
+                self.image_filepath,
+                largest_series,
+                self.preprocessing,
+                force_rgb=force_rgb,
             )
 
         if (

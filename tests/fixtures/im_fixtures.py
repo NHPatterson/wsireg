@@ -21,6 +21,11 @@ def im_mch_np():
 
 
 @pytest.fixture
+def im_mch_np_uint8():
+    return np.random.randint(0, 255, (3, 2048, 2048), dtype=np.uint8)
+
+
+@pytest.fixture
 def im_rgb_np():
     return np.random.randint(0, 255, (2048, 2048, 3), dtype=np.uint8)
 

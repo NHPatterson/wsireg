@@ -307,3 +307,23 @@ def test_wsireg_run_reg_with_crop_merge(data_out_dir, disk_im_gry):
 
     assert registered_image_nocrop.im_dims[1:] == (2048, 2048)
     assert registered_image_crop.im_dims[1:] == (512, 512)
+
+
+@pytest.mark.usefixtures("im_mch_np_uint8")
+def test_wsireg_run_reg_with_crop_merge(data_out_dir, im_mch_np_uint8):
+    wsi_reg = WsiReg2D("test_proj10", str(data_out_dir))
+
+    wsi_reg.add_modality(
+        "mod1", im_mch_np_uint8, 0.65, prepro_dict={"set_rgb": True}
+    )
+
+    wsi_reg.add_modality("mod2", im_mch_np_uint8, 0.65)
+
+    wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])
+    wsi_reg.register_images()
+
+    im_fps = wsi_reg.transform_images(transform_non_reg=False)
+
+    registered_image = reg_image_loader(im_fps[0], 0.65)
+
+    assert registered_image.im_dims == (2048, 2048, 3)
