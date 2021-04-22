@@ -249,5 +249,3 @@ def register_2d_images_itkelx(
         pixel_id = NP_TO_SITK_DTYPE[source_image.im_dtype]
         image = sitk.Cast(image, pixel_id)
         return tform_list, image
-
-
