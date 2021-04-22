@@ -1,4 +1,5 @@
 from pathlib import Path
+from enum import Enum, EnumMeta
 import multiprocessing
 import warnings
 from concurrent.futures import ThreadPoolExecutor
@@ -1631,3 +1632,31 @@ def std_prepro():
         'inv_int': sitk_inv_int,
     }
     return STD_PREPRO
+
+
+class ImageTypeMeta(EnumMeta):
+    def __getitem__(self, name):
+        try:
+            return super().__getitem__(name)
+        except (TypeError, KeyError):
+            warnings.warn("image type not recongizing, using FL type")
+            return self["FL"]
+
+
+class ImageTypeStdPreprocessing(Enum, metaclass=ImageTypeMeta):
+    FL = {
+        'as_uint8': True,
+        'max_int_proj': sitk_max_int_proj,
+    }
+    fluorescence = {
+        'as_uint8': True,
+        'max_int_proj': sitk_max_int_proj,
+    }
+
+    BF = {
+        'inv_int': sitk_inv_int,
+    }
+
+    brightfield = {
+        'inv_int': sitk_inv_int,
+    }
