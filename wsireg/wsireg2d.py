@@ -1,4 +1,5 @@
 import time
+from typing import List, Union
 import yaml
 from pathlib import Path
 from copy import deepcopy
@@ -16,6 +17,7 @@ from wsireg.reg_shapes import RegShapes
 from wsireg.reg_transform import RegTransform
 from wsireg.utils.config_utils import parse_check_reg_config
 from wsireg.utils.tform_conversion import get_elastix_transforms
+from wsireg.parameter_maps.reg_params import RegParams
 
 
 class WsiReg2D(object):
@@ -71,8 +73,8 @@ class WsiReg2D(object):
         self,
         project_name: str,
         output_dir: str,
-        cache_images=True,
-        config=None,
+        cache_images: bool = True,
+        config: str = None,
     ):
 
         if project_name is None:
@@ -145,13 +147,13 @@ class WsiReg2D(object):
 
     def add_modality(
         self,
-        modality_name,
+        modality_name: str,
         image_fp,
-        image_res=1,
-        channel_names=None,
-        channel_colors=None,
-        prepro_dict={},
-        mask=None,
+        image_res: float = 1,
+        channel_names: list = [],
+        channel_colors: list = [],
+        prepro_dict: dict = {},
+        mask: str = None,
     ):
         """
         Add an image modality (node) to the registration graph
@@ -191,7 +193,11 @@ class WsiReg2D(object):
         self.modality_names = modality_name
 
     def add_shape_set(
-        self, attachment_modality, shape_set_name, shape_files, image_res
+        self,
+        attachment_modality: str,
+        shape_set_name: str,
+        shape_files: str,
+        image_res: float,
     ):
         """
         Add a shape set to the graph
@@ -206,7 +212,7 @@ class WsiReg2D(object):
             "shape_name" = class of the shape("tumor","normal",etc.)
         image_res : float
             spatial resolution of shape data's associated image in units per px (i.e. 0.9 um / px)
-        attachment_modality :
+        attachment_modality : str
             image modality to which the shapes are attached
         """
         if shape_set_name in self._shape_set_names:
@@ -228,12 +234,12 @@ class WsiReg2D(object):
 
     def add_attachment_images(
         self,
-        attachment_modality,
-        modality_name,
-        image_fp,
-        image_res=1,
-        channel_names=None,
-        channel_colors=None,
+        attachment_modality: str,
+        modality_name: str,
+        image_fp: str,
+        image_res: float = 1,
+        channel_names: list = None,
+        channel_colors: list = None,
     ):
         """
         Images which are unregistered between modalities, but are transformed following the path of one of the graph's
@@ -266,7 +272,7 @@ class WsiReg2D(object):
         self.attachment_images[modality_name] = attachment_modality
 
     def add_attachment_shapes(
-        self, attachment_modality, shape_set_name, shape_files
+        self, attachment_modality: str, shape_set_name: str, shape_files: str
     ):
         if attachment_modality not in self.modality_names:
             raise ValueError(
@@ -310,10 +316,10 @@ class WsiReg2D(object):
 
     def add_reg_path(
         self,
-        src_modality_name,
-        tgt_modality_name,
-        thru_modality=None,
-        reg_params=[],
+        src_modality_name: str,
+        tgt_modality_name: str,
+        thru_modality: str = None,
+        reg_params: List[Union[str, RegParams]] = ["rigid"],
         override_prepro={"source": None, "target": None},
     ):
         """
@@ -338,12 +344,19 @@ class WsiReg2D(object):
         if tgt_modality_name not in self.modality_names:
             raise ValueError("target modality not found!")
 
+        reg_params_in = []
+        for reg_param in reg_params:
+            if isinstance(reg_param, RegParams):
+                reg_params_in.append(reg_param.value)
+            else:
+                reg_params_in.append(RegParams[reg_param].value)
+
         if thru_modality is None:
             self.reg_paths = (
                 src_modality_name,
                 tgt_modality_name,
                 tgt_modality_name,
-                reg_params,
+                reg_params_in,
                 override_prepro,
             )
         else:
@@ -351,7 +364,7 @@ class WsiReg2D(object):
                 src_modality_name,
                 tgt_modality_name,
                 thru_modality,
-                reg_params,
+                reg_params_in,
                 override_prepro,
             )
 
@@ -389,7 +402,9 @@ class WsiReg2D(object):
 
         self._transform_paths = transform_path_dict
 
-    def find_path(self, start_modality, end_modality, path=None):
+    def find_path(
+        self, start_modality: str, end_modality: str, path: str = None
+    ):
         """
         Find a path from start_modality to end_modality in the graph
         """
@@ -532,7 +547,7 @@ class WsiReg2D(object):
 
         return non_reg_modalities
 
-    def save_config(self, registered=False):
+    def save_config(self, registered: bool = False):
         ts = time.strftime('%Y%m%d-%H%M%S')
         status = "registered" if registered is True else "setup"
 
@@ -589,7 +604,7 @@ class WsiReg2D(object):
         with open(str(output_path), "w") as f:
             yaml.dump(config, f, sort_keys=False)
 
-    def register_images(self, parallel=False):
+    def register_images(self, parallel: bool = False):
         """
         Start image registration process for all modalities
 
@@ -732,7 +747,7 @@ class WsiReg2D(object):
     def transformations(self, reg_graph_edges):
         self._transformations = self._collate_transformations()
 
-    def add_merge_modalities(self, merge_name, modalities):
+    def add_merge_modalities(self, merge_name: str, modalities: List[str]):
         self.merge_modalities.update({merge_name: modalities})
 
     def _generate_reg_transforms(self):
@@ -874,9 +889,9 @@ class WsiReg2D(object):
 
     def transform_images(
         self,
-        file_writer="ome.tiff",
-        transform_non_reg=True,
-        to_original_size=True,
+        file_writer: str = "ome.tiff",
+        transform_non_reg: bool = True,
+        to_original_size: bool = True,
     ):
         """
         Transform and write images to disk after registration. Also transforms all attachment images
@@ -1092,7 +1107,7 @@ class WsiReg2D(object):
             with open(output_path, 'w') as fp:
                 json.dump(self.transformations[key], fp, indent=4)
 
-    def add_data_from_config(self, config_filepath):
+    def add_data_from_config(self, config_filepath: str):
 
         reg_config = parse_check_reg_config(config_filepath)
 
@@ -1165,7 +1180,7 @@ class WsiReg2D(object):
             for mn, mm in reg_config["merge_modalities"]:
                 self.add_merge_modalities(mn, mm)
 
-    def reset_registered_modality(self, modalities):
+    def reset_registered_modality(self, modalities: Union[list, str]):
         edge_keys = [
             r.get("modalities").get("source") for r in self.reg_graph_edges
         ]

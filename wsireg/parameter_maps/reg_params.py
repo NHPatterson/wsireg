@@ -1,3 +1,6 @@
+from enum import Enum, EnumMeta
+from pathlib import Path
+
 DEFAULT_REG_PARAM_MAPS = {
     'rigid': {
         "AutomaticScalesEstimation": ['true'],
@@ -278,3 +281,64 @@ DEFAULT_REG_PARAM_MAPS["rigid_test"] = test_rig
 DEFAULT_REG_PARAM_MAPS["affine_test"] = test_aff
 DEFAULT_REG_PARAM_MAPS["similarity_test"] = test_sim
 DEFAULT_REG_PARAM_MAPS["nl_test"] = test_nl
+
+
+def elx_lineparser(line):
+    if line[0] == "(":
+        params = (
+            line.replace("(", "")
+            .replace(")", "")
+            .replace("\n", "")
+            .replace('"', "")
+        )
+        params = params.split(" ", 1)
+        k, v = params[0], params[1]
+        if " " in v:
+            v = v.split(" ")
+            v = list(filter(lambda a: a != "", v))
+        if isinstance(v, list) is False:
+            v = [v]
+        return k, v
+    else:
+        return None, None
+
+
+def read_elastix_parameter_file(elx_fp):
+    with open(
+        elx_fp,
+        "r",
+    ) as f:
+        lines = f.readlines()
+    parameters = {}
+    for line in lines:
+        k, v = elx_lineparser(line)
+        if k is not None:
+            parameters.update({k: v})
+    return parameters
+
+
+class RegParamsMeta(EnumMeta):
+    def __getitem__(self, name):
+        try:
+            return super().__getitem__(name)
+        except (TypeError, KeyError):
+            if isinstance(name, str) and Path(name).exists():
+                return read_elastix_parameter_file(name)
+            else:
+                raise ValueError(
+                    "unrecognized registration parameter, please provide"
+                    "file path to elastix transform parameters or specify one of "
+                    f"{[i.name for i in self]}"
+                )
+
+
+class RegParams(Enum, metaclass=RegParamsMeta):
+    rigid = DEFAULT_REG_PARAM_MAPS["rigid"]
+    similarity = DEFAULT_REG_PARAM_MAPS["similarity"]
+    affine = DEFAULT_REG_PARAM_MAPS["affine"]
+    nl = DEFAULT_REG_PARAM_MAPS["nl"]
+    nonlinear = DEFAULT_REG_PARAM_MAPS["nl"]
+    bspline = DEFAULT_REG_PARAM_MAPS["nl"]
+    rigid_test = DEFAULT_REG_PARAM_MAPS["rigid_test"]
+    affine_test = DEFAULT_REG_PARAM_MAPS["affine_test"]
+    nl_test = DEFAULT_REG_PARAM_MAPS["nl_test"]
