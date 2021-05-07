@@ -780,7 +780,7 @@ def get_tifffile_info(image_filepath):
 
 
 def tf_zarr_read_single_ch(
-    image_filepath, channel_idx, is_rgb, is_rgb_interleaved=False
+    image_filepath, channel_idx, is_rgb, is_rgb_interleaved=True
 ):
     """
     Reads a single channel using zarr or dask in combination with tifffile
