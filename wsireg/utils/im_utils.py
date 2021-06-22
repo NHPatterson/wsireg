@@ -1430,48 +1430,48 @@ def transform_to_ome_tiff_merge(
                     (merge_image.image_res, merge_image.image_res)
                 )
 
-            if composite_transform[m_idx] is not None:
-                image = transform_plane(
-                    image, final_transform[m_idx], composite_transform[m_idx]
+                if composite_transform[m_idx] is not None:
+                    image = transform_plane(
+                        image, final_transform[m_idx], composite_transform[m_idx]
+                    )
+
+                print("saving")
+                if isinstance(image, sitk.Image):
+                    image = sitk.GetArrayFromImage(image)
+
+                options = dict(
+                    tile=(tile_size, tile_size),
+                    compression="jpeg" if merge_image.is_rgb else "deflate",
+                    photometric="rgb" if merge_image.is_rgb else "minisblack",
+                    metadata=None,
+                )
+                # write OME-XML to the ImageDescription tag of the first page
+                description = omexml if channel_idx == 0 else None
+                # write channel data
+                print(f" writing channel {channel_idx} - shape: {image.shape}")
+                tif.write(
+                    image,
+                    subifds=subifds,
+                    description=description,
+                    **options,
                 )
 
-            print("saving")
-            if isinstance(image, sitk.Image):
-                image = sitk.GetArrayFromImage(image)
+                if write_pyramid:
+                    for pyr_idx in range(1, n_pyr_levels):
+                        resize_shape = (
+                            pyr_levels[pyr_idx][0],
+                            pyr_levels[pyr_idx][1],
+                        )
+                        image = cv2.resize(
+                            image,
+                            resize_shape,
+                            cv2.INTER_LINEAR,
+                        )
+                        print(
+                            f"pyr {pyr_idx} : channel {channel_idx} shape: {image.shape}"
+                        )
 
-            options = dict(
-                tile=(tile_size, tile_size),
-                compression="jpeg" if merge_image.is_rgb else "deflate",
-                photometric="rgb" if merge_image.is_rgb else "minisblack",
-                metadata=None,
-            )
-            # write OME-XML to the ImageDescription tag of the first page
-            description = omexml if channel_idx == 0 else None
-            # write channel data
-            print(f" writing channel {channel_idx} - shape: {image.shape}")
-            tif.write(
-                image,
-                subifds=subifds,
-                description=description,
-                **options,
-            )
-
-            if write_pyramid:
-                for pyr_idx in range(1, n_pyr_levels):
-                    resize_shape = (
-                        pyr_levels[pyr_idx][0],
-                        pyr_levels[pyr_idx][1],
-                    )
-                    image = cv2.resize(
-                        image,
-                        resize_shape,
-                        cv2.INTER_LINEAR,
-                    )
-                    print(
-                        f"pyr {pyr_idx} : channel {channel_idx} shape: {image.shape}"
-                    )
-
-                    tif.write(image, **options, subfiletype=1)
+                        tif.write(image, **options, subfiletype=1)
 
         return f"{output_file_name}.ome.tiff"
 
