@@ -224,8 +224,6 @@ def test_ometiff_read_rgb():
     assert len(ri.im_dims) == 3
     assert ri.im_dtype == np.uint8
     assert ri.is_rgb is True
-    assert ri.is_rgb_interleaved is False
-
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_ometiff_read_rgb_default_preprocess():
@@ -245,8 +243,6 @@ def test_ometiff_read_mc():
     assert ri.im_dims[2] > 3
     assert ri.im_dtype == np.uint16
     assert ri.is_rgb is False
-    assert ri.is_rgb_interleaved is False
-
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_ometiff_read_mc_default_preprocess():
@@ -293,9 +289,9 @@ def test_czi_read_rgb_read_channels():
     ch1 = ri.read_single_channel(1)
     ch2 = ri.read_single_channel(2)
 
-    assert np.squeeze(ch0).shape == ri.im_dims[1:]
-    assert np.squeeze(ch1).shape == ri.im_dims[1:]
-    assert np.squeeze(ch2).shape == ri.im_dims[1:]
+    assert np.squeeze(ch0).shape == ri.im_dims[:2]
+    assert np.squeeze(ch1).shape == ri.im_dims[:2]
+    assert np.squeeze(ch2).shape == ri.im_dims[:2]
     assert np.ndim(ch0) == 2
     assert np.ndim(ch1) == 2
     assert np.ndim(ch2) == 2
