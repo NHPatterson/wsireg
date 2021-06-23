@@ -1432,7 +1432,9 @@ def transform_to_ome_tiff_merge(
 
                 if composite_transform[m_idx] is not None:
                     image = transform_plane(
-                        image, final_transform[m_idx], composite_transform[m_idx]
+                        image,
+                        final_transform[m_idx],
+                        composite_transform[m_idx],
                     )
 
                 print("saving")
@@ -1615,3 +1617,53 @@ def std_prepro():
         'inv_int': sitk_inv_int,
     }
     return STD_PREPRO
+
+
+def tifffile_to_arraylike(image_filepath):
+    largest_series_idx = tf_get_largest_series(image_filepath)
+    image = zarr.open(
+        imread(image_filepath, aszarr=True, series=largest_series_idx)
+    )
+    if isinstance(image, zarr.Group):
+        image = image[0]
+
+    return image
+
+
+def ome_tifffile_to_arraylike(image_filepath):
+    ome_metadata = xml2dict(TiffFile(image_filepath).ome_metadata)
+    im_dims, im_dtype = get_tifffile_info(image_filepath)
+
+    largest_series_idx = tf_get_largest_series(image_filepath)
+
+    series_metadata = ome_metadata.get("OME").get("Image")
+
+    if isinstance(series_metadata, list):
+        series_metadata = series_metadata[largest_series_idx]
+
+    if isinstance(series_metadata.get("Pixels").get("Channel"), list):
+        samples_per_pixel = (
+            series_metadata.get("Pixels")
+            .get("Channel")[0]
+            .get("SamplesPerPixel")
+        )
+    else:
+        samples_per_pixel = (
+            series_metadata.get("Pixels").get("Channel").get("SamplesPerPixel")
+        )
+
+    is_rgb = guess_rgb(im_dims)
+
+    image = zarr.open(
+        imread(image_filepath, aszarr=True, series=largest_series_idx)
+    )
+
+    if isinstance(image, zarr.Group):
+        image = image[0]
+
+    image = da.from_zarr(image)
+
+    if is_rgb is False and samples_per_pixel >= 3:
+        image = image.transpose(1, 2, 0)
+
+    return image
