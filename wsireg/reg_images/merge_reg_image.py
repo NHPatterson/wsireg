@@ -55,7 +55,7 @@ class MergeRegImage(RegImage):
 
             images.append(imdata)
 
-        if all([im.im_dtype for im in images]) is False:
+        if all([im.im_dtype == images[0].im_dtype for im in images]) is False:
             raise ValueError(
                 "MergeRegImage requires a list of images with matching data type"
             )
@@ -67,6 +67,11 @@ class MergeRegImage(RegImage):
 
         self.images = images
         self.image_fps = image_fp
+        self.im_dtype = self.images[0].im_dtype
+
+        # rgb merging not supported!
+        self.is_rgb = False
+
         self.n_ch = np.sum([i.n_ch for i in self.images])
         self.channel_names = [i.channel_names for i in self.images]
         self.original_size_transform = None
