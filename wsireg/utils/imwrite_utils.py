@@ -20,7 +20,6 @@ from wsireg.utils.tile_image_transform import (
     subres_zarr_to_tiles,
     tile_pad_output_size,
 )
-from wsireg.reg_images.merge_reg_image import MergeRegImage
 from wsireg.utils.tform_utils import (
     prepare_wsireg_transform_data,
 )
@@ -251,7 +250,6 @@ class OmeTiffWriter:
             compression=compression,
             by_tile=True,
         )
-
 
         # create per tile coordinate information for fixed
         # and moving
@@ -572,4 +570,3 @@ class MergeOmeTiffWriter(OmeTiffWriter):
                             tif.write(image, **options, subfiletype=1)
 
             return f"{output_file_name}.ome.tiff"
-

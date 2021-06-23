@@ -1,6 +1,5 @@
 import SimpleITK as sitk
 import numpy as np
-from tifffile import TiffWriter
 import zarr
 import dask.array as da
 from wsireg.utils.tform_utils import (
@@ -10,13 +9,6 @@ from wsireg.utils.shape_utils import (
     prepare_pt_transformation_data,
     itk_transform_pts,
 )
-from wsireg.utils.im_utils import (
-    get_final_yx_from_tform,
-    get_pyramid_info,
-    format_channel_names,
-    prepare_ome_xml_str,
-)
-from pathlib import Path
 
 
 def tile_pad_output_size(y_size, x_size, tile_size=512):
@@ -265,7 +257,9 @@ def subres_zarr_to_tiles(z, tile_size, is_rgb):
                 yield z[y : y + tile_size, x : x + tile_size].compute()
 
 
-def compute_sub_res(tform_reg_im, resampled_zarray, ds_factor, tile_size, is_rgb):
+def compute_sub_res(
+    tform_reg_im, resampled_zarray, ds_factor, tile_size, is_rgb
+):
     if is_rgb:
         resampling_axis = {0: ds_factor, 1: ds_factor, 2: 1}
         tiling = (tile_size, tile_size, 3)
@@ -299,6 +293,7 @@ def compute_sub_res(tform_reg_im, resampled_zarray, ds_factor, tile_size, is_rgb
 
     resampled_zarray_subres = da.pad(resampled_zarray_subres, padding)
     return resampled_zarray_subres, orig_shape
+
 
 #
 # def tiled_transform_to_ome_tiff(
