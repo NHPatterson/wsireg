@@ -3,11 +3,14 @@ from tifffile import TiffFile
 from wsireg.reg_images import (
     CziRegImage,
     SitkRegImage,
-    TiffFileRegImage,
     NumpyRegImage,
-    OmeTiffRegImage,
 )
-from wsireg.utils.im_utils import TIFFFILE_EXTS, ARRAYLIKE_CLASSES
+from wsireg.utils.im_utils import (
+    TIFFFILE_EXTS,
+    ARRAYLIKE_CLASSES,
+    tifffile_to_arraylike,
+    ome_tifffile_to_arraylike,
+)
 
 
 def reg_image_loader(
@@ -33,7 +36,8 @@ def reg_image_loader(
     image_ext = Path(image).suffix
     if image_ext in TIFFFILE_EXTS:
         if TiffFile(image).is_ome:
-            reg_image = OmeTiffRegImage(
+            image = ome_tifffile_to_arraylike(image)
+            reg_image = NumpyRegImage(
                 image,
                 image_res,
                 mask,
@@ -43,7 +47,8 @@ def reg_image_loader(
                 channel_colors,
             )
         else:
-            reg_image = TiffFileRegImage(
+            image = tifffile_to_arraylike(image)
+            reg_image = NumpyRegImage(
                 image,
                 image_res,
                 mask,
