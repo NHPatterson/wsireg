@@ -5,6 +5,7 @@ import numpy as np
 import SimpleITK as sitk
 import cv2
 import geojson
+from wsireg.reg_transform import RegTransform
 from wsireg.utils.tform_utils import (
     wsireg_transforms_to_itk_composite,
 )
@@ -276,10 +277,12 @@ def prepare_pt_transformation_data(transformations):
         physical spacing of the final transformation in the transform sequence
         This is needed to map coordinates defined as pixel indices to physical coordinates and then back
     """
-    composite, itk_transforms = wsireg_transforms_to_itk_composite(
-        transformations
-    )
-    itk_pt_transforms = invert_nonlinear_transforms(itk_transforms)
+    if all([isinstance(t, RegTransform) for t in transformations]) is False:
+        composite, transformations = wsireg_transforms_to_itk_composite(
+            transformations
+        )
+
+    itk_pt_transforms = invert_nonlinear_transforms(transformations)
     target_res = float(itk_pt_transforms[-1].output_spacing[0])
     return itk_pt_transforms, target_res
 
