@@ -278,3 +278,35 @@ DEFAULT_REG_PARAM_MAPS["rigid_test"] = test_rig
 DEFAULT_REG_PARAM_MAPS["affine_test"] = test_aff
 DEFAULT_REG_PARAM_MAPS["similarity_test"] = test_sim
 DEFAULT_REG_PARAM_MAPS["nl_test"] = test_nl
+
+# advanced mean squares
+ams_rig = DEFAULT_REG_PARAM_MAPS["rigid"].copy()
+ams_aff = DEFAULT_REG_PARAM_MAPS["affine"].copy()
+ams_sim = DEFAULT_REG_PARAM_MAPS["similarity"].copy()
+ams_nl = DEFAULT_REG_PARAM_MAPS["nl"].copy()
+
+ams_rig["Metric"] = ["AdvancedMeanSquares"]
+ams_aff["Metric"] = ["AdvancedMeanSquares"]
+ams_sim["Metric"] = ["AdvancedMeanSquares"]
+ams_nl["Metric"] = ["AdvancedMeanSquares"]
+
+DEFAULT_REG_PARAM_MAPS["rigid_ams"] = ams_rig
+DEFAULT_REG_PARAM_MAPS["affine_ams"] = ams_aff
+DEFAULT_REG_PARAM_MAPS["similarity_ams"] = ams_sim
+DEFAULT_REG_PARAM_MAPS["nl_ams"] = ams_nl
+
+# normalized correlation
+anc_rig = DEFAULT_REG_PARAM_MAPS["rigid"].copy()
+anc_aff = DEFAULT_REG_PARAM_MAPS["affine"].copy()
+anc_sim = DEFAULT_REG_PARAM_MAPS["similarity"].copy()
+anc_nl = DEFAULT_REG_PARAM_MAPS["nl"].copy()
+
+anc_rig["Metric"] = ["AdvancedNormalizedCorrelation"]
+anc_aff["Metric"] = ["AdvancedNormalizedCorrelation"]
+anc_sim["Metric"] = ["AdvancedNormalizedCorrelation"]
+anc_nl["Metric"] = ["AdvancedNormalizedCorrelation"]
+
+DEFAULT_REG_PARAM_MAPS["rigid_anc"] = anc_rig
+DEFAULT_REG_PARAM_MAPS["affine_anc"] = anc_aff
+DEFAULT_REG_PARAM_MAPS["similarity_anc"] = anc_sim
+DEFAULT_REG_PARAM_MAPS["nl_anc"] = anc_nl
