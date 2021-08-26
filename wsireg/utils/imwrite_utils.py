@@ -241,6 +241,7 @@ class OmeTiffWriter:
         compression="default",
         tile_padding=None,
     ):
+
         output_file_name = str(Path(output_dir) / image_name)
         self.prepare_image_info(
             image_name,
@@ -304,6 +305,7 @@ class OmeTiffWriter:
                     for pyr_idx in range(1, self.n_pyr_levels):
 
                         resampled_zarray_subres, orig_shape = compute_sub_res(
+                            self.reg_image,
                             resampled_zarray,
                             2 ** pyr_idx,
                             tile_size,
@@ -357,6 +359,7 @@ class OmeTiffWriter:
                                 resampled_zarray_subres,
                                 orig_shape,
                             ) = compute_sub_res(
+                                self.reg_image,
                                 resampled_zarray,
                                 2 ** pyr_idx,
                                 tile_size,
