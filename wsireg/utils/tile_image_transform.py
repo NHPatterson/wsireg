@@ -7,7 +7,6 @@ from wsireg.utils.tform_utils import (
 )
 from wsireg.utils.shape_utils import (
     prepare_pt_transformation_data,
-    itk_transform_pts,
 )
 
 
@@ -47,12 +46,11 @@ def add_tile_location_on_moving(
     pt_transform, target_res = prepare_pt_transformation_data(
         wsireg_transforms
     )
-    # pt_transform = pt_transforms
-    # target_res = 2.0
-    # px_idx = True
-    # output_idx = True
-    # # pt_transforms = pt_transform
-    # # pt_transform = pt_transforms
+
+    # ordering is to transform moving to fixed
+    # reversing goes from fixed to moving
+    pt_transform = pt_transform[::-1]
+
     for tile in tile_coordinate_data:
         x0 = tile["tile_index"][0]
         y0 = tile["tile_index"][1]
@@ -60,14 +58,19 @@ def add_tile_location_on_moving(
         y1 = y0 + tile["output_size"][1]
         tile_corners = np.asarray([[x0, y0], [x1, y0], [x1, y1], [x0, y1]])
 
-        transformed_tile_pts = itk_transform_pts(
-            tile_corners,
-            pt_transform,
-            px_idx=True,
-            source_res=target_res,
-            output_idx=True,
-            target_res=source_res,
-        )
+        tformed_pts = []
+        for pt in tile_corners:
+            pt = pt * target_res
+            for idx, t in enumerate(pt_transform):
+                if idx == 0:
+                    t_pt = t.itk_transform.TransformPoint(pt)
+                else:
+                    t_pt = t.itk_transform.TransformPoint(t_pt)
+            t_pt = np.array(t_pt)
+            t_pt /= source_res
+            tformed_pts.append(t_pt)
+
+        transformed_tile_pts = np.stack(tformed_pts)
         tile.update({"tile_on_moving": transformed_tile_pts})
 
     return tile_coordinate_data
@@ -147,14 +150,6 @@ def itk_transform_tiles(
     tile_size=512,
     tile_padding=128,
 ):
-    # tform_reg_im = self.reg_image
-    # y_size = self.y_size
-    # x_size = self.x_size
-    # tile_coordinate_data
-    # itk_transform_composite = composite_transform
-    # ch_idx = channel_idx
-    # tile_size = tile_size
-    # tile_padding = tile_padding
 
     zstr = zarr.TempStore()
     zgrp = zarr.open(zstr)
@@ -293,181 +288,3 @@ def compute_sub_res(
 
     resampled_zarray_subres = da.pad(resampled_zarray_subres, padding)
     return resampled_zarray_subres, orig_shape
-
-
-#
-# def tiled_transform_to_ome_tiff(
-#     tform_reg_im,
-#     image_name,
-#     output_dir,
-#     final_transform,
-#     composite_transform,
-#     itk_transforms,
-#     tile_size=512,
-#     write_pyramid=True,
-#     tile_padding=None,
-#     compression="default",
-# ):
-#
-#     y_size_orig, x_size_orig, y_spacing, x_spacing = get_final_yx_from_tform(
-#         tform_reg_im, final_transform
-#     )
-#
-#     # protect against too large tile size
-#     while y_size_orig / tile_size <= 1 or x_size_orig / tile_size <= 1:
-#         tile_size = tile_size // 2
-#
-#     y_size, x_size = tile_pad_output_size(
-#         y_size_orig, x_size_orig, tile_size=tile_size
-#     )
-#
-#     n_ch = (
-#         tform_reg_im.im_dims[2]
-#         if tform_reg_im.is_rgb
-#         else tform_reg_im.im_dims[0]
-#     )
-#     pyr_levels, pyr_shapes = get_pyramid_info(
-#         y_size_orig, x_size_orig, n_ch, tile_size
-#     )
-#     n_pyr_levels = len(pyr_levels)
-#     output_file_name = str(Path(output_dir) / image_name)
-#     channel_names = format_channel_names(tform_reg_im.channel_names, n_ch)
-#
-#     if final_transform is not None:
-#         PhysicalSizeY = y_spacing
-#         PhysicalSizeX = x_spacing
-#     else:
-#         PhysicalSizeY = tform_reg_im.image_res
-#         PhysicalSizeX = tform_reg_im.image_res
-#
-#     omexml = prepare_ome_xml_str(
-#         y_size,
-#         x_size,
-#         n_ch,
-#         tform_reg_im.im_dtype,
-#         tform_reg_im.is_rgb,
-#         PhysicalSizeX=PhysicalSizeX,
-#         PhysicalSizeY=PhysicalSizeY,
-#         PhysicalSizeXUnit="µm",
-#         PhysicalSizeYUnit="µm",
-#         Name=image_name,
-#         Channel=None if tform_reg_im.is_rgb else {"Name": channel_names},
-#     )
-#     subifds = n_pyr_levels - 1 if write_pyramid is True else None
-#
-#     # create per tile coordinate information for fixed
-#     # and moving
-#     tile_coordinate_data = generate_tile_coords(
-#         (x_size, y_size), (PhysicalSizeX, PhysicalSizeY), tile_size=tile_size
-#     )
-#     tile_coordinate_data = add_tile_location_on_moving(
-#         transforms, tile_coordinate_data, tform_reg_im.image_res
-#     )
-#
-#     if tile_padding is None:
-#         tile_padding = determine_moving_tile_padding(itk_transforms)
-#
-#     if compression == "default":
-#         compression = "jpeg" if tform_reg_im.is_rgb else "deflate"
-#
-#     print(f"saving to {output_file_name}.ome.tiff")
-#     with TiffWriter(f"{output_file_name}.ome.tiff", bigtiff=True) as tif:
-#         options = dict(
-#             tile=(tile_size, tile_size),
-#             compression=compression,
-#             photometric="rgb" if tform_reg_im.is_rgb else "minisblack",
-#             metadata=None,
-#         )
-#         if tform_reg_im.is_rgb:
-#             resampled_zarray = itk_transform_tiles(
-#                 tform_reg_im,
-#                 y_size,
-#                 x_size,
-#                 tile_coordinate_data,
-#                 composite_transform,
-#                 tile_size=tile_size,
-#                 tile_padding=tile_padding,
-#             )
-#             print(f"writing base layer RGB - shape: {resampled_zarray.shape}")
-#             description = omexml
-#             tif.write(
-#                 zarr_to_tiles(
-#                     resampled_zarray, tile_coordinate_data, tform_reg_im.is_rgb
-#                 ),
-#                 subifds=subifds,
-#                 description=description,
-#                 shape=(y_size, x_size, 3),
-#                 dtype=resampled_zarray.dtype,
-#                 **options,
-#             )
-#             if write_pyramid:
-#                 for pyr_idx in range(1, n_pyr_levels):
-#
-#                     resampled_zarray_subres, orig_shape = compute_sub_res(
-#                         resampled_zarray,
-#                         2 ** pyr_idx,
-#                         tile_size,
-#                         tform_reg_im.is_rgb,
-#                     )
-#                     print(f"pyr {pyr_idx} : RGB-shape: {orig_shape}")
-#
-#                     tif.write(
-#                         subres_zarr_to_tiles(
-#                             resampled_zarray_subres,
-#                             tile_size,
-#                             tform_reg_im.is_rgb,
-#                         ),
-#                         shape=orig_shape,
-#                         dtype=resampled_zarray_subres.dtype,
-#                         **options,
-#                         subfiletype=1,
-#                     )
-#         else:
-#             for channel_idx in range(n_ch):
-#                 resampled_zarray = itk_transform_tiles(
-#                     tform_reg_im,
-#                     y_size,
-#                     x_size,
-#                     tile_coordinate_data,
-#                     composite_transform,
-#                     ch_idx=channel_idx,
-#                     tile_size=tile_size,
-#                     tile_padding=tile_padding,
-#                 )
-#
-#                 description = omexml if channel_idx == 0 else None
-#                 print(
-#                     f"writing channel {channel_idx} - shape: {resampled_zarray.shape}"
-#                 )
-#                 tif.write(
-#                     zarr_to_tiles(
-#                         resampled_zarray,
-#                         tile_coordinate_data,
-#                         tform_reg_im.is_rgb,
-#                     ),
-#                     subifds=subifds,
-#                     description=description,
-#                     shape=(y_size, x_size),
-#                     dtype=resampled_zarray.dtype,
-#                     **options,
-#                 )
-#                 if write_pyramid:
-#                     for pyr_idx in range(1, n_pyr_levels):
-#                         resampled_zarray_subres, orig_shape = compute_sub_res(
-#                             resampled_zarray,
-#                             2 ** pyr_idx,
-#                             tile_size,
-#                             tform_reg_im.is_rgb,
-#                         )
-#
-#                         tif.write(
-#                             subres_zarr_to_tiles(
-#                                 resampled_zarray_subres,
-#                                 tile_size,
-#                                 tform_reg_im.is_rgb,
-#                             ),
-#                             shape=orig_shape,
-#                             dtype=resampled_zarray_subres.dtype,
-#                             **options,
-#                             subfiletype=1,
-#                         )
