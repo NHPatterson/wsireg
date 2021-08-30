@@ -14,4 +14,11 @@ from tests.fixtures.im_fixtures import (
     disk_im_rgb,
     disk_im_gry,
 )
-from tests.fixtures.transform_fixtures import complex_transform
+from tests.fixtures.transform_fixtures import (
+    complex_transform,
+    complex_transform_larger,
+    simple_transform_affine,
+    simple_transform_affine_nl,
+    simple_transform_affine_large_output,
+    simple_transform_affine_nl_large_output
+)

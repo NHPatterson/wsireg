@@ -197,6 +197,7 @@ def test_wsireg_run_reg_with_crop(data_out_dir, disk_im_gry):
     im_fps = wsi_reg.transform_images(
         transform_non_reg=True, to_original_size=True
     )
+
     registered_image_nocrop = reg_image_loader(im_fps[0], 1)
     unregistered_image_nocrop = reg_image_loader(im_fps[1], 1)
 
@@ -204,9 +205,10 @@ def test_wsireg_run_reg_with_crop(data_out_dir, disk_im_gry):
     im_fps = wsi_reg.transform_images(
         transform_non_reg=True, to_original_size=False
     )
+    #
     registered_image_crop = reg_image_loader(im_fps[0], 1)
     unregistered_image_crop = reg_image_loader(im_fps[1], 1)
-
+    #
     assert registered_image_nocrop.im_dims[1:] == (2048, 2048)
     assert unregistered_image_nocrop.im_dims[1:] == (2048, 2048)
     assert registered_image_crop.im_dims[1:] == (512, 512)
@@ -250,6 +252,7 @@ def test_wsireg_run_reg_with_flip_crop(data_out_dir, disk_im_gry):
     im_fps = wsi_reg.transform_images(
         transform_non_reg=True, to_original_size=False
     )
+
     registered_image_crop = reg_image_loader(im_fps[0], 1)
     unregistered_image_crop = reg_image_loader(im_fps[1], 1)
 
