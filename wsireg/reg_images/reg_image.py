@@ -5,7 +5,6 @@ import itk
 from wsireg.utils.im_utils import (
     contrast_enhance,
     sitk_inv_int,
-    transform_to_ome_tiff,
     transform_to_ome_zarr,
     compute_mask_to_bbox,
 )
@@ -272,7 +271,7 @@ class RegImage:
                 self, output_dir, **transformation_opts
             )
 
-        if file_writer.lower() == "ome.tiff" or transform_data == None:
+        if file_writer.lower() == "ome.tiff" or transform_data is None:
             ometiffwriter = OmeTiffWriter(self)
             im_fp = ometiffwriter.write_image_by_plane(
                 image_name,

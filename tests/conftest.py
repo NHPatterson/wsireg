@@ -20,5 +20,5 @@ from tests.fixtures.transform_fixtures import (
     simple_transform_affine,
     simple_transform_affine_nl,
     simple_transform_affine_large_output,
-    simple_transform_affine_nl_large_output
+    simple_transform_affine_nl_large_output,
 )

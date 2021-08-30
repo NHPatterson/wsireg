@@ -288,6 +288,7 @@ def test_OmeTiffWriter_compare_tile_plane_mc_nl(
 
     assert np.array_equal(im_tile[:, 0:2099, 0:3099], im_plane)
 
+
 #
 # @pytest.mark.usefixtures("simple_transform_affine_nl_large_output")
 # def test_OmeTiffWriter_tile_large_rgb_from_disk(
@@ -435,4 +436,3 @@ def test_MergeOmeTiffWriter_mc(simple_transform_affine_nl, data_out_dir):
     assert np.array_equal(im_plane[0:3, :, :], im_plane_s1)
     assert np.array_equal(im_plane[3:6, :, :], im_plane_s2)
     assert np.array_equal(im_plane[6:9, :, :], im_plane_s3)
-

@@ -237,9 +237,7 @@ def test_wsireg_run_reg_with_flip_crop(data_out_dir, disk_im_gry):
         prepro_dict={"mask_bbox": [512, 512, 512, 512], "flip": "h"},
     )
 
-    wsi_reg.add_reg_path(
-        "mod1", "mod2", reg_params=["rigid_test"]
-    )
+    wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])
     wsi_reg.register_images()
     # not cropped
     im_fps = wsi_reg.transform_images(
