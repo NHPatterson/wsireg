@@ -238,7 +238,7 @@ def test_wsireg_run_reg_with_flip_crop(data_out_dir, disk_im_gry):
     )
 
     wsi_reg.add_reg_path(
-        "mod1", "mod2", reg_params=["rigid_test", "affine_test"]
+        "mod1", "mod2", reg_params=["rigid_test"]
     )
     wsi_reg.register_images()
     # not cropped
@@ -307,6 +307,5 @@ def test_wsireg_run_reg_with_crop_merge(data_out_dir, disk_im_gry):
         transform_non_reg=True, to_original_size=False
     )
     registered_image_crop = reg_image_loader(im_fps[0], 1)
-
     assert registered_image_nocrop.im_dims[1:] == (2048, 2048)
     assert registered_image_crop.im_dims[1:] == (512, 512)
