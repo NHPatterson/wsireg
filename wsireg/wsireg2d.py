@@ -6,6 +6,8 @@ import json
 import SimpleITK as sitk
 from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_images import MergeRegImage
+from wsireg.writers.merge_ome_tiff_writer import OmeTiffWriter
+from wsireg.writers.merge_ome_tiff_writer import MergeOmeTiffWriter
 from wsireg.utils.reg_utils import (
     register_2d_images_itkelx,
     sitk_pmap_to_dict,
@@ -16,6 +18,9 @@ from wsireg.reg_shapes import RegShapes
 from wsireg.reg_transform import RegTransform
 from wsireg.utils.config_utils import parse_check_reg_config
 from wsireg.utils.tform_conversion import get_elastix_transforms
+from wsireg.utils.tform_utils import (
+    prepare_wsireg_transform_data,
+)
 
 
 class WsiReg2D(object):
@@ -767,10 +772,11 @@ class WsiReg2D(object):
                     }
                 else:
                     transforms[modality][idx] = reg_edge_tforms['registration']
+
         return transforms
 
-    def _transform_nonreg_image(
-        self, modality_key, file_writer="ome.tiff", to_original_size=True
+    def _prepare_nonreg_image_transform(
+        self, modality_key, to_original_size=True
     ):
         print(
             "transforming non-registered modality : {} ".format(modality_key)
@@ -806,24 +812,11 @@ class WsiReg2D(object):
         ):
             transformations = None
 
-        tfregimage = reg_image_loader(
-            im_data["image_filepath"],
-            im_data["image_res"],
-            channel_names=im_data.get("channel_names"),
-            channel_colors=im_data.get("channel_colors"),
-        )
-        im_fp = tfregimage.transform_image(
-            output_path.stem,
-            transform_data=transformations,
-            file_writer=file_writer,
-            output_dir=str(self.output_dir),
-        )
-        return im_fp
+        return im_data, transformations, output_path
 
-    def _transform_image(
+    def _prepare_reg_image_transform(
         self,
         edge_key,
-        file_writer="ome.tiff",
         attachment=False,
         attachment_modality=None,
         to_original_size=True,
@@ -857,84 +850,53 @@ class WsiReg2D(object):
                 {"orig": [RegTransform(original_size_transform)]}
             )
 
+        return im_data, transformations, output_path
+
+    def _transform_write_image(
+        self, im_data, transformations, output_path, file_writer="ome.tiff"
+    ):
+
         tfregimage = reg_image_loader(
             im_data["image_filepath"],
             im_data["image_res"],
             channel_names=im_data.get("channel_names"),
             channel_colors=im_data.get("channel_colors"),
         )
-        im_fp = tfregimage.transform_image(
-            output_path.stem,
-            transform_data=transformations,
-            file_writer=file_writer,
-            output_dir=str(self.output_dir),
-        )
+
+        ometiffwriter = OmeTiffWriter(tfregimage)
+
+        if transformations:
+            (
+                composite_transform,
+                itk_transforms,
+                final_transform,
+            ) = prepare_wsireg_transform_data(transformations)
+        else:
+            composite_transform, itk_transforms, final_transform = (
+                None,
+                None,
+                None,
+            )
+
+        if file_writer == "ome.tiff-bytile":
+            im_fp = ometiffwriter.write_image_by_tile(
+                output_path.stem,
+                itk_transforms=itk_transforms,
+                composite_transform=composite_transform,
+                final_transform=final_transform,
+                output_dir=str(self.output_dir),
+            )
+        else:
+            im_fp = ometiffwriter.write_image_by_plane(
+                output_path.stem,
+                composite_transform=composite_transform,
+                final_transform=final_transform,
+                output_dir=str(self.output_dir),
+            )
 
         return im_fp
 
-    def transform_images(
-        self,
-        file_writer="ome.tiff",
-        transform_non_reg=True,
-        to_original_size=True,
-    ):
-        """
-        Transform and write images to disk after registration. Also transforms all attachment images
-
-        Parameters
-        ----------
-        file_writer : str
-            output type to use, sitk writes a single resolution tiff, "zarr" writes an ome-zarr multiscale
-            zarr store
-        """
-        image_fps = []
-
-        if all(
-            [reg_edge.get("registered") for reg_edge in self.reg_graph_edges]
-        ):
-            # prepare workflow
-            merge_modalities = []
-            if len(self.merge_modalities.keys()) > 0:
-                for k, v in self.merge_modalities.items():
-                    merge_modalities.extend(v)
-
-            reg_path_keys = list(self.reg_paths.keys())
-            nonreg_keys = self._find_nonreg_modalities()
-
-            for merge_mod in merge_modalities:
-                try:
-                    m_idx = reg_path_keys.index(merge_mod)
-                    reg_path_keys.pop(m_idx)
-                except ValueError:
-                    pass
-                try:
-                    m_idx = nonreg_keys.index(merge_mod)
-                    nonreg_keys.pop(m_idx)
-                except ValueError:
-                    pass
-
-            for key in reg_path_keys:
-                im_fp = self._transform_image(
-                    key,
-                    file_writer=file_writer,
-                    to_original_size=to_original_size,
-                )
-                image_fps.append(im_fp)
-
-            for (
-                modality,
-                attachment_modality,
-            ) in self.attachment_images.items():
-
-                im_fp = self._transform_image(
-                    modality,
-                    file_writer=file_writer,
-                    attachment=True,
-                    attachment_modality=attachment_modality,
-                    to_original_size=to_original_size,
-                )
-                image_fps.append(im_fp)
-
+    def _transform_write_merge_images(self, to_original_size=True):
         for merge_name, sub_images in self.merge_modalities.items():
             im_fps = []
             im_res = []
@@ -990,30 +952,126 @@ class WsiReg2D(object):
                 merge_name,
             )
 
-            tfregimage = MergeRegImage(
+            merge_regimage = MergeRegImage(
                 im_fps,
                 im_res,
                 channel_names=im_ch_names,
             )
 
-            im_fp = tfregimage.transform_image(
+            merge_ometiffwriter = MergeOmeTiffWriter(merge_regimage)
+
+            im_fp = merge_ometiffwriter.merge_write_image_by_plane(
                 output_path.stem,
                 sub_images,
-                transform_data=transformations,
-                file_writer=file_writer,
+                transformations=transformations,
                 output_dir=str(self.output_dir),
             )
-            image_fps.append(im_fp)
+            return im_fp
 
-        if transform_non_reg is True:
-            # preprocess and save unregistered nodes
-            for key in nonreg_keys:
-                im_fp = self._transform_nonreg_image(
-                    key,
+    def transform_images(
+        self,
+        file_writer="ome.tiff",
+        transform_non_reg=True,
+        to_original_size=True,
+    ):
+        """
+        Transform and write images to disk after registration. Also transforms all attachment images
+
+        Parameters
+        ----------
+        file_writer : str
+            output type to use, sitk writes a single resolution tiff, "zarr" writes an ome-zarr multiscale
+            zarr store
+        """
+        image_fps = []
+
+        if all(
+            [reg_edge.get("registered") for reg_edge in self.reg_graph_edges]
+        ):
+            # prepare workflow
+            merge_modalities = []
+            if len(self.merge_modalities.keys()) > 0:
+                for k, v in self.merge_modalities.items():
+                    merge_modalities.extend(v)
+
+            reg_path_keys = list(self.reg_paths.keys())
+            nonreg_keys = self._find_nonreg_modalities()
+
+            for merge_mod in merge_modalities:
+                try:
+                    m_idx = reg_path_keys.index(merge_mod)
+                    reg_path_keys.pop(m_idx)
+                except ValueError:
+                    pass
+                try:
+                    m_idx = nonreg_keys.index(merge_mod)
+                    nonreg_keys.pop(m_idx)
+                except ValueError:
+                    pass
+
+            for modality in reg_path_keys:
+                (
+                    im_data,
+                    transformations,
+                    output_path,
+                ) = self._prepare_reg_image_transform(
+                    modality,
+                    attachment=False,
+                    to_original_size=to_original_size,
+                )
+                im_fp = self._transform_write_image(
+                    im_data,
+                    transformations,
+                    output_path,
                     file_writer=file_writer,
+                )
+                image_fps.append(im_fp)
+
+            for (
+                modality,
+                attachment_modality,
+            ) in self.attachment_images.items():
+                (
+                    im_data,
+                    transformations,
+                    output_path,
+                ) = self._prepare_reg_image_transform(
+                    modality,
+                    attachment=True,
+                    attachment_modality=attachment_modality,
                     to_original_size=to_original_size,
                 )
 
+                im_fp = self._transform_write_image(
+                    im_data,
+                    transformations,
+                    output_path,
+                    file_writer=file_writer,
+                )
+                image_fps.append(im_fp)
+            if len(self.merge_modalities.items()) > 0:
+                im_fp = self._transform_write_merge_images(
+                    to_original_size=to_original_size
+                )
+                image_fps.append(im_fp)
+
+        if transform_non_reg is True:
+            # preprocess and save unregistered nodes
+            for modality in nonreg_keys:
+                (
+                    im_data,
+                    transformations,
+                    output_path,
+                ) = self._prepare_nonreg_image_transform(
+                    modality,
+                    to_original_size=to_original_size,
+                )
+                im_fp = self._transform_write_image(
+                    im_data,
+                    transformations,
+                    output_path,
+                    file_writer=file_writer,
+                )
                 image_fps.append(im_fp)
 
         return image_fps
@@ -1089,8 +1147,12 @@ class WsiReg2D(object):
                 )
             )
 
+            out_transforms = get_elastix_transforms(
+                self.transformations[modality]
+            )
+
             with open(output_path, 'w') as fp:
-                json.dump(self.transformations[key], fp, indent=4)
+                json.dump(out_transforms, fp, indent=4)
 
     def add_data_from_config(self, config_filepath):
 
