@@ -20,6 +20,7 @@ from wsireg.utils.tform_utils import (
 from wsireg.utils.itk_im_conversions import (
     sitk_image_to_itk_image,
 )
+from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 
 
 class RegImage:
@@ -264,19 +265,31 @@ class RegImage:
                 final_transform,
             ) = prepare_wsireg_transform_data(transform_data)
         else:
-            itk_composite, _, final_transform = None, None, None
+            itk_composite, itk_transforms, final_transform = None, None, None
 
         if file_writer.lower() == "ome.zarr" or file_writer.lower() == "zarr":
             im_fp = transform_to_ome_zarr(
                 self, output_dir, **transformation_opts
             )
-        if file_writer.lower() == "ome.tiff":
-            im_fp = transform_to_ome_tiff(
-                self,
+
+        if file_writer.lower() == "ome.tiff" or transform_data == None:
+            ometiffwriter = OmeTiffWriter(self)
+            im_fp = ometiffwriter.write_image_by_plane(
                 image_name,
-                output_dir,
-                final_transform,
-                itk_composite,
+                output_dir=output_dir,
+                final_transform=final_transform,
+                composite_transform=itk_composite,
+                **transformation_opts,
+            )
+
+        if file_writer.lower() == "ome.tiff-bytile":
+            ometiffwriter = OmeTiffWriter(self)
+            im_fp = ometiffwriter.write_image_by_tile(
+                image_name,
+                output_dir=output_dir,
+                final_transform=final_transform,
+                itk_transforms=itk_transforms,
+                composite_transform=itk_composite,
                 **transformation_opts,
             )
         return im_fp

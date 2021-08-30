@@ -260,7 +260,7 @@ def invert_nonlinear_transforms(itk_transforms: list):
     return itk_transforms
 
 
-def prepare_pt_transformation_data(transformations):
+def prepare_pt_transformation_data(transformations, compute_inverse=True):
     """
     Read and prepare wsireg transformation data for point set transformation
 
@@ -269,6 +269,8 @@ def prepare_pt_transformation_data(transformations):
     transformations
         list of dict containing elastix transformation data or str to wsireg .json file containing
         elastix transformation data
+    compute_inverse : bool
+        whether or not to compute the inverse transformation for moving to fixed point transformations
     Returns
     -------
     itk_pt_transforms:list
@@ -281,10 +283,10 @@ def prepare_pt_transformation_data(transformations):
         composite, transformations = wsireg_transforms_to_itk_composite(
             transformations
         )
-
-    itk_pt_transforms = invert_nonlinear_transforms(transformations)
-    target_res = float(itk_pt_transforms[-1].output_spacing[0])
-    return itk_pt_transforms, target_res
+    if compute_inverse:
+        transformations = invert_nonlinear_transforms(transformations)
+    target_res = float(transformations[-1].output_spacing[0])
+    return transformations, target_res
 
 
 def itk_transform_pts(
