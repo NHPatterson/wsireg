@@ -20,7 +20,6 @@ from wsireg.utils.tile_image_transform import (
     subres_zarr_to_tiles,
     tile_pad_output_size,
 )
-from wsireg.utils.tform_utils import prepare_wsireg_transform_data
 
 
 class OmeTiffWriter:

@@ -225,6 +225,7 @@ def test_ometiff_read_rgb():
     assert ri.im_dtype == np.uint8
     assert ri.is_rgb is True
 
+
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_ometiff_read_rgb_default_preprocess():
     image_fp = os.path.join(PRIVATE_DIR, "czi_rgb.ome.tiff")
@@ -243,6 +244,7 @@ def test_ometiff_read_mc():
     assert ri.im_dims[2] > 3
     assert ri.im_dtype == np.uint16
     assert ri.is_rgb is False
+
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_ometiff_read_mc_default_preprocess():

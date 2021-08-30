@@ -28,11 +28,11 @@ class MergeOmeTiffWriter(OmeTiffWriter):
         compression="default",
     ):
 
-        if (
-            isinstance(sub_image_names, list) is False
-        ):
+        if isinstance(sub_image_names, list) is False:
             if sub_image_names is None:
-                sub_image_names = ["" for i in range(len(self.reg_image.images))]
+                sub_image_names = [
+                    "" for i in range(len(self.reg_image.images))
+                ]
             else:
                 raise ValueError(
                     "MergeRegImage requires a list of image names for each image to merge"
