@@ -38,12 +38,12 @@ class MergeRegImage(RegImage):
         for im_idx, image_data in enumerate(
             zip(image_fp, image_res, channel_names, channel_colors)
         ):
-            imfp, imres, channames, chancolors = image_data
+            image, image_res, channel_names, channel_colors = image_data
             imdata = reg_image_loader(
-                imfp,
-                imres,
-                channel_names=channames,
-                channel_colors=chancolors,
+                image,
+                image_res,
+                channel_names=channel_names,
+                channel_colors=channel_colors,
             )
             if (
                 imdata.channel_names is None

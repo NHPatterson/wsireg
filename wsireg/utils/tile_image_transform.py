@@ -44,7 +44,7 @@ def add_tile_location_on_moving(
 ):
 
     pt_transform, target_res = prepare_pt_transformation_data(
-        wsireg_transforms
+        wsireg_transforms, compute_inverse=False
     )
 
     # ordering is to transform moving to fixed
