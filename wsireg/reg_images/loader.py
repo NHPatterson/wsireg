@@ -59,26 +59,15 @@ def reg_image_loader(
                 channel_colors,
             )
     elif image_ext == ".czi":
-        try:
-            reg_image = AICSRegImage(
-                image,
-                image_res,
-                mask,
-                pre_reg_transforms,
-                preprocessing,
-                channel_names,
-                channel_colors,
-            )
-        except ValueError:
-            reg_image = CziRegImage(
-                image,
-                image_res,
-                mask,
-                pre_reg_transforms,
-                preprocessing,
-                channel_names,
-                channel_colors,
-            )
+        reg_image = CziRegImage(
+            image,
+            image_res,
+            mask,
+            pre_reg_transforms,
+            preprocessing,
+            channel_names,
+            channel_colors,
+        )
     else:
         reg_image = SitkRegImage(
             image,
