@@ -878,7 +878,10 @@ class WsiReg2D(object):
                 None,
             )
 
-        if file_writer == "ome.tiff-bytile":
+        if (
+            file_writer == "ome.tiff-bytile"
+            and ometiffwriter.reg_image.reader not in ["czi", "sitk"]
+        ):
             im_fp = ometiffwriter.write_image_by_tile(
                 output_path.stem,
                 itk_transforms=itk_transforms,
