@@ -51,7 +51,7 @@ class AICSRegImage(RegImage):
             self.preprocessing.update(preprocessing)
 
         self.pre_reg_transforms = pre_reg_transforms
-        self.aics_image.
+
         self.channel_names = channel_names
         self.channel_colors = channel_colors
         self.original_size_transform = None

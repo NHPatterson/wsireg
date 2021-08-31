@@ -12,3 +12,4 @@ dask
 fsspec
 itk-elastix
 SimpleITK
+aicsimageio[czi]
