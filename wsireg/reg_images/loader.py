@@ -4,6 +4,7 @@ from wsireg.reg_images import (
     CziRegImage,
     SitkRegImage,
     NumpyRegImage,
+    AICSRegImage,
 )
 from wsireg.utils.im_utils import (
     TIFFFILE_EXTS,
@@ -58,15 +59,26 @@ def reg_image_loader(
                 channel_colors,
             )
     elif image_ext == ".czi":
-        reg_image = CziRegImage(
-            image,
-            image_res,
-            mask,
-            pre_reg_transforms,
-            preprocessing,
-            channel_names,
-            channel_colors,
-        )
+        try:
+            reg_image = AICSRegImage(
+                image,
+                image_res,
+                mask,
+                pre_reg_transforms,
+                preprocessing,
+                channel_names,
+                channel_colors,
+            )
+        except ValueError:
+            reg_image = CziRegImage(
+                image,
+                image_res,
+                mask,
+                pre_reg_transforms,
+                preprocessing,
+                channel_names,
+                channel_colors,
+            )
     else:
         reg_image = SitkRegImage(
             image,
