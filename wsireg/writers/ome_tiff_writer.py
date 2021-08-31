@@ -246,6 +246,7 @@ class OmeTiffWriter:
         tile_size=512,
         compression="default",
         tile_padding=None,
+        use_multiprocessing=False,
     ):
 
         output_file_name = str(Path(output_dir) / f"{image_name}.ome.tiff")
@@ -291,6 +292,7 @@ class OmeTiffWriter:
                     composite_transform,
                     tile_size=self.tile_size,
                     tile_padding=tile_padding,
+                    use_multiprocessing=use_multiprocessing,
                 )
                 print(
                     f"writing base layer RGB - shape: {resampled_zarray.shape}"
@@ -346,6 +348,7 @@ class OmeTiffWriter:
                         ch_idx=channel_idx,
                         tile_size=self.tile_size,
                         tile_padding=tile_padding,
+                        use_multiprocessing=use_multiprocessing,
                     )
 
                     description = self.omexml if channel_idx == 0 else None

@@ -1,3 +1,5 @@
+import multiprocessing
+from concurrent.futures import ThreadPoolExecutor
 import SimpleITK as sitk
 import numpy as np
 import zarr
@@ -149,6 +151,7 @@ def itk_transform_tiles(
     ch_idx=0,
     tile_size=512,
     tile_padding=128,
+    use_multiprocessing = False
 ):
 
     zstr = zarr.TempStore()
@@ -174,7 +177,7 @@ def itk_transform_tiles(
         y_size_moving = tform_reg_im.im_dims[1]
         x_size_moving = tform_reg_im.im_dims[2]
 
-    for tile in tile_coordinate_data:
+    def transform_tile(tile):
         tile_resampler = wsireg_tile_transform_to_resampler(tile)
         x_min, x_max, y_min, y_max = pad_transform_tile_corners(
             x_size_moving,
@@ -227,6 +230,14 @@ def itk_transform_tiles(
             resample_zarray[
                 y_idx_start:y_idx_end, x_idx_start:x_idx_end
             ] = sitk.GetArrayFromImage(tile_resampled)
+
+    if use_multiprocessing:
+        max_workers = multiprocessing.cpu_count() - 1
+        with ThreadPoolExecutor(max_workers) as executor:
+            executor.map(transform_tile, tile_coordinate_data)
+    else:
+        for tile in tile_coordinate_data:
+            transform_tile(tile)
 
     return resample_zarray
 
