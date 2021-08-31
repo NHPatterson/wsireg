@@ -4,7 +4,7 @@ from wsireg.reg_images import (
     CziRegImage,
     SitkRegImage,
     NumpyRegImage,
-    AICSRegImage,
+    # AICSRegImage,
 )
 from wsireg.utils.im_utils import (
     TIFFFILE_EXTS,

@@ -331,7 +331,10 @@ class OmeTiffWriter:
                             **options,
                             subfiletype=1,
                         )
-                resampled_zarray.store.clear()
+                try:
+                    resampled_zarray.store.clear()
+                except FileNotFoundError:
+                    pass
             else:
                 for channel_idx in range(self.reg_image.n_ch):
                     resampled_zarray = itk_transform_tiles(
@@ -385,5 +388,8 @@ class OmeTiffWriter:
                                 **options,
                                 subfiletype=1,
                             )
-                    resampled_zarray.store.clear()
+                    try:
+                        resampled_zarray.store.clear()
+                    except FileNotFoundError:
+                        pass
         return output_file_name
