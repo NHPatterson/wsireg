@@ -23,3 +23,9 @@ History
 	- add ability to automatically crop images based on associated masks's bounding box (can be useful if image dimensions differ greatly)
 
 * use `RegTransform` class to manage transformations
+
+0.3.0 (2021-09-02)
+------------------
+
+* add "ome.tiff-bytile" writer to write transformed images tile-by-tile
+* unify data reading from tiffs to use `dask`
