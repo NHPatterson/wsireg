@@ -128,6 +128,8 @@ class OmeTiffWriter:
 
         print(f"saving to {output_file_name}")
         with TiffWriter(output_file_name, bigtiff=True) as tif:
+            if self.reg_image.reader == "sitk":
+                self.reg_image.read_full_image()
             for channel_idx in range(self.reg_image.n_ch):
                 print(f"transforming : {channel_idx}")
                 if self.reg_image.reader != "sitk":
@@ -137,16 +139,6 @@ class OmeTiffWriter:
                     image.SetSpacing(
                         (self.reg_image.image_res, self.reg_image.image_res)
                     )
-                else:
-                    full_image = sitk.ReadImage(self.reg_image.image_filepath)
-                    if self.reg_image.is_rgb:
-                        image = sitk.VectorIndexSelectionCast(
-                            full_image, channel_idx
-                        )
-                    elif len(full_image.GetSize()) > 2:
-                        image = full_image[:, :, channel_idx]
-                    else:
-                        image = full_image
 
                 if composite_transform is not None:
                     image = transform_plane(
