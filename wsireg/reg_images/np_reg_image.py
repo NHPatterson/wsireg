@@ -21,13 +21,13 @@ class NumpyRegImage(RegImage):
         preprocessing=None,
         channel_names=None,
         channel_colors=None,
+        image_filepath=None,
     ):
-        self.image_filepath = "numpy"
+        self.image_filepath = image_filepath
         self.image_res = image_res
         self.reader = "numpy"
 
         self.image = ensure_dask_array(image)
-
         self.image = da.squeeze(self.image)
 
         (
@@ -40,6 +40,7 @@ class NumpyRegImage(RegImage):
 
         self.n_ch = self.im_dims[2] if self.is_rgb else self.im_dims[0]
 
+        self.reg_image = None
         self.mask = self.read_mask(mask)
 
         if preprocessing is None:
@@ -63,29 +64,29 @@ class NumpyRegImage(RegImage):
 
     def read_reg_image(self):
 
-        image = read_preprocess_array(
+        reg_image = read_preprocess_array(
             self.image, preprocessing=self.preprocessing, force_rgb=self.is_rgb
         )
 
         if (
             self.preprocessing is not None
             and self.preprocessing.get('as_uint8') is True
-            and image.GetPixelID() != sitk.sitkUInt8
+            and reg_image.GetPixelID() != sitk.sitkUInt8
         ):
-            image = sitk.RescaleIntensity(image)
-            image = sitk.Cast(image, sitk.sitkUInt8)
+            reg_image = sitk.RescaleIntensity(reg_image)
+            reg_image = sitk.Cast(reg_image, sitk.sitkUInt8)
 
-        image, spatial_preprocessing = self.preprocess_reg_image_intensity(
-            image, self.preprocessing
+        reg_image, spatial_preprocessing = self.preprocess_reg_image_intensity(
+            reg_image, self.preprocessing
         )
 
-        if image.GetDepth() >= 1:
+        if reg_image.GetDepth() >= 1:
             raise ValueError(
                 "preprocessing did not result in a single image plane\n"
                 "multi-channel or 3D image return"
             )
 
-        if image.GetNumberOfComponentsPerPixel() > 1:
+        if reg_image.GetNumberOfComponentsPerPixel() > 1:
             raise ValueError(
                 "preprocessing did not result in a single image plane\n"
                 "multi-component / RGB(A) image returned"
@@ -96,13 +97,13 @@ class NumpyRegImage(RegImage):
             or self.pre_reg_transforms is not None
         ):
             (
-                self.image,
+                self.reg_image,
                 self.pre_reg_transforms,
             ) = self.preprocess_reg_image_spatial(
-                image, spatial_preprocessing, self.pre_reg_transforms
+                reg_image, spatial_preprocessing, self.pre_reg_transforms
             )
         else:
-            self.image = image
+            self.reg_image = reg_image
             self.pre_reg_transforms = None
 
     def read_single_channel(self, channel_idx: int):

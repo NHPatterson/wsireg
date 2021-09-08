@@ -49,6 +49,8 @@ class RegImage:
     """
 
     def __init__(self):
+        self.image = None
+        self.reg_image = None
         self.original_size_transform = None
         return
 
@@ -233,9 +235,9 @@ class RegImage:
             self.mask = None
         return image, transforms
 
-    def sitk_to_itk(self, cast_to_float32=True):
-        self.image = sitk_image_to_itk_image(
-            self.image, cast_to_float32=cast_to_float32
+    def reg_image_sitk_to_itk(self, cast_to_float32=True):
+        self.reg_image = sitk_image_to_itk_image(
+            self.reg_image, cast_to_float32=cast_to_float32
         )
         if self.mask is not None:
             self.mask = sitk_image_to_itk_image(
