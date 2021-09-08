@@ -27,56 +27,59 @@ def reg_image_loader(
         return NumpyRegImage(
             image,
             image_res,
-            mask,
-            pre_reg_transforms,
-            preprocessing,
-            channel_names,
-            channel_colors,
+            mask=mask,
+            pre_reg_transforms=pre_reg_transforms,
+            preprocessing=preprocessing,
+            channel_names=channel_names,
+            channel_colors=channel_colors,
+            image_filepath=None,
         )
 
     image_ext = Path(image).suffix
     if image_ext in TIFFFILE_EXTS:
         if TiffFile(image).is_ome:
-            image = ome_tifffile_to_arraylike(image)
+            image, image_filepath = ome_tifffile_to_arraylike(image)
             reg_image = NumpyRegImage(
                 image,
                 image_res,
-                mask,
-                pre_reg_transforms,
-                preprocessing,
-                channel_names,
-                channel_colors,
+                mask=mask,
+                pre_reg_transforms=pre_reg_transforms,
+                preprocessing=preprocessing,
+                channel_names=channel_names,
+                channel_colors=channel_colors,
+                image_filepath=image_filepath,
             )
         else:
-            image = tifffile_to_arraylike(image)
+            image, image_filepath = tifffile_to_arraylike(image)
             reg_image = NumpyRegImage(
                 image,
                 image_res,
-                mask,
-                pre_reg_transforms,
-                preprocessing,
-                channel_names,
-                channel_colors,
+                mask=mask,
+                pre_reg_transforms=pre_reg_transforms,
+                preprocessing=preprocessing,
+                channel_names=channel_names,
+                channel_colors=channel_colors,
+                image_filepath=image_filepath,
             )
     elif image_ext == ".czi":
         reg_image = CziRegImage(
             image,
             image_res,
-            mask,
-            pre_reg_transforms,
-            preprocessing,
-            channel_names,
-            channel_colors,
+            mask=mask,
+            pre_reg_transforms=pre_reg_transforms,
+            preprocessing=preprocessing,
+            channel_names=channel_names,
+            channel_colors=channel_colors,
         )
     else:
         reg_image = SitkRegImage(
             image,
             image_res,
-            mask,
-            pre_reg_transforms,
-            preprocessing,
-            channel_names,
-            channel_colors,
+            mask=mask,
+            pre_reg_transforms=pre_reg_transforms,
+            preprocessing=preprocessing,
+            channel_names=channel_names,
+            channel_colors=channel_colors,
         )
 
     return reg_image
