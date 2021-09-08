@@ -498,7 +498,7 @@ class WsiReg2D(object):
             / "{}_orig_size_tform.json".format(cache_im_fp.stem)
         )
         if cache_im_fp.is_file() is False:
-            sitk.WriteImage(reg_image.image, str(cache_im_fp), True)
+            sitk.WriteImage(reg_image.reg_image, str(cache_im_fp), True)
 
         if reg_image.mask is not None:
             cache_mask_im_fp = self.image_cache / "{}_prepro_mask.tiff".format(
@@ -652,6 +652,7 @@ class WsiReg2D(object):
 
                 src_reg_image.read_reg_image()
                 tgt_reg_image.read_reg_image()
+
                 if (
                     tgt_original_size_transform is None
                     and tgt_reg_image.original_size_transform is not None

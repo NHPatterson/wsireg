@@ -190,11 +190,12 @@ def register_2d_images_itkelx(
         source_image.image = matcher.Execute(
             source_image.image, target_image.image
         )
-    source_image.sitk_to_itk()
-    target_image.sitk_to_itk()
+
+    source_image.reg_image_sitk_to_itk()
+    target_image.reg_image_sitk_to_itk()
 
     selx = itk.ElastixRegistrationMethod.New(
-        source_image.image, target_image.image
+        source_image.reg_image, target_image.reg_image
     )
 
     # Set additional options
@@ -207,8 +208,8 @@ def register_2d_images_itkelx(
     if target_image.mask is not None:
         selx.SetFixedMask(target_image.mask)
 
-    selx.SetMovingImage(source_image.image)
-    selx.SetFixedImage(target_image.image)
+    selx.SetMovingImage(source_image.reg_image)
+    selx.SetFixedImage(target_image.reg_image)
 
     parameter_object_registration = itk.ParameterObject.New()
     for idx, reg_param in enumerate(reg_params):

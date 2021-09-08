@@ -13,6 +13,10 @@ from tests.fixtures.im_fixtures import (
     disk_im_mch,
     disk_im_rgb,
     disk_im_gry,
+    disk_im_mch_notile,
+    disk_im_gry_pyr,
+    disk_im_mch_pyr,
+    disk_im_rgb_pyr,
 )
 from tests.fixtures.transform_fixtures import (
     complex_transform,

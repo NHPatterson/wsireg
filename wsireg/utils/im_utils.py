@@ -97,37 +97,39 @@ def ensure_dask_array(image):
     return da.from_array(image)
 
 
-def read_preprocess_array(img, preprocessing, force_rgb=None):
+def read_preprocess_array(array, preprocessing, force_rgb=None):
     """Read np.array, zarr.Array, or dask.array image into memory
     with preprocessing for registration."""
-    is_interleaved = guess_rgb(img.shape)
+    is_interleaved = guess_rgb(array.shape)
     is_rgb = is_interleaved if not force_rgb else force_rgb
 
     if is_rgb:
         if preprocessing is not None:
-            image = np.asarray(grayscale(img, is_interleaved=is_interleaved))
-            image = sitk.GetImageFromArray(image)
+            image_out = np.asarray(
+                grayscale(array, is_interleaved=is_interleaved)
+            )
+            image_out = sitk.GetImageFromArray(image_out)
         else:
-            image = np.asarray(img)
+            image_out = np.asarray(array)
             if not is_interleaved:
-                image = np.rollaxis(image, 0, 3)
-            image = sitk.GetImageFromArray(image, isVector=True)
+                image_out = np.rollaxis(image_out, 0, 3)
+            image_out = sitk.GetImageFromArray(image_out, isVector=True)
 
-    elif len(img.shape) == 2:
-        image = sitk.GetImageFromArray(np.asarray(img))
+    elif len(array.shape) == 2:
+        image_out = sitk.GetImageFromArray(np.asarray(array))
 
     else:
         if preprocessing is not None:
             if (
                 preprocessing.get("ch_indices") is not None
-                and len(img.shape) > 2
+                and len(array.shape) > 2
             ):
-                chs = tuple(preprocessing.get('ch_indices'))
-                img = img[chs, :, :]
+                chs = list(preprocessing.get('ch_indices'))
+                array = array[chs, :, :]
 
-        image = sitk.GetImageFromArray(np.squeeze(np.asarray(img)))
+        image_out = sitk.GetImageFromArray(np.squeeze(np.asarray(array)))
 
-    return image
+    return image_out
 
 
 def tifffile_zarr_backend(
@@ -228,6 +230,7 @@ def sitk_backend(image_filepath, preprocessing):
                 preprocessing.get("ch_indices") is not None
                 and image.GetDepth() > 0
             ):
+                print("here")
                 chs = np.asarray(preprocessing.get('ch_indices'))
                 image = image[:, :, chs]
 
@@ -259,13 +262,13 @@ def guess_rgb(shape):
     return rgb
 
 
-def grayscale(rgb, is_interleaved=False):
+def grayscale(rgb_image, is_interleaved=False):
     """
     convert RGB image data to greyscale
 
     Parameters
     ----------
-    rgb: np.ndarray
+    rgb_image: np.ndarray
         image data
     Returns
     -------
@@ -274,40 +277,40 @@ def grayscale(rgb, is_interleaved=False):
     """
     if is_interleaved is True:
         result = (
-            (rgb[..., 0] * 0.2125)
-            + (rgb[..., 1] * 0.7154)
-            + (rgb[..., 2] * 0.0721)
+            (rgb_image[..., 0] * 0.2125).astype(np.uint8)
+            + (rgb_image[..., 1] * 0.7154).astype(np.uint8)
+            + (rgb_image[..., 2] * 0.0721).astype(np.uint8)
         )
     else:
         result = (
-            (
-                rgb[
-                    0,
-                ]
-                * 0.2125
-            )
-            + (rgb[1, ...] * 0.7154)
-            + (rgb[2, ...] * 0.0721)
+            (rgb_image[0, ...] * 0.2125).astype(np.uint8)
+            + (rgb_image[1, ...] * 0.7154).astype(np.uint8)
+            + (rgb_image[2, ...] * 0.0721).astype(np.uint8)
         )
 
-    return result.astype(np.uint8)
+    return result
 
 
-def tile_grayscale(rgb):
+def czi_tile_grayscale(rgb_image):
     """
     convert RGB image data to greyscale
 
     Parameters
     ----------
-    rgb: np.ndarray
+    rgb_image: np.ndarray
         image data
     Returns
     -------
     image:np.ndarray
         returns 8-bit greyscale image for 24-bit RGB image
     """
-    result = np.dot(rgb[..., :3], [0.299, 0.587, 0.114])
-    return np.expand_dims(result.astype(np.uint8), axis=-1)
+    result = (
+        (rgb_image[..., 0] * 0.2125).astype(np.uint8)
+        + (rgb_image[..., 1] * 0.7154).astype(np.uint8)
+        + (rgb_image[..., 2] * 0.0721).astype(np.uint8)
+    )
+
+    return np.expand_dims(result, axis=-1)
 
 
 class CziRegImageReader(CziFile):
@@ -361,8 +364,16 @@ class CziRegImageReader(CziFile):
         if channel_idx is not None:
             if isinstance(channel_idx, int):
                 channel_idx = [channel_idx]
-            out_shape[ch_dim_idx] = len(channel_idx)
-            min_ch = np.min(channel_idx)
+
+            if out_shape[ch_dim_idx] == 1:
+                channel_idx = None
+
+            else:
+                out_shape[ch_dim_idx] = len(channel_idx)
+                min_ch_seq = {}
+                for idx, i in enumerate(channel_idx):
+                    min_ch_seq.update({i: idx})
+
         if as_uint8 is True:
             out_dtype = np.uint8
         else:
@@ -383,12 +394,13 @@ class CziRegImageReader(CziFile):
             czi_c_idx = [
                 de.dimension for de in subblock.dimension_entries
             ].index('C')
-
+            subblock_ch_idx = subblock.dimension_entries[czi_c_idx].start
             if channel_idx is not None:
-                if subblock.dimension_entries[czi_c_idx].start in channel_idx:
+                if subblock_ch_idx in channel_idx:
+                    subblock.dimension_entries[czi_c_idx].start
                     tile = subblock.data(resize=resize, order=order)
-                    dvstart[ch_dim_idx] = (
-                        subblock.dimension_entries[czi_c_idx].start - min_ch
+                    dvstart[ch_dim_idx] = subblock_ch_idx - min_ch_seq.get(
+                        subblock_ch_idx
                     )
                 else:
                     return
@@ -492,7 +504,7 @@ class CziRegImageReader(CziFile):
             tile = subblock.data(resize=resize, order=order)
 
             if greyscale is True:
-                tile = tile_grayscale(tile)
+                tile = czi_tile_grayscale(tile)
 
             if channel_idx is not None:
                 tile = tile[:, :, :, :, :, channel_idx]
@@ -559,113 +571,6 @@ def tf_get_largest_series(image_filepath):
     return largest_series
 
 
-def prepare_np_image(image, preprocessing):
-    """
-    preprocess images stored as numpy arrays
-
-    Parameters
-    ----------
-    image:np.ndarray
-        image data
-    preprocessing:dict
-        whether to do some read-time pre-processing
-        - greyscale conversion (at the tile level)
-        - read individual or range of channels (at the tile level)
-
-    Returns
-    -------
-    image:sitk.Image
-        image ready for registration
-    """
-    is_rgb = guess_rgb(image.shape)
-
-    # greyscale an RGB np array
-    if preprocessing is not None:
-        if is_rgb:
-            image = grayscale(image)
-            is_rgb = False
-
-        # select channels for registration if multi-channel
-        if image.ndim > 2 and preprocessing.get("ch_indices") is not None:
-            image = np.squeeze(image[preprocessing.get("ch_indices"), :, :])
-
-    # pass nparray to sitk image
-    image = sitk.GetImageFromArray(image, isVector=is_rgb)
-
-    # sitk preprocessing
-    if (
-        preprocessing is not None
-        and preprocessing.get('as_uint8') is True
-        and image.GetPixelID() != sitk.sitkUInt8
-    ):
-        image = sitk.RescaleIntensity(image)
-        image = sitk.Cast(image, sitk.sitkUInt8)
-
-    return image
-
-
-def read_image(image_filepath, preprocessing):
-    """
-    Convenience function to read images
-
-    Parameters
-    ----------
-    image_filepath : str
-        file path to image
-    preprocessing
-        read time preprocessing dict ("as_uint8" and "ch_indices")
-    Returns
-    -------
-    image: sitk.Image
-        SimpleITK image of image data from czi, scn or other image formats read by SimpleITK
-    """
-
-    fp_ext = Path(image_filepath).suffix.lower()
-
-    if fp_ext == '.czi':
-        czi = CziRegImageReader(image_filepath)
-        scene_idx = czi.axes.index('S')
-
-        if czi.shape[scene_idx] > 1:
-            raise ValueError('multi scene czis not allowed at this time')
-
-        if preprocessing is None:
-            image = czi.asarray()
-        else:
-            image = czi.sub_asarray(
-                channel_idx=preprocessing['ch_indices'],
-                as_uint8=preprocessing['as_uint8'],
-            )
-        image = np.squeeze(image)
-
-        image = sitk.GetImageFromArray(image)
-
-    # find out other WSI formats read by tifffile
-    elif fp_ext in TIFFFILE_EXTS:
-        largest_series = tf_get_largest_series(image_filepath)
-
-        try:
-            image = tifffile_dask_backend(
-                image_filepath, largest_series, preprocessing
-            )
-        except ValueError:
-            image = tifffile_zarr_backend(
-                image_filepath, largest_series, preprocessing
-            )
-
-        if (
-            preprocessing is not None
-            and preprocessing.get('as_uint8') is True
-            and image.GetPixelID() != sitk.sitkUInt8
-        ):
-            image = sitk.RescaleIntensity(image)
-            image = sitk.Cast(image, sitk.sitkUInt8)
-    else:
-        image = sitk_backend(image_filepath, preprocessing)
-
-    return image
-
-
 def get_sitk_image_info(image_filepath):
     """
     Get image info for files only ready by SimpleITK
@@ -701,52 +606,6 @@ def get_sitk_image_info(image_filepath):
         im_dims = np.concatenate([[1], im_dims], axis=0)
 
     return im_dims, im_dtype
-
-
-def get_im_info(image_filepath):
-    """
-    Use CziFile and tifffile to get image dimension and other information.
-
-    Parameters
-    ----------
-    image_filepath: str
-        filepath to the image file
-
-    Returns
-    -------
-    im_dims: np.ndarray
-        image dimensions in np.ndarray
-    im_dtype: np.dtype
-        data type of the image
-    reader:str
-        whether to use "czifile" or "tifffile" to read the image
-    """
-    if Path(image_filepath).suffix.lower() == ".czi":
-        czi = CziFile(image_filepath)
-        ch_dim_idx = czi.axes.index('C')
-        y_dim_idx = czi.axes.index('Y')
-        x_dim_idx = czi.axes.index('X')
-        im_dims = np.array(czi.shape)[[ch_dim_idx, y_dim_idx, x_dim_idx]]
-        im_dtype = czi.dtype
-        reader = "czi"
-
-    elif Path(image_filepath).suffix.lower() in TIFFFILE_EXTS:
-        largest_series = tf_get_largest_series(image_filepath)
-        zarr_im = zarr.open(
-            imread(image_filepath, aszarr=True, series=largest_series)
-        )
-        zarr_im = zarr_get_base_pyr_layer(zarr_im)
-        im_dims = np.squeeze(zarr_im.shape)
-        if len(im_dims) == 2:
-            im_dims = np.concatenate([[1], im_dims])
-        im_dtype = zarr_im.dtype
-        reader = "tifffile"
-
-    else:
-        im_dims, im_dtype = get_sitk_image_info(image_filepath)
-        reader = "sitk"
-
-    return im_dims, im_dtype, reader
 
 
 def get_tifffile_info(image_filepath):
@@ -1627,7 +1486,7 @@ def tifffile_to_arraylike(image_filepath):
     if isinstance(image, zarr.Group):
         image = image[0]
 
-    return image
+    return image, image_filepath
 
 
 def ome_tifffile_to_arraylike(image_filepath):
@@ -1666,4 +1525,159 @@ def ome_tifffile_to_arraylike(image_filepath):
     if is_rgb is False and samples_per_pixel >= 3:
         image = image.transpose(1, 2, 0)
 
-    return image
+    return image, image_filepath
+
+
+#
+#
+# def prepare_np_image(image, preprocessing):
+#     """
+#     preprocess images stored as numpy arrays
+#
+#     Parameters
+#     ----------
+#     image:np.ndarray
+#         image data
+#     preprocessing:dict
+#         whether to do some read-time pre-processing
+#         - greyscale conversion (at the tile level)
+#         - read individual or range of channels (at the tile level)
+#
+#     Returns
+#     -------
+#     image:sitk.Image
+#         image ready for registration
+#     """
+#     is_rgb = guess_rgb(image.shape)
+#
+#     # greyscale an RGB np array
+#     if preprocessing is not None:
+#         if is_rgb:
+#             image = grayscale(image)
+#             is_rgb = False
+#
+#         # select channels for registration if multi-channel
+#         if image.ndim > 2 and preprocessing.get("ch_indices") is not None:
+#             image = np.squeeze(image[preprocessing.get("ch_indices"), :, :])
+#
+#     # pass nparray to sitk image
+#     image = sitk.GetImageFromArray(image, isVector=is_rgb)
+#
+#     # sitk preprocessing
+#     if (
+#         preprocessing is not None
+#         and preprocessing.get('as_uint8') is True
+#         and image.GetPixelID() != sitk.sitkUInt8
+#     ):
+#         image = sitk.RescaleIntensity(image)
+#         image = sitk.Cast(image, sitk.sitkUInt8)
+#
+#     return image
+#
+#
+# def read_image(image_filepath, preprocessing):
+#     """
+#     Convenience function to read images
+#
+#     Parameters
+#     ----------
+#     image_filepath : str
+#         file path to image
+#     preprocessing
+#         read time preprocessing dict ("as_uint8" and "ch_indices")
+#     Returns
+#     -------
+#     image: sitk.Image
+#         SimpleITK image of image data from czi, scn or other image formats read by SimpleITK
+#     """
+#
+#     fp_ext = Path(image_filepath).suffix.lower()
+#
+#     if fp_ext == '.czi':
+#         czi = CziRegImageReader(image_filepath)
+#         scene_idx = czi.axes.index('S')
+#
+#         if czi.shape[scene_idx] > 1:
+#             raise ValueError('multi scene czis not allowed at this time')
+#
+#         if preprocessing is None:
+#             image = czi.asarray()
+#         else:
+#             image = czi.sub_asarray(
+#                 channel_idx=preprocessing['ch_indices'],
+#                 as_uint8=preprocessing['as_uint8'],
+#             )
+#         image = np.squeeze(image)
+#
+#         image = sitk.GetImageFromArray(image)
+#
+#     # find out other WSI formats read by tifffile
+#     elif fp_ext in TIFFFILE_EXTS:
+#         largest_series = tf_get_largest_series(image_filepath)
+#
+#         try:
+#             image = tifffile_dask_backend(
+#                 image_filepath, largest_series, preprocessing
+#             )
+#         except ValueError:
+#             image = tifffile_zarr_backend(
+#                 image_filepath, largest_series, preprocessing
+#             )
+#
+#         if (
+#             preprocessing is not None
+#             and preprocessing.get('as_uint8') is True
+#             and image.GetPixelID() != sitk.sitkUInt8
+#         ):
+#             image = sitk.RescaleIntensity(image)
+#             image = sitk.Cast(image, sitk.sitkUInt8)
+#     else:
+#         image = sitk_backend(image_filepath, preprocessing)
+#
+#     return image
+
+#
+# def get_im_info(image_filepath):
+#     """
+#     Use CziFile and tifffile to get image dimension and other information.
+#
+#     Parameters
+#     ----------
+#     image_filepath: str
+#         filepath to the image file
+#
+#     Returns
+#     -------
+#     im_dims: np.ndarray
+#         image dimensions in np.ndarray
+#     im_dtype: np.dtype
+#         data type of the image
+#     reader:str
+#         whether to use "czifile" or "tifffile" to read the image
+#     """
+#     if Path(image_filepath).suffix.lower() == ".czi":
+#         czi = CziFile(image_filepath)
+#         ch_dim_idx = czi.axes.index('C')
+#         y_dim_idx = czi.axes.index('Y')
+#         x_dim_idx = czi.axes.index('X')
+#         im_dims = np.array(czi.shape)[[ch_dim_idx, y_dim_idx, x_dim_idx]]
+#         im_dtype = czi.dtype
+#         reader = "czi"
+#
+#     elif Path(image_filepath).suffix.lower() in TIFFFILE_EXTS:
+#         largest_series = tf_get_largest_series(image_filepath)
+#         zarr_im = zarr.open(
+#             imread(image_filepath, aszarr=True, series=largest_series)
+#         )
+#         zarr_im = zarr_get_base_pyr_layer(zarr_im)
+#         im_dims = np.squeeze(zarr_im.shape)
+#         if len(im_dims) == 2:
+#             im_dims = np.concatenate([[1], im_dims])
+#         im_dtype = zarr_im.dtype
+#         reader = "tifffile"
+#
+#     else:
+#         im_dims, im_dtype = get_sitk_image_info(image_filepath)
+#         reader = "sitk"
+#
+#     return im_dims, im_dtype, reader

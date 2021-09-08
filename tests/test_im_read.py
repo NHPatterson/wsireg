@@ -31,7 +31,7 @@ def test_czi_read_rgb_default_preprocess():
     image_fp = os.path.join(PRIVATE_DIR, "czi_rgb.czi")
     ri = reg_image_loader(image_fp, 1)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -40,7 +40,7 @@ def test_czi_read_rgb_bf_preprocess():
     preprocessing = {"image_type": "BF"}
     ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -59,8 +59,8 @@ def test_czi_read_mc_default_preprocess():
     image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
     ri = reg_image_loader(image_fp, 1)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
-    assert ri.image.GetPixelID() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetPixelID() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -69,8 +69,8 @@ def test_czi_read_mc_fl_preprocess():
     preprocessing = {"image_type": "FL", "as_uint8": True}
     ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
-    assert ri.image.GetPixelID() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetPixelID() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -79,8 +79,8 @@ def test_czi_read_mc_std_preprocess():
     preprocessing = std_prepro()
     ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
-    assert ri.image.GetPixelID() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetPixelID() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -89,8 +89,8 @@ def test_czi_read_mc_selectch_preprocess():
     preprocessing = {"ch_indices": [0]}
     ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
-    assert ri.image.GetPixelID() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetPixelID() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -99,8 +99,8 @@ def test_czi_read_mc_selectch_preprocess():
     preprocessing = {"ch_indices": 0}
     ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
-    assert ri.image.GetPixelID() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetPixelID() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -169,7 +169,7 @@ def test_scn_read_rgb_default_preprocess():
     image_fp = os.path.join(PRIVATE_DIR, "scn_rgb.scn")
     ri = reg_image_loader(image_fp, 1)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -178,7 +178,7 @@ def test_scn_read_rgb_bf_preprocess():
     preprocessing = {"image_type": "BF"}
     ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -196,7 +196,7 @@ def test_huron_read_rgb_default_preprocess():
     image_fp = os.path.join(PRIVATE_DIR, "huron_rgb.tif")
     ri = reg_image_loader(image_fp, 1)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -205,7 +205,7 @@ def test_huron_read_rgb_bf_preprocess():
     preprocessing = {"image_type": "BF"}
     ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -214,7 +214,7 @@ def test_huron_read_rgb_bf_preprocess():
     preprocessing = {"image_type": "BF"}
     ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -231,7 +231,7 @@ def test_ometiff_read_rgb_default_preprocess():
     image_fp = os.path.join(PRIVATE_DIR, "czi_rgb.ome.tiff")
     ri = reg_image_loader(image_fp, 1)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
@@ -251,7 +251,7 @@ def test_ometiff_read_mc_default_preprocess():
     image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.ome.tiff")
     ri = reg_image_loader(image_fp, 1)
     ri.read_reg_image()
-    assert ri.image.GetNumberOfComponentsPerPixel() == 1
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
