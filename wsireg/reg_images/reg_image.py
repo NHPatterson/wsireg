@@ -276,13 +276,38 @@ class RegImage:
         return image, transforms
 
     def reg_image_sitk_to_itk(self, cast_to_float32=True):
-        self.reg_image = sitk_image_to_itk_image(
-            self.reg_image, cast_to_float32=cast_to_float32
-        )
+        origin = self.reg_image.GetOrigin()
+        spacing = self.reg_image.GetSpacing()
+        # direction = image.GetDirection()
+        is_vector = self.reg_image.GetNumberOfComponentsPerPixel() > 1
+        if cast_to_float32 is True:
+            self.reg_image = sitk.Cast(self.reg_image, sitk.sitkFloat32)
+            self.reg_image = sitk.GetArrayFromImage(self.reg_image)
+        else:
+            self.reg_image = sitk.GetArrayFromImage(self.reg_image)
+
+        self.reg_image = itk.GetImageFromArray(self.reg_image, is_vector=is_vector)
+        self.reg_image.SetOrigin(origin)
+        self.reg_image.SetSpacing(spacing)
+
         if self.mask is not None:
             self.mask = sitk_image_to_itk_image(
                 self.mask, cast_to_float32=False
             )
+            origin = self.mask.GetOrigin()
+            spacing = self.mask.GetSpacing()
+            # direction = image.GetDirection()
+            is_vector = self.mask.GetNumberOfComponentsPerPixel() > 1
+            if cast_to_float32 is True:
+                self.mask = sitk.Cast(self.mask, sitk.sitkFloat32)
+                self.mask = sitk.GetArrayFromImage(self.mask)
+            else:
+                self.mask = sitk.GetArrayFromImage(self.mask)
+
+            self.mask = itk.GetImageFromArray(self.mask, is_vector=is_vector)
+            self.mask.SetOrigin(origin)
+            self.mask.SetSpacing(spacing)
+
             mask_im_type = itk.Image[itk.UC, 2]
             self.mask = itk.binary_threshold_image_filter(
                 self.mask,
