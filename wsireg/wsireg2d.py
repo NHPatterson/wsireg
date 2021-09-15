@@ -739,7 +739,16 @@ class WsiReg2D(object):
         self._transformations = self._collate_transformations()
 
     def add_merge_modalities(self, merge_name, modalities):
-        self.merge_modalities.update({merge_name: modalities})
+        for modality in modalities:
+            try:
+                self.modalities[modality]
+            except KeyError:
+                raise ValueError(
+                    f"Modality for merger [{modality}] is not a modality "
+                    f"within the graph, current modalitles : "
+                    f"{self.modality_names}"
+                )
+            self.merge_modalities.update({merge_name: modalities})
 
     def _generate_reg_transforms(self):
         self._reg_graph_edges["reg_transforms"]
@@ -924,11 +933,14 @@ class WsiReg2D(object):
                     initial_transforms = self._check_cache_modality(sub_image)[
                         1
                     ][0]
-                    initial_transforms = [
-                        RegTransform(t) for t in initial_transforms
-                    ]
-                    final_modalities.append(sub_image)
-                    transforms = {"initial": initial_transforms}
+                    if initial_transforms:
+                        initial_transforms = [
+                            RegTransform(t) for t in initial_transforms
+                        ]
+                        final_modalities.append(sub_image)
+                        transforms = {"initial": initial_transforms}
+                    else:
+                        transforms = None
 
                 transformations.append(transforms)
 
