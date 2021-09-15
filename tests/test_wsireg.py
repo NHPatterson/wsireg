@@ -136,6 +136,28 @@ def test_wsireg2d_add_modality_duplicated_error(data_out_dir, data_im_fp):
         )
 
 
+def test_wsireg2d_add_merge_modality_notfound(data_out_dir, data_im_fp):
+    wsi_reg = WsiReg2D("test_proj_merge_nf", str(data_out_dir))
+    img_fp1 = str(data_im_fp)
+    wsi_reg.add_modality(
+        "test_mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+    img_fp1 = str(data_im_fp)
+    wsi_reg.add_modality(
+        "test_mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+    with pytest.raises(ValueError):
+        wsi_reg.add_merge_modalities("mergetest", ["test_mod1", "test_mod3"])
+
+
 @pytest.mark.usefixtures("disk_im_gry")
 def test_wsireg_run_reg(data_out_dir, disk_im_gry):
     wsi_reg = WsiReg2D("test_proj6", str(data_out_dir))
@@ -307,3 +329,34 @@ def test_wsireg_run_reg_with_crop_merge(data_out_dir, disk_im_gry):
     registered_image_crop = reg_image_loader(im_fps[0], 1)
     assert registered_image_nocrop.im_dims[1:] == (2048, 2048)
     assert registered_image_crop.im_dims[1:] == (512, 512)
+
+
+def test_wsireg_run_reg_wmerge(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj-merge-work", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_reg_path(
+        "mod1", "mod2", reg_params=["rigid_test", "affine_test"]
+    )
+    wsi_reg.add_merge_modalities("test_merge", ["mod1", "mod2"])
+    wsi_reg.register_images()
+    im_fps = wsi_reg.transform_images(transform_non_reg=True)
+    merged_im = reg_image_loader(im_fps[0], 0.65)
+    assert Path(im_fps[0]).exists() is True
+    assert merged_im.im_dims == (2, 2048, 2048)
