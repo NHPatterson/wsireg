@@ -7,9 +7,9 @@ from wsireg.utils.im_utils import (
     sitk_inv_int,
     transform_to_ome_zarr,
     compute_mask_to_bbox,
+    transform_plane,
 )
 from wsireg.utils.tform_utils import (
-    transform_2d_image_itkelx,
     gen_aff_tform_flip,
     gen_rigid_tform_rot,
     gen_rigid_translation,
@@ -160,9 +160,21 @@ class RegImage:
                 translation_transform = gen_rigid_translation(
                     image, self.image_res, bbox[0], bbox[1], bbox[2], bbox[3]
                 )
-                image = transform_2d_image_itkelx(
-                    image, [translation_transform]
+
+                (
+                    composite_transform,
+                    _,
+                    final_tform,
+                ) = prepare_wsireg_transform_data(
+                    {"initial": [translation_transform]}
                 )
+
+                image = transform_plane(
+                    image, final_tform, composite_transform
+                )
+                # image = transform_2d_image_itkelx(
+                #     image, [translation_transform]
+                # )
 
                 self.original_size_transform = gen_rig_to_original(
                     original_size, deepcopy(translation_transform)
@@ -170,8 +182,11 @@ class RegImage:
 
                 if self.mask is not None:
                     self.mask.SetSpacing((self.image_res, self.image_res))
-                    self.mask = transform_2d_image_itkelx(
-                        self.mask, [translation_transform]
+                    # self.mask = transform_2d_image_itkelx(
+                    #     self.mask, [translation_transform]
+                    # )
+                    self.mask = transform_plane(
+                        self.mask, final_tform, composite_transform
                     )
                 transforms.append(translation_transform)
 
@@ -182,13 +197,27 @@ class RegImage:
                     rot_tform = gen_rigid_tform_rot(
                         image, self.image_res, rotangle
                     )
-                    image = transform_2d_image_itkelx(image, [rot_tform])
+                    (
+                        composite_transform,
+                        _,
+                        final_tform,
+                    ) = prepare_wsireg_transform_data(
+                        {"initial": [rot_tform]}
+                    )
+
+                    image = transform_plane(
+                        image, final_tform, composite_transform
+                    )
+                    # image = transform_2d_image_itkelx(image, [rot_tform])
 
                     if self.mask is not None:
-                        self.mask = transform_2d_image_itkelx(
-                            self.mask, [rot_tform]
+                        self.mask.SetSpacing((self.image_res, self.image_res))
+                        # self.mask = transform_2d_image_itkelx(
+                        #     self.mask, [translation_transform]
+                        # )
+                        self.mask = transform_plane(
+                            self.mask, final_tform, composite_transform
                         )
-
                     transforms.append(rot_tform)
 
             if spatial_preprocessing.get("flip") is not None:
@@ -200,11 +229,22 @@ class RegImage:
                         image, self.image_res, flip_direction
                     )
 
-                    image = transform_2d_image_itkelx(image, [flip_tform])
+                    (
+                        composite_transform,
+                        _,
+                        final_tform,
+                    ) = prepare_wsireg_transform_data(
+                        {"initial": [flip_tform]}
+                    )
+
+                    image = transform_plane(
+                        image, final_tform, composite_transform
+                    )
 
                     if self.mask is not None:
-                        self.mask = transform_2d_image_itkelx(
-                            self.mask, [flip_tform]
+                        self.mask.SetSpacing((self.image_res, self.image_res))
+                        self.mask = transform_plane(
+                            self.mask, final_tform, composite_transform
                         )
 
                     transforms.append(flip_tform)
