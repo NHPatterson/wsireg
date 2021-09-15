@@ -743,9 +743,11 @@ class WsiReg2D(object):
             try:
                 self.modalities[modality]
             except KeyError:
-                raise ValueError(f"Modality for merger [{modality}] is not a modality "
-                                 f"within the graph, current modalitles : "
-                                 f"{self.modality_names}")
+                raise ValueError(
+                    f"Modality for merger [{modality}] is not a modality "
+                    f"within the graph, current modalitles : "
+                    f"{self.modality_names}"
+                )
             self.merge_modalities.update({merge_name: modalities})
 
     def _generate_reg_transforms(self):
