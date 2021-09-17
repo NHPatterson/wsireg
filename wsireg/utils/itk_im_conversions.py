@@ -1,6 +1,5 @@
 import SimpleITK as sitk
 import itk
-import numpy as np
 
 
 def itk_image_to_sitk_image(image):

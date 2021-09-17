@@ -73,11 +73,13 @@ def disk_im_mch(tmpdir_factory, im_mch_np):
     imwrite(out_im, im_mch_np, tile=(256, 256))
     return out_im
 
+
 @pytest.fixture
 def disk_im_mch_notile(tmpdir_factory, im_mch_np):
     out_im = tmpdir_factory.mktemp("image").join("image_fp_mch_nt.tiff")
-    imwrite(out_im, im_mch_np, photometric="MINISBLACK", tile=(256,256))
+    imwrite(out_im, im_mch_np, photometric="MINISBLACK", tile=(256, 256))
     return out_im
+
 
 @pytest.fixture
 def disk_im_rgb(tmpdir_factory, im_rgb_np):
