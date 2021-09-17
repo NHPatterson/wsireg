@@ -25,6 +25,7 @@ from wsireg.utils.im_utils import (
     ARRAYLIKE_CLASSES,
 )
 
+
 class WsiReg2D(object):
     """
     Class to define a 2D registration graph and execute the registrations and transformations of the graph
@@ -569,7 +570,7 @@ class WsiReg2D(object):
         [rge.pop("reg_transforms", None) for rge in reg_graph_edges]
 
         modalities_out = deepcopy(self.modalities)
-        for mod,data in modalities_out.items():
+        for mod, data in modalities_out.items():
             if isinstance(data["image_filepath"], ARRAYLIKE_CLASSES):
                 data["image_filepath"] = "ArrayLike"
 
