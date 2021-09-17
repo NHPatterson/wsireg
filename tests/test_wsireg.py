@@ -410,3 +410,38 @@ def test_wsireg_run_reg_wmerge_and_indiv(data_out_dir, disk_im_gry):
     assert Path(im_fps[2]).exists() is True
     assert Path(im_fps[3]).exists() is True
     assert merged_im.im_dims == (2, 2048, 2048)
+
+
+def test_wsireg_run_reg_wattachment(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj-attach", str(data_out_dir))
+    im1 = np.random.randint(0, 255, (2048, 2048), dtype=np.uint16)
+    im2 = np.random.randint(0, 255, (2048, 2048), dtype=np.uint16)
+
+    wsi_reg.add_modality(
+        "mod1",
+        im1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        im2,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+    wsi_reg.add_attachment_images("mod2", "attached", im2, image_res=0.65)
+
+    wsi_reg.add_reg_path(
+        "mod2", "mod1", reg_params=["rigid_test", "affine_test"]
+    )
+
+    wsi_reg.register_images()
+    im_fps = wsi_reg.transform_images(transform_non_reg=False)
+
+    regim = reg_image_loader(im_fps[0], 0.65)
+    attachim = reg_image_loader(im_fps[1], 0.65)
+
+    assert np.array_equal(regim.image.compute(), attachim.image.compute())

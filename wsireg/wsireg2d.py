@@ -21,6 +21,9 @@ from wsireg.utils.tform_conversion import get_elastix_transforms
 from wsireg.utils.tform_utils import (
     prepare_wsireg_transform_data,
 )
+from wsireg.utils.im_utils import (
+    ARRAYLIKE_CLASSES,
+)
 
 
 class WsiReg2D(object):
@@ -566,11 +569,16 @@ class WsiReg2D(object):
 
         [rge.pop("reg_transforms", None) for rge in reg_graph_edges]
 
+        modalities_out = deepcopy(self.modalities)
+        for mod, data in modalities_out.items():
+            if isinstance(data["image_filepath"], ARRAYLIKE_CLASSES):
+                data["image_filepath"] = "ArrayLike"
+
         config = {
             "project_name": self.project_name,
             "output_dir": str(self.output_dir),
             "cache_images": self.cache_images,
-            "modalities": self.modalities,
+            "modalities": modalities_out,
             "reg_paths": reg_paths,
             "reg_graph_edges": reg_graph_edges
             if status == "registered"
