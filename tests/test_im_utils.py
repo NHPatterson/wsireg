@@ -17,7 +17,7 @@ from wsireg.utils.im_utils import (
     CziRegImageReader,
     tf_get_largest_series,
     get_sitk_image_info,
-    get_tifffile_info
+    get_tifffile_info,
 )
 
 # private data logic borrowed from https://github.com/cgohlke/tifffile/tests/test_tifffile.py
@@ -341,6 +341,7 @@ def test_greyscale():
     assert da_gs_noil.shape == (2048, 2048)
     assert np.array_equal(da_gs_il.compute(), da_gs_noil.compute())
 
+
 # PRIVATE_DIR = "tests/private_data"
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_czi_tile_greyscale():
@@ -355,6 +356,7 @@ def test_czi_tile_greyscale():
     assert tile_gs.shape[-1] == 1
     assert tile_gs.dtype == np.uint8
 
+
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_CziRegImageReader_rgb():
     image_fp = os.path.join(PRIVATE_DIR, "czi_rgb.czi")
@@ -365,6 +367,7 @@ def test_CziRegImageReader_rgb():
     assert len(np.squeeze(gs_out).shape) == 2
     assert len(np.squeeze(rgb_out).shape) == 3
 
+
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_CziRegImageReader_mc():
     image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
@@ -374,16 +377,19 @@ def test_CziRegImageReader_mc():
     ch1_out = czi.sub_asarray(channel_idx=[1], max_workers=1)
     ch2_out = czi.sub_asarray(channel_idx=[2], max_workers=1)
     ch3_out = czi.sub_asarray(channel_idx=[3], max_workers=1)
-    ch02_out = czi.sub_asarray(channel_idx=[0,2],max_workers=1)
+    ch02_out = czi.sub_asarray(channel_idx=[0, 2], max_workers=1)
 
     assert np.squeeze(mc_out).shape == (4, 4305, 4194)
-    assert np.squeeze(ch0_out).shape == (4305,4194)
-    assert np.squeeze(ch1_out).shape == (4305,4194)
-    assert np.squeeze(ch1_out).shape == (4305,4194)
-    assert np.squeeze(ch2_out).shape == (4305,4194)
-    assert np.squeeze(ch3_out).shape == (4305,4194)
-    assert np.squeeze(ch02_out).shape == (2,4305,4194)
-    assert np.array_equal(np.squeeze(ch02_out), np.squeeze(mc_out)[[0,2],:,:])
+    assert np.squeeze(ch0_out).shape == (4305, 4194)
+    assert np.squeeze(ch1_out).shape == (4305, 4194)
+    assert np.squeeze(ch1_out).shape == (4305, 4194)
+    assert np.squeeze(ch2_out).shape == (4305, 4194)
+    assert np.squeeze(ch3_out).shape == (4305, 4194)
+    assert np.squeeze(ch02_out).shape == (2, 4305, 4194)
+    assert np.array_equal(
+        np.squeeze(ch02_out), np.squeeze(mc_out)[[0, 2], :, :]
+    )
+
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_tf_get_largest_series():
@@ -396,24 +402,34 @@ def test_tf_get_largest_series():
     assert tf_get_largest_series(image_fp_bigtiff) == 0
     assert tf_get_largest_series(image_fp_scn) == 1
 
+
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_get_sitk_image_info():
     image_fp_jpgrgb = os.path.join(PRIVATE_DIR, "testjpegrgb.jpg")
     image_fp_pngrgb = os.path.join(PRIVATE_DIR, "testpngrgb.png")
 
-    assert np.array_equal(get_sitk_image_info(image_fp_jpgrgb)[0], [450,750,3])
+    assert np.array_equal(
+        get_sitk_image_info(image_fp_jpgrgb)[0], [450, 750, 3]
+    )
     assert get_sitk_image_info(image_fp_jpgrgb)[1] == np.uint8
-    assert np.array_equal(get_sitk_image_info(image_fp_pngrgb)[0], [450,750,3])
+    assert np.array_equal(
+        get_sitk_image_info(image_fp_pngrgb)[0], [450, 750, 3]
+    )
     assert get_sitk_image_info(image_fp_pngrgb)[1] == np.uint8
+
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_get_tifffile_info_private():
     image_fp_bigtiff = os.path.join(PRIVATE_DIR, "huron_rgb.tif")
     image_fp_scn = os.path.join(PRIVATE_DIR, "scn_rgb.scn")
 
-    assert np.array_equal(get_tifffile_info(image_fp_bigtiff)[0], [7662, 15778,     3])
+    assert np.array_equal(
+        get_tifffile_info(image_fp_bigtiff)[0], [7662, 15778, 3]
+    )
     assert get_tifffile_info(image_fp_bigtiff)[1] == np.uint8
-    assert np.array_equal(get_tifffile_info(image_fp_scn)[0], [11776, 18528,     3])
+    assert np.array_equal(
+        get_tifffile_info(image_fp_scn)[0], [11776, 18528, 3]
+    )
     assert get_tifffile_info(image_fp_scn)[1] == np.uint8
 
 
@@ -428,11 +444,17 @@ def test_get_tifffile_info_public(
     disk_im_rgb_pyr,
 ):
 
-    assert np.array_equal(get_tifffile_info(disk_im_rgb_pyr)[0], [2048,2048,3])
+    assert np.array_equal(
+        get_tifffile_info(disk_im_rgb_pyr)[0], [2048, 2048, 3]
+    )
     assert get_tifffile_info(disk_im_rgb_pyr)[1] == np.uint8
 
-    assert np.array_equal(get_tifffile_info(disk_im_mch_pyr)[0], [3,2048,2048])
+    assert np.array_equal(
+        get_tifffile_info(disk_im_mch_pyr)[0], [3, 2048, 2048]
+    )
     assert get_tifffile_info(disk_im_mch_pyr)[1] == np.uint16
 
-    assert np.array_equal(get_tifffile_info(disk_im_gry_pyr)[0], [1,2048,2048])
+    assert np.array_equal(
+        get_tifffile_info(disk_im_gry_pyr)[0], [1, 2048, 2048]
+    )
     assert get_tifffile_info(disk_im_gry_pyr)[1] == np.uint16

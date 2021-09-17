@@ -1,6 +1,5 @@
 import SimpleITK as sitk
 import itk
-import numpy as np
 
 
 def itk_image_to_sitk_image(image):
@@ -23,7 +22,8 @@ def sitk_image_to_itk_image(image, cast_to_float32=False):
     # direction = image.GetDirection()
     is_vector = image.GetNumberOfComponentsPerPixel() > 1
     if cast_to_float32 is True:
-        image = sitk.GetArrayFromImage(image).astype(np.float32)
+        image = sitk.Cast(image, sitk.sitkFloat32)
+        image = sitk.GetArrayFromImage(image)
     else:
         image = sitk.GetArrayFromImage(image)
 

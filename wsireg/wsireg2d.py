@@ -988,6 +988,7 @@ class WsiReg2D(object):
         self,
         file_writer="ome.tiff",
         transform_non_reg=True,
+        remove_merged=True,
         to_original_size=True,
     ):
         """
@@ -998,6 +999,13 @@ class WsiReg2D(object):
         file_writer : str
             output type to use, sitk writes a single resolution tiff, "zarr" writes an ome-zarr multiscale
             zarr store
+        transform_non_reg : bool
+            whether to write the images that aren't transformed during registration as well
+        remove_merged: bool
+            whether to remove images that are stored in merged store, if True, images that are merged
+            will not be written as individual images as well
+        to_original_size: bool
+            write images that have been cropped for registration back to their original coordinate space
         """
         image_fps = []
 
@@ -1013,17 +1021,18 @@ class WsiReg2D(object):
             reg_path_keys = list(self.reg_paths.keys())
             nonreg_keys = self._find_nonreg_modalities()
 
-            for merge_mod in merge_modalities:
-                try:
-                    m_idx = reg_path_keys.index(merge_mod)
-                    reg_path_keys.pop(m_idx)
-                except ValueError:
-                    pass
-                try:
-                    m_idx = nonreg_keys.index(merge_mod)
-                    nonreg_keys.pop(m_idx)
-                except ValueError:
-                    pass
+            if remove_merged:
+                for merge_mod in merge_modalities:
+                    try:
+                        m_idx = reg_path_keys.index(merge_mod)
+                        reg_path_keys.pop(m_idx)
+                    except ValueError:
+                        pass
+                    try:
+                        m_idx = nonreg_keys.index(merge_mod)
+                        nonreg_keys.pop(m_idx)
+                    except ValueError:
+                        pass
 
             for modality in reg_path_keys:
                 (

@@ -360,3 +360,53 @@ def test_wsireg_run_reg_wmerge(data_out_dir, disk_im_gry):
     merged_im = reg_image_loader(im_fps[0], 0.65)
     assert Path(im_fps[0]).exists() is True
     assert merged_im.im_dims == (2, 2048, 2048)
+
+
+def test_wsireg_run_reg_wmerge_and_indiv(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj-merge-and-unmerge", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_modality(
+        "mod3",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_reg_path(
+        "mod2", "mod1", reg_params=["rigid_test", "affine_test"]
+    )
+    wsi_reg.add_reg_path(
+        "mod3", "mod1", reg_params=["rigid_test", "affine_test"]
+    )
+    wsi_reg.add_merge_modalities("test_merge", ["mod1", "mod2"])
+    wsi_reg.register_images()
+    im_fps = wsi_reg.transform_images(
+        remove_merged=False, transform_non_reg=True
+    )
+
+    merged_im = reg_image_loader(im_fps[-2], 0.65)
+
+    assert len(im_fps) == 4
+    assert Path(im_fps[0]).exists() is True
+    assert Path(im_fps[1]).exists() is True
+    assert Path(im_fps[2]).exists() is True
+    assert Path(im_fps[3]).exists() is True
+    assert merged_im.im_dims == (2, 2048, 2048)

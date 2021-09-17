@@ -7,17 +7,14 @@ from wsireg.utils.im_utils import (
     sitk_inv_int,
     transform_to_ome_zarr,
     compute_mask_to_bbox,
+    transform_plane,
 )
 from wsireg.utils.tform_utils import (
-    transform_2d_image_itkelx,
     gen_aff_tform_flip,
     gen_rigid_tform_rot,
     gen_rigid_translation,
     gen_rig_to_original,
     prepare_wsireg_transform_data,
-)
-from wsireg.utils.itk_im_conversions import (
-    sitk_image_to_itk_image,
 )
 from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 
@@ -160,9 +157,21 @@ class RegImage:
                 translation_transform = gen_rigid_translation(
                     image, self.image_res, bbox[0], bbox[1], bbox[2], bbox[3]
                 )
-                image = transform_2d_image_itkelx(
-                    image, [translation_transform]
+
+                (
+                    composite_transform,
+                    _,
+                    final_tform,
+                ) = prepare_wsireg_transform_data(
+                    {"initial": [translation_transform]}
                 )
+
+                image = transform_plane(
+                    image, final_tform, composite_transform
+                )
+                # image = transform_2d_image_itkelx(
+                #     image, [translation_transform]
+                # )
 
                 self.original_size_transform = gen_rig_to_original(
                     original_size, deepcopy(translation_transform)
@@ -170,8 +179,11 @@ class RegImage:
 
                 if self.mask is not None:
                     self.mask.SetSpacing((self.image_res, self.image_res))
-                    self.mask = transform_2d_image_itkelx(
-                        self.mask, [translation_transform]
+                    # self.mask = transform_2d_image_itkelx(
+                    #     self.mask, [translation_transform]
+                    # )
+                    self.mask = transform_plane(
+                        self.mask, final_tform, composite_transform
                     )
                 transforms.append(translation_transform)
 
@@ -182,13 +194,25 @@ class RegImage:
                     rot_tform = gen_rigid_tform_rot(
                         image, self.image_res, rotangle
                     )
-                    image = transform_2d_image_itkelx(image, [rot_tform])
+                    (
+                        composite_transform,
+                        _,
+                        final_tform,
+                    ) = prepare_wsireg_transform_data({"initial": [rot_tform]})
+
+                    image = transform_plane(
+                        image, final_tform, composite_transform
+                    )
+                    # image = transform_2d_image_itkelx(image, [rot_tform])
 
                     if self.mask is not None:
-                        self.mask = transform_2d_image_itkelx(
-                            self.mask, [rot_tform]
+                        self.mask.SetSpacing((self.image_res, self.image_res))
+                        # self.mask = transform_2d_image_itkelx(
+                        #     self.mask, [translation_transform]
+                        # )
+                        self.mask = transform_plane(
+                            self.mask, final_tform, composite_transform
                         )
-
                     transforms.append(rot_tform)
 
             if spatial_preprocessing.get("flip") is not None:
@@ -200,11 +224,22 @@ class RegImage:
                         image, self.image_res, flip_direction
                     )
 
-                    image = transform_2d_image_itkelx(image, [flip_tform])
+                    (
+                        composite_transform,
+                        _,
+                        final_tform,
+                    ) = prepare_wsireg_transform_data(
+                        {"initial": [flip_tform]}
+                    )
+
+                    image = transform_plane(
+                        image, final_tform, composite_transform
+                    )
 
                     if self.mask is not None:
-                        self.mask = transform_2d_image_itkelx(
-                            self.mask, [flip_tform]
+                        self.mask.SetSpacing((self.image_res, self.image_res))
+                        self.mask = transform_plane(
+                            self.mask, final_tform, composite_transform
                         )
 
                     transforms.append(flip_tform)
@@ -236,13 +271,37 @@ class RegImage:
         return image, transforms
 
     def reg_image_sitk_to_itk(self, cast_to_float32=True):
-        self.reg_image = sitk_image_to_itk_image(
-            self.reg_image, cast_to_float32=cast_to_float32
+        origin = self.reg_image.GetOrigin()
+        spacing = self.reg_image.GetSpacing()
+        # direction = image.GetDirection()
+        is_vector = self.reg_image.GetNumberOfComponentsPerPixel() > 1
+        if cast_to_float32 is True:
+            self.reg_image = sitk.Cast(self.reg_image, sitk.sitkFloat32)
+            self.reg_image = sitk.GetArrayFromImage(self.reg_image)
+        else:
+            self.reg_image = sitk.GetArrayFromImage(self.reg_image)
+
+        self.reg_image = itk.GetImageFromArray(
+            self.reg_image, is_vector=is_vector
         )
+        self.reg_image.SetOrigin(origin)
+        self.reg_image.SetSpacing(spacing)
+
         if self.mask is not None:
-            self.mask = sitk_image_to_itk_image(
-                self.mask, cast_to_float32=False
-            )
+            origin = self.mask.GetOrigin()
+            spacing = self.mask.GetSpacing()
+            # direction = image.GetDirection()
+            is_vector = self.mask.GetNumberOfComponentsPerPixel() > 1
+            if cast_to_float32 is True:
+                self.mask = sitk.Cast(self.mask, sitk.sitkFloat32)
+                self.mask = sitk.GetArrayFromImage(self.mask)
+            else:
+                self.mask = sitk.GetArrayFromImage(self.mask)
+
+            self.mask = itk.GetImageFromArray(self.mask, is_vector=is_vector)
+            self.mask.SetOrigin(origin)
+            self.mask.SetSpacing(spacing)
+
             mask_im_type = itk.Image[itk.UC, 2]
             self.mask = itk.binary_threshold_image_filter(
                 self.mask,
