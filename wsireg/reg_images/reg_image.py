@@ -16,9 +16,6 @@ from wsireg.utils.tform_utils import (
     gen_rig_to_original,
     prepare_wsireg_transform_data,
 )
-from wsireg.utils.itk_im_conversions import (
-    sitk_image_to_itk_image,
-)
 from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 
 
@@ -201,9 +198,7 @@ class RegImage:
                         composite_transform,
                         _,
                         final_tform,
-                    ) = prepare_wsireg_transform_data(
-                        {"initial": [rot_tform]}
-                    )
+                    ) = prepare_wsireg_transform_data({"initial": [rot_tform]})
 
                     image = transform_plane(
                         image, final_tform, composite_transform
@@ -286,14 +281,13 @@ class RegImage:
         else:
             self.reg_image = sitk.GetArrayFromImage(self.reg_image)
 
-        self.reg_image = itk.GetImageFromArray(self.reg_image, is_vector=is_vector)
+        self.reg_image = itk.GetImageFromArray(
+            self.reg_image, is_vector=is_vector
+        )
         self.reg_image.SetOrigin(origin)
         self.reg_image.SetSpacing(spacing)
 
         if self.mask is not None:
-            self.mask = sitk_image_to_itk_image(
-                self.mask, cast_to_float32=False
-            )
             origin = self.mask.GetOrigin()
             spacing = self.mask.GetSpacing()
             # direction = image.GetDirection()
