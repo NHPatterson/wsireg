@@ -367,17 +367,20 @@ def test_CziRegImageReader_rgb():
     assert len(np.squeeze(gs_out).shape) == 2
     assert len(np.squeeze(rgb_out).shape) == 3
 
-
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_CziRegImageReader_mc():
     image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
     czi = CziRegImageReader(image_fp)
-    mc_out = czi.sub_asarray(max_workers=1)
+    mc_out = czi.asarray(max_workers=1)
     ch0_out = czi.sub_asarray(channel_idx=[0], max_workers=1)
     ch1_out = czi.sub_asarray(channel_idx=[1], max_workers=1)
     ch2_out = czi.sub_asarray(channel_idx=[2], max_workers=1)
     ch3_out = czi.sub_asarray(channel_idx=[3], max_workers=1)
     ch02_out = czi.sub_asarray(channel_idx=[0, 2], max_workers=1)
+    ch13_out = czi.sub_asarray(channel_idx=[1, 3], max_workers=1)
+    ch03_out = czi.sub_asarray(channel_idx=[0, 3], max_workers=1)
+    ch12_out = czi.sub_asarray(channel_idx=[1, 2], max_workers=1)
+    ch23_out = czi.sub_asarray(channel_idx=[2, 3], max_workers=1)
 
     assert np.squeeze(mc_out).shape == (4, 4305, 4194)
     assert np.squeeze(ch0_out).shape == (4305, 4194)
@@ -389,6 +392,22 @@ def test_CziRegImageReader_mc():
     assert np.array_equal(
         np.squeeze(ch02_out), np.squeeze(mc_out)[[0, 2], :, :]
     )
+    assert np.array_equal(
+        np.squeeze(ch13_out), np.squeeze(mc_out)[[1, 3], :, :]
+    )
+    assert np.array_equal(
+        np.squeeze(ch03_out), np.squeeze(mc_out)[[0, 3], :, :]
+    )
+    assert np.array_equal(
+        np.squeeze(ch12_out), np.squeeze(mc_out)[[1, 2], :, :]
+    )
+    assert np.array_equal(
+        np.squeeze(ch23_out), np.squeeze(mc_out)[[2, 3], :, :]
+    )
+    assert np.array_equal(np.squeeze(mc_out)[0,:,:], np.squeeze(ch0_out))
+    assert np.array_equal(np.squeeze(mc_out)[1,:,:], np.squeeze(ch1_out))
+    assert np.array_equal(np.squeeze(mc_out)[2,:,:], np.squeeze(ch2_out))
+    assert np.array_equal(np.squeeze(mc_out)[3,:,:], np.squeeze(ch3_out))
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
