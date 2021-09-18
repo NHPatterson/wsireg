@@ -399,9 +399,7 @@ class CziRegImageReader(CziFile):
                 if subblock_ch_idx in channel_idx:
                     subblock.dimension_entries[czi_c_idx].start
                     tile = subblock.data(resize=resize, order=order)
-                    dvstart[ch_dim_idx] = subblock_ch_idx - min_ch_seq.get(
-                        subblock_ch_idx
-                    )
+                    dvstart[ch_dim_idx] = min_ch_seq.get(subblock_ch_idx)
                 else:
                     return
             else:

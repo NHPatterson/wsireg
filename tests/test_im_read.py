@@ -120,6 +120,9 @@ def test_czi_read_mc_read_channels():
     assert np.ndim(ch1) == 6
     assert np.ndim(ch2) == 6
     assert np.ndim(ch3) == 6
+    assert np.mean(ch1) > 0
+    assert np.mean(ch2) > 0
+    assert np.mean(ch3) > 0
     assert np.array_equal(ch0, ch1) is False
     assert np.array_equal(ch0, ch2) is False
     assert np.array_equal(ch0, ch3) is False
