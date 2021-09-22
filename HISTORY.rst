@@ -1,4 +1,4 @@
-=======
+git=======
 History
 =======
 
@@ -24,8 +24,9 @@ History
 
 * use `RegTransform` class to manage transformations
 
-0.3.0 (2021-09-02)
+0.3.0 (2021-09-22)
 ------------------
 
 * add "ome.tiff-bytile" writer to write transformed images tile-by-tile
 * unify data reading from tiffs to use `dask`
+* numerous improvements, bug fixes, and additional tests
