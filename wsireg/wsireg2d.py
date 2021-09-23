@@ -1147,45 +1147,52 @@ class WsiReg2D(object):
         """
         Save all transformations for a given modality as JSON
         """
-        for key in self.reg_paths.keys():
+        if all(
+            [reg_edge.get("registered") for reg_edge in self.reg_graph_edges]
+        ):
+            for key in self.reg_paths.keys():
 
-            final_modality = self.reg_paths[key][-1]
+                final_modality = self.reg_paths[key][-1]
 
-            output_path = (
-                self.output_dir
-                / "{}-{}_to_{}_transformations.json".format(
-                    self.project_name,
-                    key,
-                    final_modality,
+                output_path = (
+                    self.output_dir
+                    / "{}-{}_to_{}_transformations.json".format(
+                        self.project_name,
+                        key,
+                        final_modality,
+                    )
                 )
-            )
-            out_transforms = get_elastix_transforms(self.transformations[key])
-
-            with open(output_path, 'w') as fp:
-                json.dump(out_transforms, fp, indent=4)
-
-        for (
-            modality,
-            attachment_modality,
-        ) in self.attachment_images.items():
-
-            final_modality = self.reg_paths[attachment_modality][-1]
-
-            output_path = (
-                self.output_dir
-                / "{}-{}_to_{}_transformations.json".format(
-                    self.project_name,
-                    modality,
-                    final_modality,
+                out_transforms = get_elastix_transforms(
+                    self.transformations[key]
                 )
-            )
 
-            out_transforms = get_elastix_transforms(
-                self.transformations[modality]
-            )
+                with open(output_path, 'w') as fp:
+                    json.dump(out_transforms, fp, indent=4)
 
-            with open(output_path, 'w') as fp:
-                json.dump(out_transforms, fp, indent=4)
+            for (
+                modality,
+                attachment_modality,
+            ) in self.attachment_images.items():
+
+                final_modality = self.reg_paths[attachment_modality][-1]
+
+                output_path = (
+                    self.output_dir
+                    / "{}-{}_to_{}_transformations.json".format(
+                        self.project_name,
+                        modality,
+                        final_modality,
+                    )
+                )
+
+                out_transforms = get_elastix_transforms(
+                    self.transformations[attachment_modality]
+                )
+
+                with open(output_path, 'w') as fp:
+                    json.dump(out_transforms, fp, indent=4)
+        else:
+            print("registration has not been executed for the graph")
 
     def add_data_from_config(self, config_filepath):
 
