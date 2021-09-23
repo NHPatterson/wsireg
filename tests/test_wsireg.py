@@ -183,6 +183,7 @@ def test_wsireg_run_reg(data_out_dir, disk_im_gry):
         "mod1", "mod2", reg_params=["rigid_test", "affine_test"]
     )
     wsi_reg.register_images()
+    wsi_reg.save_transformations()
     im_fps = wsi_reg.transform_images(transform_non_reg=True)
 
     assert Path(im_fps[0]).exists() is True
@@ -227,6 +228,8 @@ def test_wsireg_run_reg_with_crop(data_out_dir, disk_im_gry):
     im_fps = wsi_reg.transform_images(
         transform_non_reg=True, to_original_size=False
     )
+    wsi_reg.save_transformations()
+
     #
     registered_image_crop = reg_image_loader(im_fps[0], 1)
     unregistered_image_crop = reg_image_loader(im_fps[1], 1)
@@ -272,6 +275,7 @@ def test_wsireg_run_reg_with_flip_crop(data_out_dir, disk_im_gry):
     im_fps = wsi_reg.transform_images(
         transform_non_reg=True, to_original_size=False
     )
+    wsi_reg.save_transformations()
 
     registered_image_crop = reg_image_loader(im_fps[0], 1)
     unregistered_image_crop = reg_image_loader(im_fps[1], 1)
@@ -326,6 +330,7 @@ def test_wsireg_run_reg_with_crop_merge(data_out_dir, disk_im_gry):
     im_fps = wsi_reg.transform_images(
         transform_non_reg=True, to_original_size=False
     )
+    wsi_reg.save_transformations()
     registered_image_crop = reg_image_loader(im_fps[0], 1)
     assert registered_image_nocrop.im_dims[1:] == (2048, 2048)
     assert registered_image_crop.im_dims[1:] == (512, 512)
@@ -356,6 +361,7 @@ def test_wsireg_run_reg_wmerge(data_out_dir, disk_im_gry):
     )
     wsi_reg.add_merge_modalities("test_merge", ["mod1", "mod2"])
     wsi_reg.register_images()
+    wsi_reg.save_transformations()
     im_fps = wsi_reg.transform_images(transform_non_reg=True)
     merged_im = reg_image_loader(im_fps[0], 0.65)
     assert Path(im_fps[0]).exists() is True
@@ -403,6 +409,7 @@ def test_wsireg_run_reg_wmerge_and_indiv(data_out_dir, disk_im_gry):
     )
 
     merged_im = reg_image_loader(im_fps[-2], 0.65)
+    wsi_reg.save_transformations()
 
     assert len(im_fps) == 4
     assert Path(im_fps[0]).exists() is True
@@ -440,6 +447,8 @@ def test_wsireg_run_reg_wattachment(data_out_dir, disk_im_gry):
 
     wsi_reg.register_images()
     im_fps = wsi_reg.transform_images(transform_non_reg=False)
+
+    wsi_reg.save_transformations()
 
     regim = reg_image_loader(im_fps[0], 0.65)
     attachim = reg_image_loader(im_fps[1], 0.65)
