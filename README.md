@@ -1,4 +1,4 @@
-![Alt text](./docs/assets/wsireg-logo-crop.png?raw=true "Title")
+![Alt text](./docs/assets/wsireg-logo-crop.svg?raw=true "wsireg")
 
 ### Multi-modal whole slide image registration
 [![Python Version](https://img.shields.io/pypi/pyversions/wsireg.svg)](https://python.org)
