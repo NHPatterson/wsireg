@@ -72,8 +72,16 @@ class OmeTiffWriter:
         self.n_pyr_levels = len(self.pyr_levels)
 
         if final_transform is not None:
-            self.PhysicalSizeY = self.y_spacing
-            self.PhysicalSizeX = self.x_spacing
+            if isinstance(final_transform, list):
+                if final_transform[0] is None:
+                    self.PhysicalSizeY = self.reg_image.images[0].image_res
+                    self.PhysicalSizeX = self.reg_image.images[0].image_res
+                else:
+                    self.PhysicalSizeY = self.y_spacing
+                    self.PhysicalSizeX = self.x_spacing
+            else:
+                self.PhysicalSizeY = self.y_spacing
+                self.PhysicalSizeX = self.x_spacing
         else:
             self.PhysicalSizeY = self.reg_image.image_res
             self.PhysicalSizeX = self.reg_image.image_res
