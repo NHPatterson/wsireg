@@ -177,7 +177,7 @@ def shape_reader(shape_data, **kwargs):
             if Path(sh).is_file():
                 sh_fp = Path(sh)
 
-                if sh_fp.suffix == ".json":
+                if sh_fp.suffix in [".json", ".geojson"]:
                     out_shape_gj, out_shape_np = read_geojson(str(sh_fp))
                 # elif sh_fp.suffix == ".cz":
                 #     out_shape_gj = read_zen_shapes(str(sh_fp))
