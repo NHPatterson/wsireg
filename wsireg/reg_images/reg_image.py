@@ -165,66 +165,68 @@ class RegImage:
 
             transforms.append(flip_tform)
 
-            if self.mask and preprocessing.crop_to_mask_bbox:
-                print("computing mask bounding box")
-                if preprocessing.mask_bbox is None:
-                    mask_bbox = compute_mask_to_bbox(self.mask)
-                    preprocessing.mask_bbox = mask_bbox
+        if self.mask and preprocessing.crop_to_mask_bbox:
+            print("computing mask bounding box")
+            if preprocessing.mask_bbox is None:
+                mask_bbox = compute_mask_to_bbox(self.mask)
+                preprocessing.mask_bbox = mask_bbox
 
-                print("cropping to mask")
-                translation_transform = gen_rigid_translation(
-                    image,
-                    self.image_res,
-                    preprocessing.mask_bbox.X,
-                    preprocessing.mask_bbox.Y,
-                    preprocessing.mask_bbox.WIDTH,
-                    preprocessing.mask_bbox.HEIGHT,
+        elif preprocessing.crop_to_mask_bbox:
+
+            print("cropping to mask")
+            translation_transform = gen_rigid_translation(
+                image,
+                self.image_res,
+                preprocessing.mask_bbox.X,
+                preprocessing.mask_bbox.Y,
+                preprocessing.mask_bbox.WIDTH,
+                preprocessing.mask_bbox.HEIGHT,
+            )
+
+            (
+                composite_transform,
+                _,
+                final_tform,
+            ) = prepare_wsireg_transform_data(
+                {"initial": [translation_transform]}
+            )
+
+            image = transform_plane(
+                image, final_tform, composite_transform
+            )
+
+            self.original_size_transform = gen_rig_to_original(
+                original_size, deepcopy(translation_transform)
+            )
+
+            if self.mask is not None:
+                self.mask.SetSpacing((self.image_res, self.image_res))
+                self.mask = transform_plane(
+                    self.mask, final_tform, composite_transform
                 )
+            transforms.append(translation_transform)
 
-                (
-                    composite_transform,
-                    _,
-                    final_tform,
-                ) = prepare_wsireg_transform_data(
-                    {"initial": [translation_transform]}
+        if preprocessing.downsampling > 1:
+            print(
+                "performing downsampling by factor: {}".format(
+                    preprocessing.downsampling
                 )
+            )
+            image.SetSpacing((self.image_res, self.image_res))
+            image = sitk.Shrink(
+                image,
+                (preprocessing.downsampling, preprocessing.downsampling),
+            )
 
-                image = transform_plane(
-                    image, final_tform, composite_transform
+            if self.mask is not None:
+                self.mask.SetSpacing((self.image_res, self.image_res))
+                self.mask = sitk.Shrink(
+                    self.mask,
+                    (
+                        preprocessing.downsampling,
+                        preprocessing.downsampling,
+                    ),
                 )
-
-                self.original_size_transform = gen_rig_to_original(
-                    original_size, deepcopy(translation_transform)
-                )
-
-                if self.mask is not None:
-                    self.mask.SetSpacing((self.image_res, self.image_res))
-                    self.mask = transform_plane(
-                        self.mask, final_tform, composite_transform
-                    )
-                transforms.append(translation_transform)
-
-            if preprocessing.downsampling > 1:
-                print(
-                    "performing downsampling by factor: {}".format(
-                        preprocessing.downsampling
-                    )
-                )
-                image.SetSpacing((self.image_res, self.image_res))
-                image = sitk.Shrink(
-                    image,
-                    (preprocessing.downsampling, preprocessing.downsampling),
-                )
-
-                if self.mask is not None:
-                    self.mask.SetSpacing((self.image_res, self.image_res))
-                    self.mask = sitk.Shrink(
-                        self.mask,
-                        (
-                            preprocessing.downsampling,
-                            preprocessing.downsampling,
-                        ),
-                    )
 
         return image, transforms
 

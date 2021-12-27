@@ -216,7 +216,10 @@ def test_wsireg_run_reg_with_crop(data_out_dir, disk_im_gry):
         0.65,
         channel_names=["test"],
         channel_colors=["red"],
-        preprocessing={"mask_bbox": [512, 512, 512, 512]},
+        preprocessing={
+            "mask_bbox": [512, 512, 512, 512],
+            "crop_to_mask_bbox": True,
+        },
     )
 
     wsi_reg.add_reg_path(
@@ -266,7 +269,11 @@ def test_wsireg_run_reg_with_flip_crop(data_out_dir, disk_im_gry):
         0.65,
         channel_names=["test"],
         channel_colors=["red"],
-        preprocessing={"mask_bbox": [512, 512, 512, 512], "flip": "h"},
+        preprocessing={
+            "mask_bbox": [512, 512, 512, 512],
+            "flip": "h",
+            "crop_to_mask_bbox": True,
+        },
     )
 
     wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])
@@ -320,7 +327,10 @@ def test_wsireg_run_reg_with_crop_merge(data_out_dir, disk_im_gry):
         0.65,
         channel_names=["test"],
         channel_colors=["red"],
-        preprocessing={"mask_bbox": [512, 512, 512, 512]},
+        preprocessing={
+            "mask_bbox": [512, 512, 512, 512],
+            "crop_to_mask_bbox": True,
+        },
     )
 
     wsi_reg.add_reg_path("mod1", "mod3", reg_params=["rigid_test"])
