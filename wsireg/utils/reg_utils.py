@@ -99,38 +99,6 @@ def json_to_pmap_dict(json_file):
     return pmap_dict
 
 
-def parameter_load(reg_param):
-    """Load a default registration parameter or one from file.
-
-    Parameters
-    ----------
-    reg_param : str
-        a string of the default parameterMap name [rigid, affine, nl]. If reg_model is not in the default list
-        it should be a filepath to a SimpleITK parameterMap saved to .txt file on disk
-
-    Returns
-    -------
-    sitk.ParameterMap
-
-
-    """
-    if isinstance(reg_param, str):
-        if reg_param in list(DEFAULT_REG_PARAM_MAPS.keys()):
-            reg_params = DEFAULT_REG_PARAM_MAPS[reg_param]
-            reg_param_map = pmap_dict_to_sitk(reg_params)
-        else:
-            try:
-                reg_param_map = sitk.ReadParameterFile(reg_param)
-            except RuntimeError:
-                print("invalid parameter file")
-
-        return reg_param_map
-    else:
-        raise ValueError(
-            "parameter input is not a filepath or default parameter file str"
-        )
-
-
 def _prepare_reg_models(
     reg_params: List[Union[RegModel, Dict[str, List[str]]]]
 ) -> List[Dict[str, List[str]]]:
@@ -138,6 +106,8 @@ def _prepare_reg_models(
     for rp in reg_params:
         if isinstance(rp, RegModel):
             prepared_params.append(rp.value)
+        elif isinstance(rp, str):
+            prepared_params.append(RegModel[rp].value)
         elif isinstance(rp, dict):
             prepared_params.append(rp)
     return prepared_params
