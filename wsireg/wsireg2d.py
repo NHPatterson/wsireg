@@ -168,7 +168,7 @@ class WsiReg2D(object):
         preprocessing: Optional[
             Union[ImagePreproParams, Dict[str, Any]]
         ] = None,
-        mask: Optional[str, Path, np.ndarray] = None,
+        mask: Optional[Union[str, Path, np.ndarray]] = None,
     ) -> None:
         """
         Add an image modality (node) to the registration graph

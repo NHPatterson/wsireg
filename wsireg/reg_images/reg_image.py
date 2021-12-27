@@ -31,17 +31,17 @@ class RegImage:
 
     After preprocessing, images destined for registration should always be a single channel 2D image
 
-    Parameters
+    Attributes
     ----------
-    image : str or np.array
+    image_filepath : str or np.array
         filepath to image to be processed or a numpy array of the image
-    image_res : float
+    image_res : int or float
         Physical spacing (xy resolution) of the image (units are assumed to be the same for each image in experiment but are not
         defined)
         Does not yet support isotropic resolution
     preprocessing : ImagePreproParams
         preprocessing to apply to the image
-    transforms:list
+    transforms: list
         list of elastix transformation data to apply to an image during preprocessing
     mask : str or np.ndarray
         filepath of a mask image to be processed or a numpy array of the mask
@@ -64,6 +64,11 @@ class RegImage:
                 self.preprocessing = ImagePreproParams(**preprocessing)
         else:
             self.preprocessing = ImagePreproParams()
+
+        self.pre_reg_transforms = None
+        self.original_size_transform = None
+        self.channel_names = None
+        self.channel_colors = None
 
         return
 
@@ -220,6 +225,33 @@ class RegImage:
                     )
 
         return image, transforms
+
+    def preprocess_image(self, reg_image):
+
+        reg_image = self.preprocess_reg_image_intensity(
+            reg_image, self.preprocessing
+        )
+
+        if reg_image.GetDepth() >= 1:
+            raise ValueError(
+                "preprocessing did not result in a single image plane\n"
+                "multi-channel or 3D image return"
+            )
+
+        if reg_image.GetNumberOfComponentsPerPixel() > 1:
+            raise ValueError(
+                "preprocessing did not result in a single image plane\n"
+                "multi-component / RGB(A) image returned"
+            )
+
+        reg_image, pre_reg_transforms = self.preprocess_reg_image_spatial(
+            reg_image, self.preprocessing, self.pre_reg_transforms
+        )
+
+        if len(pre_reg_transforms) > 0:
+            self.pre_reg_transforms = pre_reg_transforms
+
+        self.reg_image = reg_image
 
     def reg_image_sitk_to_itk(self, cast_to_float32=True):
         origin = self.reg_image.GetOrigin()

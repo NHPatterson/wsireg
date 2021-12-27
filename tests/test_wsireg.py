@@ -3,6 +3,7 @@ import numpy as np
 from pathlib import Path
 from wsireg.wsireg2d import WsiReg2D
 from wsireg.reg_images.loader import reg_image_loader
+from wsireg.parameter_maps.preprocessing import ImagePreproParams
 
 
 @pytest.fixture(scope="session")
@@ -37,7 +38,10 @@ def test_wsireg2d_add_modality_w_fp(data_out_dir, data_im_fp):
     assert wsi_reg.modalities.get("test_mod").get("image_res") == 0.65
     assert wsi_reg.modalities.get("test_mod").get("channel_names") == ["test"]
     assert wsi_reg.modalities.get("test_mod").get("channel_colors") == ["red"]
-    assert wsi_reg.modalities.get("test_mod").get("preprocessing") == {}
+    assert (
+        wsi_reg.modalities.get("test_mod").get("preprocessing")
+        == ImagePreproParams()
+    )
     assert wsi_reg.modalities.get("test_mod").get("mask") == None
     assert wsi_reg.n_modalities == 1
 
@@ -58,7 +62,10 @@ def test_wsireg2d_add_modality_w_np(data_out_dir, im_mch_np):
     assert wsi_reg.modalities.get("test_mod").get("image_res") == 0.65
     assert wsi_reg.modalities.get("test_mod").get("channel_names") == ["test"]
     assert wsi_reg.modalities.get("test_mod").get("channel_colors") == ["red"]
-    assert wsi_reg.modalities.get("test_mod").get("preprocessing") == {}
+    assert (
+        wsi_reg.modalities.get("test_mod").get("preprocessing")
+        == ImagePreproParams()
+    )
     assert wsi_reg.modalities.get("test_mod").get("mask") == None
     assert wsi_reg.n_modalities == 1
 

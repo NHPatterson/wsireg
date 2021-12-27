@@ -84,17 +84,12 @@ class ImagePreproParams(BaseModel):
     downsampling: int = 1
 
     @validator('mask_bbox', pre=True)
-    def _coerce_color(cls, v):
+    def _make_bbox(cls, v):
         return _transform_to_bbox(v)
 
     @validator('custom_processing', pre=True)
-    def _coerce_color(cls, v):
+    def _check_custom_prepro(cls, v):
         if isinstance(v, (list, tuple)):
             return _transform_custom_proc(v)
         else:
             return v
-
-
-extra_func = {"str": print}
-extra_func = [print, print]
-ImagePreproParams(custom_processing=extra_func)

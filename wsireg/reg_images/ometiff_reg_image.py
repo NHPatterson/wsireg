@@ -11,7 +11,6 @@ from wsireg.utils.im_utils import (
     tifffile_zarr_backend,
     tf_zarr_read_single_ch,
 )
-from wsireg.parameter_maps.preprocessing import ImagePreproParams
 
 
 class OmeTiffRegImage(RegImage):
@@ -107,14 +106,14 @@ class OmeTiffRegImage(RegImage):
             force_rgb = None
 
         try:
-            image = tifffile_dask_backend(
+            reg_image = tifffile_dask_backend(
                 self.image_filepath,
                 largest_series,
                 self.preprocessing,
                 force_rgb=force_rgb,
             )
         except ValueError:
-            image = tifffile_zarr_backend(
+            reg_image = tifffile_zarr_backend(
                 self.image_filepath,
                 largest_series,
                 self.preprocessing,
@@ -124,40 +123,12 @@ class OmeTiffRegImage(RegImage):
         if (
             self.preprocessing is not None
             and self.preprocessing.get('as_uint8') is True
-            and image.GetPixelID() != sitk.sitkUInt8
+            and reg_image.GetPixelID() != sitk.sitkUInt8
         ):
-            image = sitk.RescaleIntensity(image)
-            image = sitk.Cast(image, sitk.sitkUInt8)
+            reg_image = sitk.RescaleIntensity(reg_image)
+            reg_image = sitk.Cast(reg_image, sitk.sitkUInt8)
 
-        image, spatial_preprocessing = self.preprocess_reg_image_intensity(
-            image, self.preprocessing
-        )
-
-        if image.GetDepth() >= 1:
-            raise ValueError(
-                "preprocessing did not result in a single image plane\n"
-                "multi-channel or 3D image return"
-            )
-
-        if image.GetNumberOfComponentsPerPixel() > 1:
-            raise ValueError(
-                "preprocessing did not result in a single image plane\n"
-                "multi-component / RGB(A) image returned"
-            )
-
-        if (
-            len(spatial_preprocessing) > 0
-            or self.pre_reg_transforms is not None
-        ):
-            (
-                self.image,
-                self.pre_reg_transforms,
-            ) = self.preprocess_reg_image_spatial(
-                image, spatial_preprocessing, self.pre_reg_transforms
-            )
-        else:
-            self.image = image
-            self.pre_reg_transforms = None
+        self.preprocess_image(reg_image)
 
     def read_single_channel(self, channel_idx: int):
         if channel_idx > (self.n_ch - 1):

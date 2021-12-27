@@ -82,30 +82,8 @@ class CziRegImage(RegImage):
 
         reg_image = np.squeeze(reg_image)
         reg_image = sitk.GetImageFromArray(reg_image)
-        reg_image = self.preprocess_reg_image_intensity(
-            reg_image, self.preprocessing
-        )
 
-        if reg_image.GetDepth() >= 1:
-            raise ValueError(
-                "preprocessing did not result in a single image plane\n"
-                "multi-channel or 3D image return"
-            )
-
-        if reg_image.GetNumberOfComponentsPerPixel() > 1:
-            raise ValueError(
-                "preprocessing did not result in a single image plane\n"
-                "multi-component / RGB(A) image returned"
-            )
-
-        (image, pre_reg_transforms,) = self.preprocess_reg_image_spatial(
-            reg_image, self.preprocessing, self.pre_reg_transforms
-        )
-
-        if len(pre_reg_transforms) > 0:
-            self.pre_reg_transforms = pre_reg_transforms
-
-        self.reg_image = image
+        self.preprocess_image(reg_image)
 
     def read_single_channel(self, channel_idx: int):
         if self.is_rgb is False:

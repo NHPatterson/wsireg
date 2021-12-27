@@ -4,12 +4,10 @@ import numpy as np
 import dask.array as da
 from wsireg.reg_images import RegImage
 from wsireg.utils.im_utils import (
-    std_prepro,
     guess_rgb,
     read_preprocess_array,
     ensure_dask_array,
 )
-from wsireg.parameter_maps.preprocessing import ImagePreproParams
 
 
 class NumpyRegImage(RegImage):
@@ -72,35 +70,7 @@ class NumpyRegImage(RegImage):
             reg_image = sitk.RescaleIntensity(reg_image)
             reg_image = sitk.Cast(reg_image, sitk.sitkUInt8)
 
-        reg_image, spatial_preprocessing = self.preprocess_reg_image_intensity(
-            reg_image, self.preprocessing
-        )
-
-        if reg_image.GetDepth() >= 1:
-            raise ValueError(
-                "preprocessing did not result in a single image plane\n"
-                "multi-channel or 3D image return"
-            )
-
-        if reg_image.GetNumberOfComponentsPerPixel() > 1:
-            raise ValueError(
-                "preprocessing did not result in a single image plane\n"
-                "multi-component / RGB(A) image returned"
-            )
-
-        if (
-            len(spatial_preprocessing) > 0
-            or self.pre_reg_transforms is not None
-        ):
-            (
-                self.reg_image,
-                self.pre_reg_transforms,
-            ) = self.preprocess_reg_image_spatial(
-                reg_image, spatial_preprocessing, self.pre_reg_transforms
-            )
-        else:
-            self.reg_image = reg_image
-            self.pre_reg_transforms = None
+        self.preprocess_image(reg_image)
 
     def read_single_channel(self, channel_idx: int):
         if channel_idx > (self.n_ch - 1):
