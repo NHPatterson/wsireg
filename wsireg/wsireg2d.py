@@ -199,7 +199,7 @@ class WsiReg2D(object):
             )
         if preprocessing:
             if isinstance(preprocessing, dict):
-                image_prepro = ImagePreproParams(*preprocessing)
+                image_prepro = ImagePreproParams(**preprocessing)
             else:
                 image_prepro = preprocessing
         else:
@@ -529,7 +529,7 @@ class WsiReg2D(object):
             ) = self._check_cache_modality(modality_name)
 
             if im_from_cache is True:
-                if mod_data["preprocessing"].get("use_mask") is False:
+                if mod_data["preprocessing"].use_mask is False:
                     mod_data["mask"] = None
                 mod_data["preprocessing"] = None
 
@@ -862,10 +862,10 @@ class WsiReg2D(object):
         transformations = {"initial": None, "registered": None}
 
         if (
-            im_data.get("preprocessing").get("rot_cc") is not None
-            or im_data.get("preprocessing").get("flip") is not None
-            or im_data.get("preprocessing").get("mask_to_bbox") is True
-            or im_data.get("preprocessing").get("mask_bbox") is not None
+            im_data["preprocessing"].rot_cc
+            or im_data["preprocessing"].flip
+            or im_data["preprocessing"].crop_to_mask_bbox
+            or im_data["preprocessing"].mask_bbox
         ):
 
             transformations.update(
