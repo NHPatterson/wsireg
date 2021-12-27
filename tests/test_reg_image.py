@@ -2,7 +2,6 @@ import pytest
 from wsireg.reg_images.loader import reg_image_loader
 import SimpleITK as sitk
 import itk
-import numpy as np
 
 
 @pytest.mark.usefixtures("disk_im_mch")
@@ -243,7 +242,7 @@ def test_reg_image_loader_mask_flip(im_gry_np, mask_np):
 @pytest.mark.usefixtures("im_gry_np", "mask_np")
 def test_reg_image_loader_downsampling(im_gry_np, mask_np):
     reg_image = reg_image_loader(
-        im_gry_np, 1, preprocessing={"downsample": 2}, mask=mask_np
+        im_gry_np, 1, preprocessing={"downsampling": 2}, mask=mask_np
     )
     reg_image.read_reg_image()
 
