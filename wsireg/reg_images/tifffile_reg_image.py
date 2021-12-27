@@ -3,7 +3,6 @@ import SimpleITK as sitk
 from tifffile import TiffFile
 from wsireg.reg_images.reg_image import RegImage
 from wsireg.utils.im_utils import (
-    std_prepro,
     guess_rgb,
     get_tifffile_info,
     tf_get_largest_series,
@@ -24,6 +23,7 @@ class TiffFileRegImage(RegImage):
         channel_names=None,
         channel_colors=None,
     ):
+        super(TiffFileRegImage, self).__init__(preprocessing)
         self.image_filepath = image_fp
         self.image_res = image_res
         self.image = None

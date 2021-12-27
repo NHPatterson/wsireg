@@ -24,6 +24,7 @@ class OmeTiffRegImage(RegImage):
         channel_names=None,
         channel_colors=None,
     ):
+        super(OmeTiffRegImage, self).__init__(preprocessing)
         self.image_filepath = image_fp
         self.image_res = image_res
         self.image = None

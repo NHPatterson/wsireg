@@ -2,7 +2,6 @@ import numpy as np
 import SimpleITK as sitk
 from wsireg.reg_images.reg_image import RegImage
 from wsireg.utils.im_utils import (
-    std_prepro,
     guess_rgb,
     get_sitk_image_info,
     sitk_vect_to_gs,
@@ -21,6 +20,7 @@ class SitkRegImage(RegImage):
         channel_names=None,
         channel_colors=None,
     ):
+        super(SitkRegImage, self).__init__(preprocessing)
         self.image_filepath = image
         self.image_res = image_res
         self.image = None

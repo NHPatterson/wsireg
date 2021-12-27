@@ -124,7 +124,9 @@ class RegImage:
 
         if float(preprocessing.rot_cc) != 0.0:
             print(f"rotating counter-clockwise {preprocessing.rot_cc}")
-            rot_tform = gen_rigid_tform_rot(image, self.image_res, rotangle)
+            rot_tform = gen_rigid_tform_rot(
+                image, self.image_res, preprocessing.rot_cc
+            )
             (
                 composite_transform,
                 _,

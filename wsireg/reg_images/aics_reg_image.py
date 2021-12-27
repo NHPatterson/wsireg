@@ -4,7 +4,6 @@ import numpy as np
 import dask.array as da
 from wsireg.reg_images import RegImage
 from wsireg.utils.im_utils import (
-    std_prepro,
     guess_rgb,
     read_preprocess_array,
     ensure_dask_array,
@@ -23,7 +22,7 @@ class AICSRegImage(RegImage):
         channel_names=None,
         channel_colors=None,
     ):
-
+        super(AICSRegImage, self).__init__(preprocessing)
         self.image_filepath = image
         self.image_res = image_res
         self.reader = "aics"
