@@ -82,6 +82,7 @@ class ImagePreproParams(BaseModel):
     crop_to_mask_bbox: bool = False
     mask_bbox: Optional[BoundingBox] = None
     downsampling: int = 1
+    use_mask: bool = True
 
     @validator('mask_bbox', pre=True)
     def _make_bbox(cls, v):
