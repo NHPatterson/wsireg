@@ -367,6 +367,7 @@ def test_CziRegImageReader_rgb():
     assert len(np.squeeze(gs_out).shape) == 2
     assert len(np.squeeze(rgb_out).shape) == 3
 
+
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_CziRegImageReader_mc():
     image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
@@ -404,10 +405,10 @@ def test_CziRegImageReader_mc():
     assert np.array_equal(
         np.squeeze(ch23_out), np.squeeze(mc_out)[[2, 3], :, :]
     )
-    assert np.array_equal(np.squeeze(mc_out)[0,:,:], np.squeeze(ch0_out))
-    assert np.array_equal(np.squeeze(mc_out)[1,:,:], np.squeeze(ch1_out))
-    assert np.array_equal(np.squeeze(mc_out)[2,:,:], np.squeeze(ch2_out))
-    assert np.array_equal(np.squeeze(mc_out)[3,:,:], np.squeeze(ch3_out))
+    assert np.array_equal(np.squeeze(mc_out)[0, :, :], np.squeeze(ch0_out))
+    assert np.array_equal(np.squeeze(mc_out)[1, :, :], np.squeeze(ch1_out))
+    assert np.array_equal(np.squeeze(mc_out)[2, :, :], np.squeeze(ch2_out))
+    assert np.array_equal(np.squeeze(mc_out)[3, :, :], np.squeeze(ch3_out))
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)

@@ -11,6 +11,7 @@ from wsireg.utils.im_utils import (
     tifffile_zarr_backend,
     tf_zarr_read_single_ch,
 )
+from wsireg.parameter_maps.preprocessing import ImagePreproParams
 
 
 class OmeTiffRegImage(RegImage):

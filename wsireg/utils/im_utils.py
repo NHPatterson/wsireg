@@ -21,7 +21,7 @@ from wsireg.utils.tform_utils import (
 )
 
 
-TIFFFILE_EXTS = [".scn", ".tif", ".tiff", ".ndpi"]
+TIFFFILE_EXTS = [".scn", ".tif", ".tiff", ".ndpi", ".svs"]
 
 ARRAYLIKE_CLASSES = (np.ndarray, da.core.Array, zarr.Array)
 
@@ -104,7 +104,7 @@ def read_preprocess_array(array, preprocessing, force_rgb=None):
     is_rgb = is_interleaved if not force_rgb else force_rgb
 
     if is_rgb:
-        if preprocessing is not None:
+        if preprocessing:
             image_out = np.asarray(
                 grayscale(array, is_interleaved=is_interleaved)
             )
@@ -119,12 +119,9 @@ def read_preprocess_array(array, preprocessing, force_rgb=None):
         image_out = sitk.GetImageFromArray(np.asarray(array))
 
     else:
-        if preprocessing is not None:
-            if (
-                preprocessing.get("ch_indices") is not None
-                and len(array.shape) > 2
-            ):
-                chs = list(preprocessing.get('ch_indices'))
+        if preprocessing:
+            if preprocessing.ch_indices and len(array.shape) > 2:
+                chs = list(preprocessing.ch_indices)
                 array = array[chs, :, :]
 
         image_out = sitk.GetImageFromArray(np.squeeze(np.asarray(array)))

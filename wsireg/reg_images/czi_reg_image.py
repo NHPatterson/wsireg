@@ -2,7 +2,6 @@ import numpy as np
 import SimpleITK as sitk
 from wsireg.reg_images import RegImage
 from wsireg.utils.im_utils import (
-    std_prepro,
     guess_rgb,
     CziRegImageReader,
 )
@@ -19,6 +18,7 @@ class CziRegImage(RegImage):
         channel_names=None,
         channel_colors=None,
     ):
+        super(CziRegImage, self).__init__(preprocessing)
         self.image_filepath = image
         self.image_res = image_res
         self.image = None
@@ -39,12 +39,6 @@ class CziRegImage(RegImage):
 
         self.reg_image = None
         self.mask = self.read_mask(mask)
-
-        if preprocessing is None:
-            self.preprocessing = std_prepro()
-        else:
-            self.preprocessing = std_prepro()
-            self.preprocessing.update(preprocessing)
 
         self.pre_reg_transforms = pre_reg_transforms
 
@@ -78,23 +72,17 @@ class CziRegImage(RegImage):
 
         if self.czi.shape[scene_idx] > 1:
             raise ValueError('multi scene czis not allowed at this time')
-        if self.is_rgb is False:
-            if self.preprocessing is None:
-                reg_image = self.czi.asarray()
-            else:
-                reg_image = self.czi.sub_asarray(
-                    channel_idx=self.preprocessing['ch_indices'],
-                    as_uint8=self.preprocessing['as_uint8'],
-                )
+        if self.is_rgb:
+            reg_image = self.czi.sub_asarray_rgb(greyscale=True)
         else:
-            if self.preprocessing is None:
-                reg_image = self.czi.asarray()
-            else:
-                reg_image = self.czi.sub_asarray_rgb(greyscale=True)
+            reg_image = self.czi.sub_asarray(
+                channel_idx=self.preprocessing.ch_indices,
+                as_uint8=self.preprocessing.as_uint8,
+            )
 
         reg_image = np.squeeze(reg_image)
         reg_image = sitk.GetImageFromArray(reg_image)
-        reg_image, spatial_preprocessing = self.preprocess_reg_image_intensity(
+        reg_image = self.preprocess_reg_image_intensity(
             reg_image, self.preprocessing
         )
 
@@ -110,19 +98,14 @@ class CziRegImage(RegImage):
                 "multi-component / RGB(A) image returned"
             )
 
-        if (
-            len(spatial_preprocessing) > 0
-            or self.pre_reg_transforms is not None
-        ):
-            (
-                self.reg_image,
-                self.pre_reg_transforms,
-            ) = self.preprocess_reg_image_spatial(
-                reg_image, spatial_preprocessing, self.pre_reg_transforms
-            )
-        else:
-            self.reg_image = reg_image
-            self.pre_reg_transforms = None
+        (image, pre_reg_transforms,) = self.preprocess_reg_image_spatial(
+            reg_image, self.preprocessing, self.pre_reg_transforms
+        )
+
+        if len(pre_reg_transforms) > 0:
+            self.pre_reg_transforms = pre_reg_transforms
+
+        self.reg_image = image
 
     def read_single_channel(self, channel_idx: int):
         if self.is_rgb is False:

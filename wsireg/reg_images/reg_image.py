@@ -1,10 +1,13 @@
+from typing import Optional, Union, Dict, Any
 from copy import deepcopy
 import numpy as np
 import SimpleITK as sitk
 import itk
+from wsireg.parameter_maps.preprocessing import ImagePreproParams
 from wsireg.utils.im_utils import (
     contrast_enhance,
     sitk_inv_int,
+    sitk_max_int_proj,
     transform_to_ome_zarr,
     compute_mask_to_bbox,
     transform_plane,
@@ -36,8 +39,8 @@ class RegImage:
         Physical spacing (xy resolution) of the image (units are assumed to be the same for each image in experiment but are not
         defined)
         Does not yet support isotropic resolution
-    prepro_dict : dict
-        preprocessing dict to apply to image
+    preprocessing : ImagePreproParams
+        preprocessing to apply to the image
     transforms:list
         list of elastix transformation data to apply to an image during preprocessing
     mask : str or np.ndarray
@@ -45,10 +48,23 @@ class RegImage:
         all values => 1 are considered WITHIN the mask
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        preprocessing: Optional[
+            Union[ImagePreproParams, Dict[str, Any]]
+        ] = None,
+    ):
         self.image = None
         self.reg_image = None
         self.original_size_transform = None
+        if preprocessing:
+            if isinstance(preprocessing, ImagePreproParams):
+                self.preprocessing = preprocessing
+            elif isinstance(preprocessing, dict):
+                self.preprocessing = ImagePreproParams(**preprocessing)
+        else:
+            self.preprocessing = ImagePreproParams()
+
         return
 
     def read_mask(self, mask):
@@ -64,98 +80,98 @@ class RegImage:
 
         return mask
 
-    def preprocess_reg_image_intensity(self, image, preprocessing):
-        # if isinstance(image, Path):
-        #     image = read_image(str(image), preprocessing=preprocessing)
-        # else:
-        #     image = prepare_np_image(image, preprocessing=preprocessing)
+    def preprocess_reg_image_intensity(
+        self, image, preprocessing: ImagePreproParams
+    ):
 
-        # separate spatial preprocessing from intensity preprocessing
-        spatial_preprocessing = {}
-        for spat_key in [
-            "mask_to_bbox",
-            "mask_bbox",
-            "rot_cc",
-            "flip",
-            "use_mask",
-        ]:
-            if spat_key in preprocessing:
-                spatial_preprocessing[spat_key] = preprocessing[spat_key]
-                preprocessing.pop(spat_key, None)
+        if preprocessing.image_type.value == "FL":
+            preprocessing.invert_intensity = False
+        elif preprocessing.image_type.value == "BF":
+            preprocessing.max_int_proj = False
+            preprocessing.contrast_enhance = False
+            if self.is_rgb:
+                preprocessing.invert_intensity = True
 
-        # remove read time preprocessing
-        preprocessing.pop("ch_indices", None)
-        preprocessing.pop("as_uint8", None)
+        if preprocessing.max_int_proj:
+            image = sitk_max_int_proj(image)
 
-        # type specific
-        if preprocessing["image_type"] == "FL":
-            preprocessing.pop("inv_int", None)
-        elif preprocessing["image_type"] == "BF":
-            preprocessing.pop("max_int_proj", None)
-            preprocessing.pop("contrast_enhance", None)
+        if preprocessing.contrast_enhance:
+            image = contrast_enhance(image)
 
-        if preprocessing.get("contrast_enhance_opt") is True:
-            preprocessing.update({"contrast_enhance": contrast_enhance})
-        else:
-            preprocessing.pop("contrast_enhance", None)
+        if preprocessing.invert_intensity:
+            image = sitk_inv_int(image)
 
-        if preprocessing.get("inv_int_opt") is True or self.is_rgb is True:
-            preprocessing.update({"inv_int": sitk_inv_int})
-        else:
-            preprocessing.pop("inv_int", None)
-
-        preprocessing.pop("contrast_enhance_opt", None)
-        preprocessing.pop("inv_int_opt", None)
-
-        # remove type and set downsample to last
-        preprocessing.pop("image_type", None)
-
-        spatial_preprocessing.update(
-            {"downsample": preprocessing.get("downsample")}
-        )
-        preprocessing.pop("downsample", None)
-
-        # iterate through intensity transformations preprocessing dictionary
-        for k, v in preprocessing.items():
-            if v is not None:
-                print("performing preprocessing: ", k)
+        if preprocessing.custom_processing:
+            for k, v in preprocessing.custom_processing.items():
+                print(f"performing preprocessing: {k}")
                 image = v(image)
 
         image.SetSpacing((self.image_res, self.image_res))
 
-        return image, spatial_preprocessing
+        return image
 
     def preprocess_reg_image_spatial(
-        self, image, spatial_preprocessing, imported_transforms=None
+        self, image, preprocessing: ImagePreproParams, imported_transforms=None
     ):
-        # spatial preprocessing:
-        # imported transforms -> Masking -> rotation -> flipping
-        transforms = []
-        # if imported_transforms is not None:
-        #     image = transform_2d_image_itkelx(
-        #         image, self.image_res, imported_transforms
-        #     )
-        #     if self.mask is not None:
-        #         self.mask = transform_2d_image_itkelx(
-        #             self.mask, self.image_res, imported_transforms
-        #         )
-        #     transforms.append(imported_transforms)
-        original_size = image.GetSize()
-        if spatial_preprocessing is not None:
-            if (
-                self.mask is not None
-                and spatial_preprocessing.get("mask_to_bbox") is not None
-            ):
-                if spatial_preprocessing.get("mask_to_bbox") is True:
-                    print("computing mask bounding box")
-                    mask_bbox = compute_mask_to_bbox(self.mask)
-                    spatial_preprocessing.update({"mask_bbox": mask_bbox})
 
-            if spatial_preprocessing.get("mask_bbox") is not None:
-                bbox = spatial_preprocessing["mask_bbox"]
+        transforms = []
+        original_size = image.GetSize()
+
+        if float(preprocessing.rot_cc) != 0.0:
+            print(f"rotating counter-clockwise {preprocessing.rot_cc}")
+            rot_tform = gen_rigid_tform_rot(image, self.image_res, rotangle)
+            (
+                composite_transform,
+                _,
+                final_tform,
+            ) = prepare_wsireg_transform_data({"initial": [rot_tform]})
+
+            image = transform_plane(image, final_tform, composite_transform)
+
+            if self.mask is not None:
+                self.mask.SetSpacing((self.image_res, self.image_res))
+                self.mask = transform_plane(
+                    self.mask, final_tform, composite_transform
+                )
+            transforms.append(rot_tform)
+
+        if preprocessing.flip:
+            print(f"flipping image {preprocessing.flip.value}")
+
+            flip_tform = gen_aff_tform_flip(
+                image, self.image_res, preprocessing.flip.value
+            )
+
+            (
+                composite_transform,
+                _,
+                final_tform,
+            ) = prepare_wsireg_transform_data({"initial": [flip_tform]})
+
+            image = transform_plane(image, final_tform, composite_transform)
+
+            if self.mask is not None:
+                self.mask.SetSpacing((self.image_res, self.image_res))
+                self.mask = transform_plane(
+                    self.mask, final_tform, composite_transform
+                )
+
+            transforms.append(flip_tform)
+
+            if self.mask and preprocessing.crop_to_mask_bbox:
+                print("computing mask bounding box")
+                if preprocessing.mask_bbox is None:
+                    mask_bbox = compute_mask_to_bbox(self.mask)
+                    preprocessing.mask_bbox = mask_bbox
+
                 print("cropping to mask")
                 translation_transform = gen_rigid_translation(
-                    image, self.image_res, bbox[0], bbox[1], bbox[2], bbox[3]
+                    image,
+                    self.image_res,
+                    preprocessing.mask_bbox.X,
+                    preprocessing.mask_bbox.Y,
+                    preprocessing.mask_bbox.WIDTH,
+                    preprocessing.mask_bbox.HEIGHT,
                 )
 
                 (
@@ -169,9 +185,6 @@ class RegImage:
                 image = transform_plane(
                     image, final_tform, composite_transform
                 )
-                # image = transform_2d_image_itkelx(
-                #     image, [translation_transform]
-                # )
 
                 self.original_size_transform = gen_rig_to_original(
                     original_size, deepcopy(translation_transform)
@@ -179,95 +192,33 @@ class RegImage:
 
                 if self.mask is not None:
                     self.mask.SetSpacing((self.image_res, self.image_res))
-                    # self.mask = transform_2d_image_itkelx(
-                    #     self.mask, [translation_transform]
-                    # )
                     self.mask = transform_plane(
                         self.mask, final_tform, composite_transform
                     )
                 transforms.append(translation_transform)
 
-            if spatial_preprocessing.get("rot_cc") is not None:
-                rotangle = spatial_preprocessing["rot_cc"]
-                if rotangle is not None and rotangle != 0:
-                    print(f"rotating counter-clockwise {rotangle}")
-                    rot_tform = gen_rigid_tform_rot(
-                        image, self.image_res, rotangle
-                    )
-                    (
-                        composite_transform,
-                        _,
-                        final_tform,
-                    ) = prepare_wsireg_transform_data({"initial": [rot_tform]})
-
-                    image = transform_plane(
-                        image, final_tform, composite_transform
-                    )
-                    # image = transform_2d_image_itkelx(image, [rot_tform])
-
-                    if self.mask is not None:
-                        self.mask.SetSpacing((self.image_res, self.image_res))
-                        # self.mask = transform_2d_image_itkelx(
-                        #     self.mask, [translation_transform]
-                        # )
-                        self.mask = transform_plane(
-                            self.mask, final_tform, composite_transform
-                        )
-                    transforms.append(rot_tform)
-
-            if spatial_preprocessing.get("flip") is not None:
-                flip_direction = spatial_preprocessing["flip"]
-                if flip_direction != "None" and flip_direction is not None:
-                    print(f"flipping image {flip_direction}")
-
-                    flip_tform = gen_aff_tform_flip(
-                        image, self.image_res, flip_direction
-                    )
-
-                    (
-                        composite_transform,
-                        _,
-                        final_tform,
-                    ) = prepare_wsireg_transform_data(
-                        {"initial": [flip_tform]}
-                    )
-
-                    image = transform_plane(
-                        image, final_tform, composite_transform
-                    )
-
-                    if self.mask is not None:
-                        self.mask.SetSpacing((self.image_res, self.image_res))
-                        self.mask = transform_plane(
-                            self.mask, final_tform, composite_transform
-                        )
-
-                    transforms.append(flip_tform)
-
-            downsampling = spatial_preprocessing.get("downsample")
-
-            if downsampling is not None and downsampling > 1:
+            if preprocessing.downsampling > 1:
                 print(
                     "performing downsampling by factor: {}".format(
-                        downsampling
+                        preprocessing.downsampling
                     )
                 )
                 image.SetSpacing((self.image_res, self.image_res))
-                image = sitk.Shrink(image, (downsampling, downsampling))
+                image = sitk.Shrink(
+                    image,
+                    (preprocessing.downsampling, preprocessing.downsampling),
+                )
 
                 if self.mask is not None:
-
                     self.mask.SetSpacing((self.image_res, self.image_res))
                     self.mask = sitk.Shrink(
-                        self.mask, (downsampling, downsampling)
+                        self.mask,
+                        (
+                            preprocessing.downsampling,
+                            preprocessing.downsampling,
+                        ),
                     )
-        if len(transforms) == 0:
-            transforms = None
-        if (
-            spatial_preprocessing.get("use_mask") is not None
-            and spatial_preprocessing.get("use_mask") is False
-        ):
-            self.mask = None
+
         return image, transforms
 
     def reg_image_sitk_to_itk(self, cast_to_float32=True):

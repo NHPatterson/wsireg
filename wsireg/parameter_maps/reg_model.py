@@ -6,6 +6,7 @@ from wsireg.parameter_maps.reg_params import DEFAULT_REG_PARAM_MAPS
 DEFAULT_REG_PARAM_MAPS.keys()
 PATH_LIKE = Union[str, Path]
 
+
 def _elx_lineparser(
     line: str,
 ) -> Union[Tuple[str, List[str]], Tuple[None, None]]:
@@ -58,6 +59,7 @@ class RegModelMeta(EnumMeta):
                     f"{[i.name for i in self]}"
                 )
 
+
 class RegModel(dict, Enum, metaclass=RegModelMeta):
     rigid: Dict[str, List[str]] = DEFAULT_REG_PARAM_MAPS["rigid"]
     affine: Dict[str, List[str]] = DEFAULT_REG_PARAM_MAPS["affine"]
@@ -88,5 +90,3 @@ class RegModel(dict, Enum, metaclass=RegModelMeta):
         "similarity_anc"
     ]
     nl_anc: Dict[str, List[str]] = DEFAULT_REG_PARAM_MAPS["nl_anc"]
-
-

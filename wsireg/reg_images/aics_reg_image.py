@@ -10,6 +10,7 @@ from wsireg.utils.im_utils import (
     ensure_dask_array,
 )
 from aicsimageio import AICSImage
+from wsireg.parameter_maps.preprocessing import ImagePreproParams
 
 
 class AICSRegImage(RegImage):

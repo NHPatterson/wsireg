@@ -9,6 +9,7 @@ from wsireg.utils.im_utils import (
     read_preprocess_array,
     ensure_dask_array,
 )
+from wsireg.parameter_maps.preprocessing import ImagePreproParams
 
 
 class NumpyRegImage(RegImage):
@@ -23,6 +24,7 @@ class NumpyRegImage(RegImage):
         channel_colors=None,
         image_filepath=None,
     ):
+        super(NumpyRegImage, self).__init__(preprocessing)
         self.image_filepath = image_filepath
         self.image_res = image_res
         self.reader = "numpy"
@@ -42,12 +44,6 @@ class NumpyRegImage(RegImage):
 
         self.reg_image = None
         self.mask = self.read_mask(mask)
-
-        if preprocessing is None:
-            self.preprocessing = std_prepro()
-        else:
-            self.preprocessing = std_prepro()
-            self.preprocessing.update(preprocessing)
 
         self.pre_reg_transforms = pre_reg_transforms
 
@@ -69,8 +65,8 @@ class NumpyRegImage(RegImage):
         )
 
         if (
-            self.preprocessing is not None
-            and self.preprocessing.get('as_uint8') is True
+            self.preprocessing
+            and self.preprocessing.as_uint8
             and reg_image.GetPixelID() != sitk.sitkUInt8
         ):
             reg_image = sitk.RescaleIntensity(reg_image)

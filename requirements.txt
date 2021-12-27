@@ -13,3 +13,4 @@ fsspec
 itk-elastix
 SimpleITK
 aicsimageio[czi]
+pydantic

@@ -1,8 +1,10 @@
+from typing import List, Dict, Union
 import json
+from pathlib import Path
 import numpy as np
 import SimpleITK as sitk
 import itk
-from wsireg.parameter_maps.reg_params import DEFAULT_REG_PARAM_MAPS
+from wsireg.parameter_maps.reg_model import RegModel
 from wsireg.utils.itk_im_conversions import (
     itk_image_to_sitk_image,
 )
@@ -129,6 +131,18 @@ def parameter_load(reg_param):
         )
 
 
+def _prepare_reg_models(
+    reg_params: List[Union[RegModel, Dict[str, List[str]]]]
+) -> List[Dict[str, List[str]]]:
+    prepared_params = []
+    for rp in reg_params:
+        if isinstance(rp, RegModel):
+            prepared_params.append(rp.value)
+        elif isinstance(rp, dict):
+            prepared_params.append(rp)
+    return prepared_params
+
+
 def parameter_to_itk_pobj(reg_param_map):
     """
     Transfer parameter data stored in dict to ITKElastix ParameterObject
@@ -153,8 +167,8 @@ def parameter_to_itk_pobj(reg_param_map):
 def register_2d_images_itkelx(
     source_image,
     target_image,
-    reg_params,
-    reg_output_fp,
+    reg_params: List[Dict[str, List[str]]],
+    reg_output_fp: Union[str, Path],
     histogram_match=False,
     return_image=False,
 ):
@@ -168,7 +182,7 @@ def register_2d_images_itkelx(
         RegImage of image to be aligned
     target_image : SimpleITK.Image
         RegImage that is being aligned to (grammar is hard)
-    reg_params : dict
+    reg_params : list of dict
         registration parameter maps stored in a dict, can be file paths to SimpleElastix parameterMaps stored
         as text or one of the default parameter maps (see parameter_load() function)
     reg_output_fp : str
@@ -188,9 +202,10 @@ def register_2d_images_itkelx(
         matcher.SetNumberOfMatchPoints(7)
         matcher.ThresholdAtMeanIntensityOn()
         source_image.image = matcher.Execute(
-            source_image.image, target_image.image
+            source_image.reg_image, target_image.reg_image
         )
 
+    pixel_id = source_image.reg_image.GetPixelID()
     source_image.reg_image_sitk_to_itk()
     target_image.reg_image_sitk_to_itk()
 
@@ -212,10 +227,11 @@ def register_2d_images_itkelx(
     selx.SetFixedImage(target_image.reg_image)
 
     parameter_object_registration = itk.ParameterObject.New()
-    for idx, reg_param in enumerate(reg_params):
+    for idx, pmap in enumerate(reg_params):
         if idx == 0:
-            pmap = parameter_load(reg_param)
-            pmap["WriteResultImage"] = ("false",)
+            pmap["WriteResultImage"] = (
+                ("true",) if return_image else ("false",)
+            )
             if target_image.mask is not None:
                 pmap["AutomaticTransformInitialization"] = ("false",)
             else:
@@ -223,8 +239,9 @@ def register_2d_images_itkelx(
 
             parameter_object_registration.AddParameterMap(pmap)
         else:
-            pmap = parameter_load(reg_param)
-            pmap["WriteResultImage"] = ("false",)
+            pmap["WriteResultImage"] = (
+                ("true",) if return_image else ("false",)
+            )
             pmap["AutomaticTransformInitialization"] = ('false',)
             parameter_object_registration.AddParameterMap(pmap)
 
@@ -249,7 +266,6 @@ def register_2d_images_itkelx(
     else:
         image = selx.GetOutput()
         image = itk_image_to_sitk_image(image)
-        pixel_id = NP_TO_SITK_DTYPE[source_image.im_dtype]
         image = sitk.Cast(image, pixel_id)
         return tform_list, image
 

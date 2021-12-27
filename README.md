@@ -35,6 +35,7 @@ pip install wsireg
 _coming soon_ : For detailed usage and example data, see [wsireg-examples](https://github.com/nhpatterson/wsireg-examples)
 
 Example registering two images.
+
 ```python
 from wsireg.wsireg2d import WsiReg2D
 
@@ -48,7 +49,7 @@ reg_graph.add_modality(
     image_res=0.65,
     channel_names=["DAPI", "eGFP", "DsRed"],
     channel_colors=["blue", "green", "red"],
-    prepro_dict={
+    preprocessing={
         "image_type": "FL",
         "ch_indices": [1],
         "as_uint8": True,
@@ -60,7 +61,7 @@ reg_graph.add_modality(
     "modality_brightfield",
     "./data/im2.tiff",
     image_res=1,
-    prepro_dict={"image_type": "BF", "as_uint8": True, "inv_int_opt": True},
+    preprocessing={"image_type": "BF", "as_uint8": True, "inv_int_opt": True},
 )
 
 reg_graph.add_reg_path(
