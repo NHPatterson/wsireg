@@ -1,3 +1,4 @@
+# flake8: noqa
 from .wsireg2d import WsiReg2D
 
 """wsireg."""
