@@ -459,6 +459,7 @@ def test_wsireg_run_reg_wattachment(data_out_dir, disk_im_gry):
 
     assert np.array_equal(regim.image.compute(), attachim.image.compute())
 
+
 @pytest.mark.usefixtures("disk_im_gry")
 def test_wsireg_run_reg(data_out_dir, disk_im_gry):
     wsi_reg = WsiReg2D("test_proj_run_wpts", str(data_out_dir))
@@ -483,7 +484,7 @@ def test_wsireg_run_reg(data_out_dir, disk_im_gry):
     wsi_reg.add_reg_path(
         "mod1", "mod2", reg_params=["rigid_test", "affine_test"]
     )
-    wsi_reg.add_attachment_shapes("mod1","shapeset",GEOJSON_FP)
+    wsi_reg.add_attachment_shapes("mod1", "shapeset", GEOJSON_FP)
     wsi_reg.register_images()
     wsi_reg.transform_shapes()
     wsi_reg.save_transformations()
