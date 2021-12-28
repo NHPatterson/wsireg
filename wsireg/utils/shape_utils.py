@@ -60,7 +60,7 @@ def gj_to_np(gj: dict):
         shape_name = gj.get("properties").get("classification").get("name")
 
     return {
-        "array": pts,
+        "array": pts.astype(np.double),
         "shape_type": gj.get("geometry").get("type"),
         "shape_name": shape_name,
     }
@@ -184,7 +184,7 @@ def shape_reader(shape_data, **kwargs):
                 #     out_shape_np = [gj_to_np(s) for s in out_shape_gj]
                 else:
                     raise ValueError(
-                        "{} is not a geojson, Zeiss Zen shape file or numpy array".format(
+                        "{} is not a geojson or numpy array".format(
                             str(sh_fp)
                         )
                     )
