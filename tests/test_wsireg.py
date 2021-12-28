@@ -1,8 +1,12 @@
 import pytest
+import os
 import numpy as np
 from pathlib import Path
 from wsireg.wsireg2d import WsiReg2D
 from wsireg.reg_images.loader import reg_image_loader
+
+HERE = os.path.dirname(__file__)
+GEOJSON_FP = os.path.join(HERE, "fixtures/polygons.geojson")
 
 
 @pytest.fixture(scope="session")
@@ -160,7 +164,7 @@ def test_wsireg2d_add_merge_modality_notfound(data_out_dir, data_im_fp):
 
 @pytest.mark.usefixtures("disk_im_gry")
 def test_wsireg_run_reg(data_out_dir, disk_im_gry):
-    wsi_reg = WsiReg2D("test_proj6", str(data_out_dir))
+    wsi_reg = WsiReg2D("test_proj_run_reg", str(data_out_dir))
     img_fp1 = str(disk_im_gry)
 
     wsi_reg.add_modality(
@@ -454,3 +458,37 @@ def test_wsireg_run_reg_wattachment(data_out_dir, disk_im_gry):
     attachim = reg_image_loader(im_fps[1], 0.65)
 
     assert np.array_equal(regim.image.compute(), attachim.image.compute())
+
+@pytest.mark.usefixtures("disk_im_gry")
+def test_wsireg_run_reg(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj_run_wpts", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_reg_path(
+        "mod1", "mod2", reg_params=["rigid_test", "affine_test"]
+    )
+    wsi_reg.add_attachment_shapes("mod1","shapeset",GEOJSON_FP)
+    wsi_reg.register_images()
+    wsi_reg.transform_shapes()
+    wsi_reg.save_transformations()
+    im_fps = wsi_reg.transform_images(transform_non_reg=False)
+    gj_files = sorted(Path(im_fps[0]).parent.glob("*.geojson"))
+
+    assert Path(im_fps[0]).exists() is True
+    assert len(gj_files) > 0
