@@ -1178,7 +1178,7 @@ class WsiReg2D(object):
 
                 output_path = (
                     self.output_dir
-                    / "{}-{}_to_{}_transformations.json".format(
+                    / "{}-{}_to_{}_transformations.geojson".format(
                         self.project_name,
                         modality,
                         final_modality,

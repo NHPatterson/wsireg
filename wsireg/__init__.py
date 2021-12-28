@@ -1,3 +1,4 @@
+from .wsireg2d import WsiReg2D
 """wsireg."""
 
 __author__ = """Nathan Heath Patterson"""
