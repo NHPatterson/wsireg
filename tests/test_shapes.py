@@ -7,6 +7,7 @@ from wsireg.reg_shapes import RegShapes
 HERE = os.path.dirname(__file__)
 GEOJSON_FP = os.path.join(HERE, "fixtures/polygons.geojson")
 
+
 @pytest.mark.usefixtures("complex_transform")
 def test_RegShapes_transform(complex_transform):
     rs = RegShapes(GEOJSON_FP)

@@ -184,9 +184,7 @@ def shape_reader(shape_data, **kwargs):
                 #     out_shape_np = [gj_to_np(s) for s in out_shape_gj]
                 else:
                     raise ValueError(
-                        "{} is not a geojson or numpy array".format(
-                            str(sh_fp)
-                        )
+                        "{} is not a geojson or numpy array".format(str(sh_fp))
                     )
         if isinstance(out_shape_gj, list):
             shapes_gj.extend(out_shape_gj)
