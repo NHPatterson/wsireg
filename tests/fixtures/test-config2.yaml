@@ -3,7 +3,7 @@ output_dir: fill_in
 cache_images: true
 modalities:
   mod1:
-    image_filepath: ./fixtures/sc_im_8bit.tiff
+    image_filepath: ./tests/fixtures/sc_im_8bit.tiff
     image_res: 0.65
     preprocessing:
       image_type: FL
@@ -12,7 +12,7 @@ modalities:
       as_uint8: true
     mask: null
   mod2:
-    image_filepath: ./fixtures/mc_im_8bit.tiff
+    image_filepath: ./tests/fixtures/mc_im_8bit.tiff
     image_res: 0.65
     channel_names:
      - DAPI autofluorescence
