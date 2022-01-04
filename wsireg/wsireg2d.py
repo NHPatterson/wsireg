@@ -169,6 +169,7 @@ class WsiReg2D(object):
             Union[ImagePreproParams, Dict[str, Any]]
         ] = None,
         mask: Optional[Union[str, Path, np.ndarray]] = None,
+        prepro_dict=Optional[Dict[str, Any]],
     ) -> None:
         """
         Add an image modality (node) to the registration graph
@@ -196,6 +197,12 @@ class WsiReg2D(object):
                 'modality named \"{}\" is already in modality_names'.format(
                     modality_name
                 )
+            )
+        if prepro_dict:
+            preprocessing = prepro_dict
+            DeprecationWarning(
+                "'prepro_dict' argument is deprepcated and will be removed\
+                in a future release, use 'preprocessing' instead"
             )
         if preprocessing:
             if isinstance(preprocessing, dict):
