@@ -1,14 +1,17 @@
+from typing import Union, Optional, List, Dict, Tuple, Any
 import time
 import yaml
 from pathlib import Path
 from copy import deepcopy
 import json
+import numpy as np
 import SimpleITK as sitk
 from wsireg.reg_images.loader import reg_image_loader
-from wsireg.reg_images import MergeRegImage
+from wsireg.reg_images import MergeRegImage, RegImage
 from wsireg.writers.merge_ome_tiff_writer import OmeTiffWriter
 from wsireg.writers.merge_ome_tiff_writer import MergeOmeTiffWriter
 from wsireg.utils.reg_utils import (
+    _prepare_reg_models,
     register_2d_images_itkelx,
     sitk_pmap_to_dict,
     pmap_dict_to_json,
@@ -21,6 +24,8 @@ from wsireg.utils.tform_conversion import get_elastix_transforms
 from wsireg.utils.tform_utils import (
     prepare_wsireg_transform_data,
 )
+from wsireg.parameter_maps.preprocessing import ImagePreproParams
+from wsireg.parameter_maps.reg_model import RegModel
 from wsireg.utils.im_utils import (
     ARRAYLIKE_CLASSES,
 )
@@ -39,6 +44,8 @@ class WsiReg2D(object):
     cache_images: bool
         whether to store images as they are preprocessed for registration (if you need to repeat or modify settings
         this will avoid image io and preprocessing)
+    config: str or Path
+        path to a 2D wsireg YAML configuration
 
     Attributes
     ----------
@@ -79,8 +86,8 @@ class WsiReg2D(object):
         self,
         project_name: str,
         output_dir: str,
-        cache_images=True,
-        config=None,
+        cache_images: bool = True,
+        config: Optional[Union[str, Path]] = None,
     ):
 
         if project_name is None:
@@ -115,7 +122,7 @@ class WsiReg2D(object):
         self.merge_modalities = {}
         self.original_size_transforms = {}
 
-        if config is not None:
+        if config:
             self.add_data_from_config(config)
 
     @property
@@ -153,14 +160,17 @@ class WsiReg2D(object):
 
     def add_modality(
         self,
-        modality_name,
-        image_fp,
-        image_res=1,
-        channel_names=None,
-        channel_colors=None,
-        prepro_dict={},
-        mask=None,
-    ):
+        modality_name: str,
+        image_fp: Union[Path, str, np.ndarray],
+        image_res: Union[int, float] = 1,
+        channel_names: Optional[List[str]] = None,
+        channel_colors: Optional[List[str]] = None,
+        preprocessing: Optional[
+            Union[ImagePreproParams, Dict[str, Any]]
+        ] = None,
+        mask: Optional[Union[str, Path, np.ndarray]] = None,
+        prepro_dict: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """
         Add an image modality (node) to the registration graph
 
@@ -172,7 +182,11 @@ class WsiReg2D(object):
             file path to the image to be read
         image_res : float
             spatial resolution of image in units per px (i.e. 0.9 um / px)
-        prepro_dict :
+        channel_names: List[str]
+            names for the channels to go into the OME-TIFF
+        channel_colors: List[str]
+            channels colors for OME-TIFF (not implemented)
+        preprocessing :
             preprocessing parameters for the modality for registration. Registration images should be a xy single plane
             so many modalities (multi-channel, RGB) must "create" a single channel.
             Defaults: multi-channel images -> max intensity project image
@@ -184,6 +198,19 @@ class WsiReg2D(object):
                     modality_name
                 )
             )
+        if prepro_dict:
+            preprocessing = prepro_dict
+            DeprecationWarning(
+                "'prepro_dict' argument is deprepcated and will be removed\
+                in a future release, use 'preprocessing' instead"
+            )
+        if preprocessing:
+            if isinstance(preprocessing, dict):
+                image_prepro = ImagePreproParams(**preprocessing)
+            else:
+                image_prepro = preprocessing
+        else:
+            image_prepro = ImagePreproParams()
 
         self.modalities = {
             modality_name: {
@@ -191,7 +218,7 @@ class WsiReg2D(object):
                 "image_res": image_res,
                 "channel_names": channel_names,
                 "channel_colors": channel_colors,
-                "preprocessing": prepro_dict,
+                "preprocessing": image_prepro,
                 "mask": mask,
             }
         }
@@ -199,23 +226,27 @@ class WsiReg2D(object):
         self.modality_names = modality_name
 
     def add_shape_set(
-        self, attachment_modality, shape_set_name, shape_files, image_res
-    ):
+        self,
+        attachment_modality: str,
+        shape_set_name: str,
+        shape_files: List[Union[str, Path]],
+        image_res: Union[int, float],
+    ) -> None:
         """
         Add a shape set to the graph
 
         Parameters
         ----------
+        attachment_modality : str
+            image modality to which the shapes are attached
         shape_set_name : str
             Unique name identifier for the shape set
-        shape_files : list
+        shape_files : list of file paths
             list of shape data in geoJSON format or list of dicts containing following keys:
             "array" = np.ndarray of xy coordinates, "shape_type" = geojson shape type (Polygon, MultiPolygon, etc.),
             "shape_name" = class of the shape("tumor","normal",etc.)
         image_res : float
             spatial resolution of shape data's associated image in units per px (i.e. 0.9 um / px)
-        attachment_modality :
-            image modality to which the shapes are attached
         """
         if shape_set_name in self._shape_set_names:
             raise ValueError(
@@ -236,13 +267,13 @@ class WsiReg2D(object):
 
     def add_attachment_images(
         self,
-        attachment_modality,
-        modality_name,
-        image_fp,
-        image_res=1,
-        channel_names=None,
-        channel_colors=None,
-    ):
+        attachment_modality: str,
+        modality_name: str,
+        image_fp: Union[str, Path],
+        image_res: Union[int, float] = 1,
+        channel_names: Optional[List[str]] = None,
+        channel_colors: Optional[List[str]] = None,
+    ) -> None:
         """
         Images which are unregistered between modalities, but are transformed following the path of one of the graph's
         modalities.
@@ -257,6 +288,10 @@ class WsiReg2D(object):
             path to the attachment modality, it will be imported and transformed without preprocessing
         image_res : float
             spatial resolution of attachment image data's in units per px (i.e. 0.9 um / px)
+        channel_names: List[str]
+            names for the channels to go into the OME-TIFF
+        channel_colors: List[str]
+            channels colors for OME-TIFF (not implemented)
         """
         if attachment_modality not in self.modality_names:
             raise ValueError(
@@ -274,8 +309,25 @@ class WsiReg2D(object):
         self.attachment_images[modality_name] = attachment_modality
 
     def add_attachment_shapes(
-        self, attachment_modality, shape_set_name, shape_files
-    ):
+        self,
+        attachment_modality: str,
+        shape_set_name: str,
+        shape_files: List[Union[str, Path]],
+    ) -> None:
+        """
+        Add attached shapes
+
+        Parameters
+        ----------
+        attachment_modality : str
+            image modality to which the shapes are attached
+        shape_set_name : str
+            Unique name identifier for the shape set
+        shape_files : list of file paths
+            list of shape data in geoJSON format or list of dicts containing following keys:
+            "array" = np.ndarray of xy coordinates, "shape_type" = geojson shape type (Polygon, MultiPolygon, etc.),
+            "shape_name" = class of the shape("tumor","normal",etc.)
+        """
         if attachment_modality not in self.modality_names:
             raise ValueError(
                 'attachment modality \"{}\" for shapes \"{}\" not found in modality_names {}'.format(
@@ -318,11 +370,13 @@ class WsiReg2D(object):
 
     def add_reg_path(
         self,
-        src_modality_name,
-        tgt_modality_name,
-        thru_modality=None,
-        reg_params=[],
-        override_prepro={"source": None, "target": None},
+        src_modality_name: str,
+        tgt_modality_name: str,
+        thru_modality: Optional[str] = None,
+        reg_params: Union[str, RegModel, List[str], List[RegModel]] = [
+            RegModel.rigid
+        ],
+        override_prepro: dict = {"source": None, "target": None},
     ):
         """
         Add registration path between modalities as well as a thru modality that describes where to attach edges.
@@ -397,7 +451,12 @@ class WsiReg2D(object):
 
         self._transform_paths = transform_path_dict
 
-    def find_path(self, start_modality, end_modality, path=None):
+    def find_path(
+        self,
+        start_modality: str,
+        end_modality: str,
+        path: Optional[List[str]] = None,
+    ) -> Optional[List[str]]:
         """
         Find a path from start_modality to end_modality in the graph
         """
@@ -415,7 +474,7 @@ class WsiReg2D(object):
                     return extended_path
         return None
 
-    def _check_cache_modality(self, modality_name):
+    def _check_cache_modality(self, modality_name: str):
         cache_im_fp = self.image_cache / "{}_prepro.tiff".format(modality_name)
         cache_transform_fp = cache_im_fp.parent / "{}_init_tforms.json".format(
             cache_im_fp.stem
@@ -444,7 +503,9 @@ class WsiReg2D(object):
 
         return im_fp, im_initial_transforms, im_from_cache, osize_tform
 
-    def _prepare_modality(self, modality_name, reg_edge, src_or_tgt):
+    def _prepare_modality(
+        self, modality_name: str, reg_edge: dict, src_or_tgt: str
+    ) -> Tuple:
         mod_data = self.modalities[modality_name].copy()
 
         if reg_edge.get("override_prepro") is not None:
@@ -475,7 +536,7 @@ class WsiReg2D(object):
             ) = self._check_cache_modality(modality_name)
 
             if im_from_cache is True:
-                if mod_data["preprocessing"].get("use_mask") is False:
+                if mod_data["preprocessing"].use_mask is False:
                     mod_data["mask"] = None
                 mod_data["preprocessing"] = None
 
@@ -488,7 +549,7 @@ class WsiReg2D(object):
                 original_size_transform,
             )
 
-    def _cache_images(self, modality_name, reg_image):
+    def _cache_images(self, modality_name: str, reg_image: RegImage) -> None:
 
         cache_im_fp = self.image_cache / "{}_prepro.tiff".format(modality_name)
 
@@ -523,7 +584,7 @@ class WsiReg2D(object):
                 reg_image.original_size_transform, str(cache_osize_tform_fp)
             )
 
-    def _find_nonreg_modalities(self):
+    def _find_nonreg_modalities(self) -> None:
         registered_modalities = [
             edge.get("modalities").get("source")
             for edge in self.reg_graph_edges
@@ -707,10 +768,12 @@ class WsiReg2D(object):
                     )
                 )
 
+                reg_params_prepared = _prepare_reg_models(reg_params)
+
                 reg_tforms = register_2d_images_itkelx(
                     src_reg_image,
                     tgt_reg_image,
-                    reg_params,
+                    reg_params_prepared,
                     output_path,
                 )
 
@@ -806,10 +869,10 @@ class WsiReg2D(object):
         transformations = {"initial": None, "registered": None}
 
         if (
-            im_data.get("preprocessing").get("rot_cc") is not None
-            or im_data.get("preprocessing").get("flip") is not None
-            or im_data.get("preprocessing").get("mask_to_bbox") is True
-            or im_data.get("preprocessing").get("mask_bbox") is not None
+            im_data["preprocessing"].rot_cc
+            or im_data["preprocessing"].flip
+            or im_data["preprocessing"].crop_to_mask_bbox
+            or im_data["preprocessing"].mask_bbox
         ):
 
             transformations.update(
@@ -1219,7 +1282,7 @@ class WsiReg2D(object):
                     image_res=val.get("image_res"),
                     channel_names=val.get("channel_names"),
                     channel_colors=val.get("channel_colors"),
-                    prepro_dict=preprocessing,
+                    preprocessing=preprocessing,
                     mask=val.get("mask"),
                 )
         else:

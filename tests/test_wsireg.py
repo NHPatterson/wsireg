@@ -4,6 +4,7 @@ import numpy as np
 from pathlib import Path
 from wsireg.wsireg2d import WsiReg2D
 from wsireg.reg_images.loader import reg_image_loader
+from wsireg.parameter_maps.preprocessing import ImagePreproParams
 
 HERE = os.path.dirname(__file__)
 GEOJSON_FP = os.path.join(HERE, "fixtures/polygons.geojson")
@@ -41,7 +42,10 @@ def test_wsireg2d_add_modality_w_fp(data_out_dir, data_im_fp):
     assert wsi_reg.modalities.get("test_mod").get("image_res") == 0.65
     assert wsi_reg.modalities.get("test_mod").get("channel_names") == ["test"]
     assert wsi_reg.modalities.get("test_mod").get("channel_colors") == ["red"]
-    assert wsi_reg.modalities.get("test_mod").get("preprocessing") == {}
+    assert (
+        wsi_reg.modalities.get("test_mod").get("preprocessing")
+        == ImagePreproParams()
+    )
     assert wsi_reg.modalities.get("test_mod").get("mask") == None
     assert wsi_reg.n_modalities == 1
 
@@ -62,7 +66,10 @@ def test_wsireg2d_add_modality_w_np(data_out_dir, im_mch_np):
     assert wsi_reg.modalities.get("test_mod").get("image_res") == 0.65
     assert wsi_reg.modalities.get("test_mod").get("channel_names") == ["test"]
     assert wsi_reg.modalities.get("test_mod").get("channel_colors") == ["red"]
-    assert wsi_reg.modalities.get("test_mod").get("preprocessing") == {}
+    assert (
+        wsi_reg.modalities.get("test_mod").get("preprocessing")
+        == ImagePreproParams()
+    )
     assert wsi_reg.modalities.get("test_mod").get("mask") == None
     assert wsi_reg.n_modalities == 1
 
@@ -213,7 +220,10 @@ def test_wsireg_run_reg_with_crop(data_out_dir, disk_im_gry):
         0.65,
         channel_names=["test"],
         channel_colors=["red"],
-        prepro_dict={"mask_bbox": [512, 512, 512, 512]},
+        preprocessing={
+            "mask_bbox": [512, 512, 512, 512],
+            "crop_to_mask_bbox": True,
+        },
     )
 
     wsi_reg.add_reg_path(
@@ -263,7 +273,11 @@ def test_wsireg_run_reg_with_flip_crop(data_out_dir, disk_im_gry):
         0.65,
         channel_names=["test"],
         channel_colors=["red"],
-        prepro_dict={"mask_bbox": [512, 512, 512, 512], "flip": "h"},
+        preprocessing={
+            "mask_bbox": [512, 512, 512, 512],
+            "flip": "h",
+            "crop_to_mask_bbox": True,
+        },
     )
 
     wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])
@@ -317,7 +331,10 @@ def test_wsireg_run_reg_with_crop_merge(data_out_dir, disk_im_gry):
         0.65,
         channel_names=["test"],
         channel_colors=["red"],
-        prepro_dict={"mask_bbox": [512, 512, 512, 512]},
+        preprocessing={
+            "mask_bbox": [512, 512, 512, 512],
+            "crop_to_mask_bbox": True,
+        },
     )
 
     wsi_reg.add_reg_path("mod1", "mod3", reg_params=["rigid_test"])

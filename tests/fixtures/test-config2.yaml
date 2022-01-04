@@ -1,0 +1,35 @@
+project_name: testreg2
+output_dir: fill_in
+cache_images: true
+modalities:
+  mod1:
+    image_filepath: ./tests/fixtures/sc_im_8bit.tiff
+    image_res: 0.65
+    preprocessing:
+      image_type: FL
+      contrast_enhance: true
+      invert_intensity: false
+      as_uint8: true
+    mask: null
+  mod2:
+    image_filepath: ./tests/fixtures/mc_im_8bit.tiff
+    image_res: 0.65
+    channel_names:
+     - DAPI autofluorescence
+     - eGFP autofluorescence
+     - DsRed autofluorescence
+    preprocessing:
+      image_type: FL
+      ch_indices: 0
+      contrast_enhance: true
+      invert_intensity: false
+      as_uint8: true
+      mask_to_bbox: false
+reg_paths:
+  reg_path_0:
+    src_modality_name: mod2
+    tgt_modality_name: mod1
+    thru_modality: null
+    reg_params:
+    - rigid_test
+    - affine_test

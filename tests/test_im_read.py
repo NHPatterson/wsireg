@@ -2,8 +2,7 @@ import pytest
 import os
 import numpy as np
 from wsireg.reg_images.loader import reg_image_loader
-from wsireg.utils.im_utils import std_prepro
-import SimpleITK as sitk
+from wsireg.parameter_maps.preprocessing import ImagePreproParams
 
 # private data logic borrowed from https://github.com/cgohlke/tifffile/tests/test_tifffile.py
 HERE = os.path.dirname(__file__)
@@ -44,6 +43,15 @@ def test_czi_read_rgb_bf_preprocess():
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+def test_czi_read_rgb_bf_preprocess_default():
+    image_fp = os.path.join(PRIVATE_DIR, "czi_rgb.czi")
+    preprocessing = ImagePreproParams()
+    ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
+    ri.read_reg_image()
+    assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
+
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_czi_read_mc():
     image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
     ri = reg_image_loader(image_fp, 1)
@@ -76,7 +84,7 @@ def test_czi_read_mc_fl_preprocess():
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_czi_read_mc_std_preprocess():
     image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
-    preprocessing = std_prepro()
+    preprocessing = ImagePreproParams()
     ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
     ri.read_reg_image()
     assert ri.reg_image.GetNumberOfComponentsPerPixel() == 1
@@ -84,7 +92,7 @@ def test_czi_read_mc_std_preprocess():
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_czi_read_mc_selectch_preprocess():
+def test_czi_read_mc_selectch_preprocess_list():
     image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
     preprocessing = {"ch_indices": [0]}
     ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)
@@ -94,7 +102,7 @@ def test_czi_read_mc_selectch_preprocess():
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
-def test_czi_read_mc_selectch_preprocess():
+def test_czi_read_mc_selectch_preprocess_int():
     image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
     preprocessing = {"ch_indices": 0}
     ri = reg_image_loader(image_fp, 1, preprocessing=preprocessing)

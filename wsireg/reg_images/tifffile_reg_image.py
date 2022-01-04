@@ -3,7 +3,6 @@ import SimpleITK as sitk
 from tifffile import TiffFile
 from wsireg.reg_images.reg_image import RegImage
 from wsireg.utils.im_utils import (
-    std_prepro,
     guess_rgb,
     get_tifffile_info,
     tf_get_largest_series,
@@ -24,6 +23,7 @@ class TiffFileRegImage(RegImage):
         channel_names=None,
         channel_colors=None,
     ):
+        super(TiffFileRegImage, self).__init__(preprocessing)
         self.image_filepath = image_fp
         self.image_res = image_res
         self.image = None
@@ -40,12 +40,6 @@ class TiffFileRegImage(RegImage):
 
         self.n_ch = self.im_dims[2] if self.is_rgb else self.im_dims[0]
         self.mask = self.read_mask(mask)
-
-        if preprocessing is None:
-            self.preprocessing = std_prepro()
-        else:
-            self.preprocessing = std_prepro()
-            self.preprocessing.update(preprocessing)
 
         self.pre_reg_transforms = pre_reg_transforms
 
@@ -68,51 +62,23 @@ class TiffFileRegImage(RegImage):
         largest_series = tf_get_largest_series(self.image_filepath)
 
         try:
-            image = tifffile_dask_backend(
+            reg_image = tifffile_dask_backend(
                 self.image_filepath, largest_series, self.preprocessing
             )
         except ValueError:
-            image = tifffile_zarr_backend(
+            reg_image = tifffile_zarr_backend(
                 self.image_filepath, largest_series, self.preprocessing
             )
 
         if (
             self.preprocessing is not None
             and self.preprocessing.get('as_uint8') is True
-            and image.GetPixelID() != sitk.sitkUInt8
+            and reg_image.GetPixelID() != sitk.sitkUInt8
         ):
-            image = sitk.RescaleIntensity(image)
-            image = sitk.Cast(image, sitk.sitkUInt8)
+            reg_image = sitk.RescaleIntensity(reg_image)
+            reg_image = sitk.Cast(reg_image, sitk.sitkUInt8)
 
-        image, spatial_preprocessing = self.preprocess_reg_image_intensity(
-            image, self.preprocessing
-        )
-
-        if image.GetDepth() >= 1:
-            raise ValueError(
-                "preprocessing did not result in a single image plane\n"
-                "multi-channel or 3D image return"
-            )
-
-        if image.GetNumberOfComponentsPerPixel() > 1:
-            raise ValueError(
-                "preprocessing did not result in a single image plane\n"
-                "multi-component / RGB(A) image returned"
-            )
-
-        if (
-            len(spatial_preprocessing) > 0
-            or self.pre_reg_transforms is not None
-        ):
-            (
-                self.image,
-                self.pre_reg_transforms,
-            ) = self.preprocess_reg_image_spatial(
-                image, spatial_preprocessing, self.pre_reg_transforms
-            )
-        else:
-            self.image = image
-            self.pre_reg_transforms = None
+        self.preprocess_image(reg_image)
 
     def read_single_channel(self, channel_idx: int):
         if channel_idx > (self.n_ch - 1):

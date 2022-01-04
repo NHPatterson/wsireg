@@ -19,6 +19,7 @@ from wsireg.utils.im_utils import (
     get_sitk_image_info,
     get_tifffile_info,
 )
+from wsireg.parameter_maps.preprocessing import ImagePreproParams
 
 # private data logic borrowed from https://github.com/cgohlke/tifffile/tests/test_tifffile.py
 HERE = os.path.dirname(__file__)
@@ -93,41 +94,45 @@ def test_read_preprocess_array():
     gr_arr = ensure_dask_array(np.zeros((128, 128), dtype=np.uint8))
 
     std_rgb = read_preprocess_array(
-        da_arr, preprocessing={"image_type": "BF"}, force_rgb=None
+        da_arr,
+        preprocessing=ImagePreproParams(image_type="BF"),
+        force_rgb=None,
     )
     nonstd_rgb = read_preprocess_array(
-        mc_arr, preprocessing={"image_type": "BF"}, force_rgb=True
+        mc_arr,
+        preprocessing=ImagePreproParams(image_type="BF"),
+        force_rgb=True,
     )
 
     all_ch_mc = read_preprocess_array(
-        mc_arr, preprocessing={"image_type": "FL"}
+        mc_arr, preprocessing=ImagePreproParams(image_type="FL")
     )
 
     ch0_ch_mc = read_preprocess_array(
-        mc_arr, preprocessing={"ch_indices": [0]}
+        mc_arr, preprocessing=ImagePreproParams(ch_indices=[0])
     )
     ch01_ch_mc = read_preprocess_array(
-        mc_arr, preprocessing={"ch_indices": [0, 1]}
+        mc_arr, preprocessing=ImagePreproParams(ch_indices=[0, 1])
     )
     ch12_ch_mc = read_preprocess_array(
-        mc_arr, preprocessing={"ch_indices": [1, 2]}
+        mc_arr, preprocessing=ImagePreproParams(ch_indices=[1, 2])
     )
     ch02_ch_mc = read_preprocess_array(
-        mc_arr, preprocessing={"ch_indices": [0, 2]}
+        mc_arr, preprocessing=ImagePreproParams(ch_indices=[0, 2])
     )
     ch1_ch_mc = read_preprocess_array(
-        mc_arr, preprocessing={"ch_indices": [1]}
+        mc_arr, preprocessing=ImagePreproParams(ch_indices=[1])
     )
     ch2_ch_mc = read_preprocess_array(
-        mc_arr, preprocessing={"ch_indices": [2]}
+        mc_arr, preprocessing=ImagePreproParams(ch_indices=[2])
     )
 
-    std_gr = read_preprocess_array(gr_arr, preprocessing={"image_type": "FL"})
+    std_gr = read_preprocess_array(gr_arr, ImagePreproParams(image_type="FL"))
     chsel0_gr = read_preprocess_array(
-        gr_arr, preprocessing={"ch_indices": [0]}
+        gr_arr, preprocessing=ImagePreproParams(ch_indices=[0])
     )
     chsel01_gr = read_preprocess_array(
-        gr_arr, preprocessing={"ch_indices": [0, 1]}
+        gr_arr, preprocessing=ImagePreproParams(ch_indices=[0, 1])
     )
 
     assert std_rgb.GetNumberOfComponentsPerPixel() == 1
@@ -173,22 +178,34 @@ def test_tifffile_zarr_backend(
     disk_im_rgb,
 ):
     im_gry_pyr = tifffile_zarr_backend(
-        disk_im_gry_pyr, largest_series=0, preprocessing={"image_type": "FL"}
+        disk_im_gry_pyr,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="FL"),
     )
     im_mch_pyr = tifffile_zarr_backend(
-        disk_im_mch_pyr, largest_series=0, preprocessing={"image_type": "FL"}
+        disk_im_mch_pyr,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="FL"),
     )
     im_rgb_pyr = tifffile_zarr_backend(
-        disk_im_rgb_pyr, largest_series=0, preprocessing={"image_type": "BF"}
+        disk_im_rgb_pyr,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="BF"),
     )
     im_gry = tifffile_zarr_backend(
-        disk_im_gry, largest_series=0, preprocessing={"image_type": "FL"}
+        disk_im_gry,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="FL"),
     )
     im_mch = tifffile_zarr_backend(
-        disk_im_mch, largest_series=0, preprocessing={"image_type": "FL"}
+        disk_im_mch,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="FL"),
     )
     im_rgb = tifffile_zarr_backend(
-        disk_im_rgb, largest_series=0, preprocessing={"image_type": "BF"}
+        disk_im_rgb,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="BF"),
     )
 
     assert im_gry_pyr.GetSize() == (2048, 2048)
@@ -216,22 +233,34 @@ def test_tifffile_dask_backend(
     disk_im_rgb,
 ):
     im_gry_pyr = tifffile_dask_backend(
-        disk_im_gry_pyr, largest_series=0, preprocessing={"image_type": "FL"}
+        disk_im_gry_pyr,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="FL"),
     )
     im_mch_pyr = tifffile_dask_backend(
-        disk_im_mch_pyr, largest_series=0, preprocessing={"image_type": "FL"}
+        disk_im_mch_pyr,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="FL"),
     )
     im_rgb_pyr = tifffile_dask_backend(
-        disk_im_rgb_pyr, largest_series=0, preprocessing={"image_type": "BF"}
+        disk_im_rgb_pyr,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="BF"),
     )
     im_gry = tifffile_dask_backend(
-        disk_im_gry, largest_series=0, preprocessing={"image_type": "FL"}
+        disk_im_gry,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="FL"),
     )
     im_mch = tifffile_dask_backend(
-        disk_im_mch, largest_series=0, preprocessing={"image_type": "FL"}
+        disk_im_mch,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="FL"),
     )
     im_rgb = tifffile_dask_backend(
-        disk_im_rgb, largest_series=0, preprocessing={"image_type": "BF"}
+        disk_im_rgb,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="BF"),
     )
 
     assert im_gry_pyr.GetSize() == (2048, 2048)
@@ -259,22 +288,34 @@ def test_tifffile_dask_backend(
     disk_im_rgb,
 ):
     im_gry_pyr = tifffile_dask_backend(
-        disk_im_gry_pyr, largest_series=0, preprocessing={"image_type": "FL"}
+        disk_im_gry_pyr,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="FL"),
     )
     im_mch_pyr = tifffile_dask_backend(
-        disk_im_mch_pyr, largest_series=0, preprocessing={"image_type": "FL"}
+        disk_im_mch_pyr,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="FL"),
     )
     im_rgb_pyr = tifffile_dask_backend(
-        disk_im_rgb_pyr, largest_series=0, preprocessing={"image_type": "BF"}
+        disk_im_rgb_pyr,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="BF"),
     )
     im_gry = tifffile_dask_backend(
-        disk_im_gry, largest_series=0, preprocessing={"image_type": "FL"}
+        disk_im_gry,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="FL"),
     )
     im_mch = tifffile_dask_backend(
-        disk_im_mch, largest_series=0, preprocessing={"image_type": "FL"}
+        disk_im_mch,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="FL"),
     )
     im_rgb = tifffile_dask_backend(
-        disk_im_rgb, largest_series=0, preprocessing={"image_type": "BF"}
+        disk_im_rgb,
+        largest_series=0,
+        preprocessing=ImagePreproParams(image_type="BF"),
     )
 
     assert im_gry_pyr.GetSize() == (2048, 2048)
@@ -296,9 +337,13 @@ def test_sitk_backend(
     disk_im_rgb,
 ):
 
-    im_gry = sitk_backend(str(disk_im_gry), preprocessing={"image_type": "FL"})
+    im_gry = sitk_backend(
+        str(disk_im_gry), preprocessing=ImagePreproParams(image_type="FL")
+    )
     # im_mch = sitk_backend(str(disk_im_mch_notile), preprocessing={"image_type":"FL"})
-    im_rgb = sitk_backend(str(disk_im_rgb), preprocessing={"image_type": "BF"})
+    im_rgb = sitk_backend(
+        str(disk_im_rgb), preprocessing=ImagePreproParams(image_type="BF")
+    )
 
     assert im_gry.GetSize() == (2048, 2048)
     # assert im_mch.GetSize() == (2048,2048,3)
@@ -367,6 +412,7 @@ def test_CziRegImageReader_rgb():
     assert len(np.squeeze(gs_out).shape) == 2
     assert len(np.squeeze(rgb_out).shape) == 3
 
+
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 def test_CziRegImageReader_mc():
     image_fp = os.path.join(PRIVATE_DIR, "czi_4ch_16bit.czi")
@@ -404,10 +450,10 @@ def test_CziRegImageReader_mc():
     assert np.array_equal(
         np.squeeze(ch23_out), np.squeeze(mc_out)[[2, 3], :, :]
     )
-    assert np.array_equal(np.squeeze(mc_out)[0,:,:], np.squeeze(ch0_out))
-    assert np.array_equal(np.squeeze(mc_out)[1,:,:], np.squeeze(ch1_out))
-    assert np.array_equal(np.squeeze(mc_out)[2,:,:], np.squeeze(ch2_out))
-    assert np.array_equal(np.squeeze(mc_out)[3,:,:], np.squeeze(ch3_out))
+    assert np.array_equal(np.squeeze(mc_out)[0, :, :], np.squeeze(ch0_out))
+    assert np.array_equal(np.squeeze(mc_out)[1, :, :], np.squeeze(ch1_out))
+    assert np.array_equal(np.squeeze(mc_out)[2, :, :], np.squeeze(ch2_out))
+    assert np.array_equal(np.squeeze(mc_out)[3, :, :], np.squeeze(ch3_out))
 
 
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
