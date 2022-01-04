@@ -61,7 +61,7 @@ reg_graph.add_modality(
     "modality_brightfield",
     "./data/im2.tiff",
     image_res=1,
-    preprocessing={"image_type": "BF", "as_uint8": True, "inv_int_opt": True},
+    preprocessing={"image_type": "BF", "as_uint8": True, "invert_intensity": True},
 )
 
 reg_graph.add_reg_path(

@@ -191,9 +191,7 @@ class RegImage:
                 {"initial": [translation_transform]}
             )
 
-            image = transform_plane(
-                image, final_tform, composite_transform
-            )
+            image = transform_plane(image, final_tform, composite_transform)
 
             self.original_size_transform = gen_rig_to_original(
                 original_size, deepcopy(translation_transform)
