@@ -34,6 +34,12 @@ def _transform_to_bbox(mask_bbox: Union[Tuple[int, int, int, int], List[int]]):
     return BoundingBox(*mask_bbox)
 
 
+def _index_to_list(ch_indices: Union[int, List[int]]):
+    if isinstance(ch_indices, int):
+        ch_indices = [ch_indices]
+    return ch_indices
+
+
 def _transform_custom_proc(
     custom_procs: Union[List[Callable], Tuple[Callable, ...]]
 ):
@@ -87,6 +93,10 @@ class ImagePreproParams(BaseModel):
     @validator('mask_bbox', pre=True)
     def _make_bbox(cls, v):
         return _transform_to_bbox(v)
+
+    @validator('ch_indices', pre=True)
+    def _make_ch_list(cls, v):
+        return _index_to_list(v)
 
     @validator('custom_processing', pre=True)
     def _check_custom_prepro(cls, v):
