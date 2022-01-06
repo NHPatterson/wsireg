@@ -759,15 +759,6 @@ class WsiReg2D(object):
 
                 output_path.mkdir(parents=False, exist_ok=True)
 
-                output_path_tform = (
-                    self.output_dir
-                    / "{}-{}_to_{}_transformations.json".format(
-                        self.project_name,
-                        reg_edge["modalities"]["source"],
-                        reg_edge["modalities"]["target"],
-                    )
-                )
-
                 reg_params_prepared = _prepare_reg_models(reg_params)
 
                 reg_tforms = register_2d_images_itkelx(
@@ -794,9 +785,6 @@ class WsiReg2D(object):
                 )
 
                 reg_edge["registered"] = True
-                pmap_dict_to_json(
-                    reg_edge["transforms"], str(output_path_tform)
-                )
 
         self.transformations = self.reg_graph_edges
         self.save_config(registered=True)
@@ -1395,3 +1383,8 @@ if __name__ == "__main__":
     import sys
 
     sys.exit(main())
+# config_filepath = "tests/fixtures/test-config1-local.yaml"
+# reg_graph = config_to_WsiReg2D(config_filepath)
+# reg_graph.add_data_from_config(config_filepath)
+#
+# self = reg_graph

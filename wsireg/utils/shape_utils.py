@@ -278,7 +278,7 @@ def prepare_pt_transformation_data(transformations, compute_inverse=True):
         This is needed to map coordinates defined as pixel indices to physical coordinates and then back
     """
     if all([isinstance(t, RegTransform) for t in transformations]) is False:
-        composite, transformations = wsireg_transforms_to_itk_composite(
+        _, transformations = wsireg_transforms_to_itk_composite(
             transformations
         )
     if compute_inverse:

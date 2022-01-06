@@ -10,6 +10,7 @@ FIXTURES_DIR = os.path.join(HERE, "fixtures")
 config1_fp = str(Path(FIXTURES_DIR) / "test-config1.yaml")
 config2_fp = str(Path(FIXTURES_DIR) / "test-config2.yaml")
 
+
 def config_to_WsiReg2D(config_filepath, output_dir):
     reg_config = parse_check_reg_config(config_filepath)
 

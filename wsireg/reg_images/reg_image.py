@@ -171,7 +171,7 @@ class RegImage:
                 mask_bbox = compute_mask_to_bbox(self.mask)
                 preprocessing.mask_bbox = mask_bbox
 
-        elif preprocessing.crop_to_mask_bbox:
+        if preprocessing.mask_bbox:
 
             print("cropping to mask")
             translation_transform = gen_rigid_translation(

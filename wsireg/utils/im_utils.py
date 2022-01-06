@@ -19,6 +19,7 @@ import dask.array as da
 from wsireg.utils.tform_utils import (
     sitk_transform_image,
 )
+from wsireg.parameter_maps.preprocessing import BoundingBox
 
 
 TIFFFILE_EXTS = [".scn", ".tif", ".tiff", ".ndpi", ".svs"]
@@ -1381,7 +1382,7 @@ def compute_mask_to_bbox(mask, mask_padding=100):
     x_width = x_max - x_min
     y_height = y_max - y_min
 
-    return (x_min, y_min, x_width, y_height)
+    return BoundingBox(x_min, y_min, x_width, y_height)
 
 
 def sitk_vect_to_gs(image):
