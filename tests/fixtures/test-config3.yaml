@@ -1,0 +1,126 @@
+project_name: VAN0006-LK-2-85
+output_dir: fill
+cache_images: true
+modalities:
+  preAF-IMS:
+    image_filepath: private_data/VAN0006-LK-2-85-AF_preIMS_unregistered.czi
+    image_res: 0.65
+    preprocessing:
+      image_type: FL
+      contrast_enhance: true
+      as_uint8: true
+  preAF-MxIF:
+    image_filepath: private_data/VAN0006-LK-2-86-AF_preMxIF_unregistered.czi
+    image_res: 0.65
+    preprocessing:
+      image_type: FL
+      contrast_enhance: true
+      as_uint8: true
+      rot_cc: 270
+      flip: h
+  MxIF-cyc1:
+    image_filepath: private_data/VAN0006-LK-2-86-MxIF_cyc1_unregistered.czi
+    image_res: 0.65
+    preprocessing:
+      image_type: FL
+      contrast_enhance: true
+      as_uint8: true
+      rot_cc: 270
+      flip: h
+      ch_indices:
+      - 1
+      - 2
+      - 3
+    mask: null
+  MxIF-cyc2:
+    image_filepath: private_data/VAN0006-LK-2-86-MxIF_cyc2_unregistered.czi
+    image_res: 0.65
+    preprocessing:
+      image_type: FL
+      contrast_enhance: true
+      as_uint8: true
+      rot_cc: 270
+      flip: h
+      ch_indices:
+      - 1
+      - 2
+      - 3
+    mask: null
+  MxIF-cyc3:
+    image_filepath: private_data/VAN0006-LK-2-86-MxIF_cyc3_unregistered.czi
+    image_res: 0.65
+    preprocessing:
+      image_type: FL
+      contrast_enhance: true
+      as_uint8: true
+      rot_cc: 270
+      flip: h
+      ch_indices:
+      - 1
+      - 2
+      - 3
+    mask: null
+  PAS-IMS:
+    image_filepath: private_data/VAN0006-LK-2-85-PAS_unregistered.scn
+    image_res: 0.5
+    preprocessing:
+      image_type: FL
+      contrast_enhance: false
+      as_uint8: true
+      rot_cc: -90
+    mask: null
+    
+reg_paths:
+  reg_path_4:
+    src_modality_name: PAS-IMS
+    tgt_modality_name: preAF-IMS
+    thru_modality: null
+    reg_params:
+    - rigid
+    - affine
+  reg_path_0:
+    src_modality_name: preAF-MxIF
+    tgt_modality_name: preAF-IMS
+    thru_modality: null
+    reg_params:
+    - rigid
+    - affine
+    - nl
+  reg_path_1:
+    src_modality_name: MxIF-cyc1
+    tgt_modality_name: preAF-IMS
+    thru_modality: preAF-MxIF
+    reg_params:
+    - rigid
+    - affine
+  reg_path_2:
+    src_modality_name: MxIF-cyc2
+    tgt_modality_name: preAF-IMS
+    thru_modality: preAF-MxIF
+    reg_params:
+    - rigid
+    - affine
+  reg_path_3:
+    src_modality_name: MxIF-cyc3
+    tgt_modality_name: preAF-IMS
+    thru_modality: preAF-MxIF
+    reg_params:
+    - rigid
+    - affine
+    
+attachment_shapes:
+  preAF-MXIF-anno:
+    attachment_modality: preAF-MxIF
+    shape_files: private_data/unreg_rois/VAN0006-LK-2-86-AF_preMxIF_unregistered.geojson
+  MxIF-cyc1-anno:
+    attachment_modality: MxIF-cyc1
+    shape_files: private_data/unreg_rois/VAN0006-LK-2-86-MxIF_cyc1_unregistered.geojson
+  MxIF-cyc2-anno:
+    attachment_modality: MxIF-cyc2
+    shape_files: private_data/unreg_rois/VAN0006-LK-2-86-MxIF_cyc2_unregistered.geojson
+  MxIF-cyc3-anno:
+    attachment_modality: MxIF-cyc3
+    shape_files: private_data/unreg_rois/VAN0006-LK-2-86-MxIF_cyc3_unregistered.geojson
+  PAS-IMS-anno:
+    attachment_modality: PAS-IMS
+    shape_files: private_data/unreg_rois/VAN0006-LK-2-85-PAS_unregistered.scn - Series 1.geojson
