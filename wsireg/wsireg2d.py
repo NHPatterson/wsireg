@@ -167,6 +167,9 @@ class WsiReg2D(object):
         ] = None,
         mask: Optional[Union[str, Path, np.ndarray]] = None,
         prepro_dict: Optional[Dict[str, Any]] = None,
+        output_res: Optional[
+            Union[int, float, Tuple[int, int], Tuple[float, float]]
+        ] = None,
     ) -> None:
         """
         Add an image modality (node) to the registration graph
@@ -183,11 +186,16 @@ class WsiReg2D(object):
             names for the channels to go into the OME-TIFF
         channel_colors: List[str]
             channels colors for OME-TIFF (not implemented)
+        mask: Union[str, Path, np.ndarray]
+            path to binary mask (>0 is in) image for registration and/or cropping
         preprocessing :
             preprocessing parameters for the modality for registration. Registration images should be a xy single plane
             so many modalities (multi-channel, RGB) must "create" a single channel.
             Defaults: multi-channel images -> max intensity project image
             RGB -> greyscale then intensity inversion (black background, white foreground)
+        output_res : Union[Tuple[int,int], Tuple[float,float]]
+            change output spacing/resolution when resampling images, default will be the spacing
+            of the final target image
         """
         if modality_name in self._modality_names:
             raise ValueError(
@@ -209,6 +217,9 @@ class WsiReg2D(object):
         else:
             image_prepro = ImagePreproParams()
 
+        if isinstance(output_res, (int, float)):
+            output_res = (output_res, output_res)
+
         self.modalities = {
             modality_name: {
                 "image_filepath": image_fp,
@@ -217,6 +228,7 @@ class WsiReg2D(object):
                 "channel_colors": channel_colors,
                 "preprocessing": image_prepro,
                 "mask": mask,
+                "output_res": output_res,
             }
         }
 
@@ -948,6 +960,9 @@ class WsiReg2D(object):
             )
             transformations.append(orig_size_rt)
 
+        if im_data["output_res"]:
+            transformations.set_output_spacing(im_data["output_res"])
+
         return im_data, transformations, output_path
 
     def _transform_write_image(
@@ -1313,6 +1328,7 @@ class WsiReg2D(object):
                     channel_colors=val.get("channel_colors"),
                     preprocessing=preprocessing,
                     mask=val.get("mask"),
+                    output_res=val.get("output_res"),
                 )
         else:
             print("warning: config file did not contain any image modalities")

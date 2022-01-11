@@ -510,3 +510,36 @@ def test_wsireg_run_reg_shapes(data_out_dir, disk_im_gry):
 
     assert Path(im_fps[0]).exists() is True
     assert len(gj_files) > 0
+
+
+@pytest.mark.usefixtures("disk_im_gry")
+def test_wsireg_run_reg_changeres(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj_run_wpts", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        output_res=0.325,
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_reg_path(
+        "mod1", "mod2", reg_params=["rigid_test", "affine_test"]
+    )
+    wsi_reg.register_images()
+
+    im_fps = wsi_reg.transform_images(transform_non_reg=False)
+    regim = reg_image_loader(im_fps[0], 0.325)
+
+    assert regim.im_dims[1:] == (4096, 4096)
