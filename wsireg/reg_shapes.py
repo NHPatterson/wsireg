@@ -50,7 +50,7 @@ class RegShapes:
         self._shape_types = None
         self._shape_names = None
 
-        if shape_data is not None:
+        if shape_data:
             self.add_shapes(shape_data, **kwargs)
 
     @property

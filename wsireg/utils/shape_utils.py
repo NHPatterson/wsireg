@@ -186,6 +186,11 @@ def shape_reader(shape_data, **kwargs):
                     raise ValueError(
                         "{} is not a geojson or numpy array".format(str(sh_fp))
                     )
+            else:
+                raise FileNotFoundError(
+                    "{} file not found".format(str(sh_fp.as_posix()))
+                )
+
         if isinstance(out_shape_gj, list):
             shapes_gj.extend(out_shape_gj)
         else:
