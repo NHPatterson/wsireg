@@ -8,7 +8,7 @@ from wsireg.utils.im_utils import (
     contrast_enhance,
     sitk_inv_int,
     sitk_max_int_proj,
-    transform_to_ome_zarr,
+    # transform_to_ome_zarr,
     compute_mask_to_bbox,
     transform_plane,
 )
@@ -19,7 +19,8 @@ from wsireg.utils.tform_utils import (
     gen_rig_to_original,
     prepare_wsireg_transform_data,
 )
-from wsireg.writers.ome_tiff_writer import OmeTiffWriter
+
+# from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 
 
 class RegImage:
@@ -295,46 +296,46 @@ class RegImage:
                 ttype=(type(self.mask), mask_im_type),
             )
 
-    def transform_image(
-        self,
-        image_name,
-        transform_data,
-        file_writer="ome.tiff",
-        output_dir="",
-        **transformation_opts,
-    ):
-        if transform_data is not None:
-            (
-                itk_composite,
-                itk_transforms,
-                final_transform,
-            ) = prepare_wsireg_transform_data(transform_data)
-        else:
-            itk_composite, itk_transforms, final_transform = None, None, None
-
-        if file_writer.lower() == "ome.zarr" or file_writer.lower() == "zarr":
-            im_fp = transform_to_ome_zarr(
-                self, output_dir, **transformation_opts
-            )
-
-        if file_writer.lower() == "ome.tiff" or transform_data is None:
-            ometiffwriter = OmeTiffWriter(self)
-            im_fp = ometiffwriter.write_image_by_plane(
-                image_name,
-                output_dir=output_dir,
-                final_transform=final_transform,
-                composite_transform=itk_composite,
-                **transformation_opts,
-            )
-
-        if file_writer.lower() == "ome.tiff-bytile":
-            ometiffwriter = OmeTiffWriter(self)
-            im_fp = ometiffwriter.write_image_by_tile(
-                image_name,
-                output_dir=output_dir,
-                final_transform=final_transform,
-                itk_transforms=itk_transforms,
-                composite_transform=itk_composite,
-                **transformation_opts,
-            )
-        return im_fp
+    # def transform_image(
+    #     self,
+    #     image_name,
+    #     transform_data,
+    #     file_writer="ome.tiff",
+    #     output_dir="",
+    #     **transformation_opts,
+    # ):
+    #     if transform_data is not None:
+    #         (
+    #             itk_composite,
+    #             itk_transforms,
+    #             final_transform,
+    #         ) = prepare_wsireg_transform_data(transform_data)
+    #     else:
+    #         itk_composite, itk_transforms, final_transform = None, None, None
+    #
+    #     if file_writer.lower() == "ome.zarr" or file_writer.lower() == "zarr":
+    #         im_fp = transform_to_ome_zarr(
+    #             self, output_dir, **transformation_opts
+    #         )
+    #
+    #     if file_writer.lower() == "ome.tiff" or transform_data is None:
+    #         ometiffwriter = OmeTiffWriter(self)
+    #         im_fp = ometiffwriter.write_image_by_plane(
+    #             image_name,
+    #             output_dir=output_dir,
+    #             final_transform=final_transform,
+    #             composite_transform=itk_composite,
+    #             **transformation_opts,
+    #         )
+    #
+    #     if file_writer.lower() == "ome.tiff-bytile":
+    #         ometiffwriter = OmeTiffWriter(self)
+    #         im_fp = ometiffwriter.write_image_by_tile(
+    #             image_name,
+    #             output_dir=output_dir,
+    #             final_transform=final_transform,
+    #             itk_transforms=itk_transforms,
+    #             composite_transform=itk_composite,
+    #             **transformation_opts,
+    #         )
+    #     return im_fp

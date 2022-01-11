@@ -478,7 +478,7 @@ def test_wsireg_run_reg_wattachment(data_out_dir, disk_im_gry):
 
 
 @pytest.mark.usefixtures("disk_im_gry")
-def test_wsireg_run_reg(data_out_dir, disk_im_gry):
+def test_wsireg_run_reg_shapes(data_out_dir, disk_im_gry):
     wsi_reg = WsiReg2D("test_proj_run_wpts", str(data_out_dir))
     img_fp1 = str(disk_im_gry)
 
