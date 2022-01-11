@@ -69,6 +69,8 @@ class RegModel(dict, Enum, metaclass=RegModelMeta):
         "fi_correction"
     ]
     nl_reduced: Dict[str, List[str]] = DEFAULT_REG_PARAM_MAPS["nl-reduced"]
+    nl_mid: Dict[str, List[str]] = DEFAULT_REG_PARAM_MAPS["nl-mid"]
+    nl2: Dict[str, List[str]] = DEFAULT_REG_PARAM_MAPS["nl2"]
     rigid_expanded: Dict[str, List[str]] = DEFAULT_REG_PARAM_MAPS[
         "rigid-expanded"
     ]
