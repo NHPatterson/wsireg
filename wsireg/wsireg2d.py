@@ -1201,6 +1201,7 @@ class WsiReg2D(object):
         """
         Transform all attached shapes and write out shape data to geoJSON.
         """
+        transformed_shapes_fps = []
         for set_name, set_data in self.shape_sets.items():
             attachment_modality = set_data["attachment_modality"]
 
@@ -1218,7 +1219,7 @@ class WsiReg2D(object):
             rs.transform_shapes(
                 self.transformations[attachment_modality][
                     "full-transform-seq"
-                ].reg_transforms,
+                ].reg_transforms_itk_order,
             )
 
             output_path = (
@@ -1232,6 +1233,9 @@ class WsiReg2D(object):
             )
 
             rs.save_shape_data(output_path, transformed=True)
+            transformed_shapes_fps.append(output_path)
+
+        return transformed_shapes_fps
 
     def _transforms_to_txt(
         self, transformations: Dict[str, RegTransformSeq]
@@ -1305,7 +1309,7 @@ class WsiReg2D(object):
 
         reg_config = parse_check_reg_config(config_filepath)
 
-        if reg_config.get("modalities") is not None:
+        if reg_config.get("modalities"):
             for key, val in reg_config["modalities"].items():
 
                 image_filepath = (
@@ -1333,7 +1337,7 @@ class WsiReg2D(object):
         else:
             print("warning: config file did not contain any image modalities")
 
-        if reg_config.get("reg_paths") is not None:
+        if reg_config.get("reg_paths"):
 
             for key, val in reg_config["reg_paths"].items():
                 self.add_reg_path(
@@ -1347,7 +1351,7 @@ class WsiReg2D(object):
             print(
                 "warning: config file did not contain any registration paths"
             )
-        if reg_config.get("attachment_images") is not None:
+        if reg_config.get("attachment_images"):
 
             for key, val in reg_config["attachment_images"].items():
                 self.add_attachment_images(
@@ -1359,19 +1363,19 @@ class WsiReg2D(object):
                     channel_colors=val.get("channel_colors"),
                 )
 
-        if reg_config.get("attachment_shapes") is not None:
+        if reg_config.get("attachment_shapes"):
 
             for key, val in reg_config["attachment_shapes"].items():
                 self.add_attachment_shapes(
                     val.get("attachment_modality"), key, val.get("shape_files")
                 )
 
-        if reg_config.get("reg_graph_edges") is not None:
+        if reg_config.get("reg_graph_edges"):
             self._reg_graph_edges = reg_config["reg_graph_edges"]
             if all([re.get("registered") for re in self.reg_graph_edges]):
                 self.transformations = self.reg_graph_edges
 
-        if reg_config.get("merge_modalities") is not None:
+        if reg_config.get("merge_modalities"):
             for mn, mm in reg_config["merge_modalities"]:
                 self.add_merge_modalities(mn, mm)
 
@@ -1418,6 +1422,10 @@ def main():
         help="how to write output registered images: ome.tiff, ome.zarr (default: ome.tiff)",
     )
 
+    parser.add_argument('--write_im', dest='write_im', action='store_true')
+    parser.add_argument('--no_write_im', dest='write_im', action='store_false')
+    parser.set_defaults(write_im=True)
+
     args = parser.parse_args()
     config_filepath = args.config_filepath[0]
     if args.fw is None:
@@ -1430,7 +1438,9 @@ def main():
 
     reg_graph.register_images()
     reg_graph.save_transformations()
-    reg_graph.transform_images(file_writer=file_writer)
+
+    if args.write_im:
+        reg_graph.transform_images(file_writer=file_writer)
 
     if reg_graph.shape_sets:
         reg_graph.transform_shapes()
@@ -1440,24 +1450,3 @@ if __name__ == "__main__":
     import sys
 
     sys.exit(main())
-
-#
-# def config_to_WsiReg2D(config_filepath):
-#     reg_config = parse_check_reg_config(config_filepath)
-#
-#     reg_graph = WsiReg2D(
-#         reg_config.get("project_name"),
-#         reg_config.get("output_dir"),
-#         reg_config.get("cache_images"),
-#     )
-#     return reg_graph
-#
-#
-# config_filepath = "tests/fixtures/test-config1-local.yaml"
-# reg_graph = config_to_WsiReg2D(config_filepath)
-# reg_graph.add_data_from_config(config_filepath)
-#
-# self = reg_graph
-#
-# self.register_images()
-# self.transform_images()
