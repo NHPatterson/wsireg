@@ -2,13 +2,13 @@ from typing import Union, Optional, List, Dict, Tuple, Any
 import time
 import yaml
 from pathlib import Path
-from copy import deepcopy
+from copy import copy, deepcopy
 import json
 import numpy as np
 import SimpleITK as sitk
 from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_images import MergeRegImage, RegImage
-from wsireg.writers.merge_ome_tiff_writer import OmeTiffWriter
+from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 from wsireg.writers.merge_ome_tiff_writer import MergeOmeTiffWriter
 from wsireg.utils.reg_utils import (
     _prepare_reg_models,
@@ -19,11 +19,8 @@ from wsireg.utils.reg_utils import (
 )
 from wsireg.reg_shapes import RegShapes
 from wsireg.reg_transform import RegTransform
+from wsireg.reg_transform_seq import RegTransformSeq
 from wsireg.utils.config_utils import parse_check_reg_config
-from wsireg.utils.tform_conversion import get_elastix_transforms
-from wsireg.utils.tform_utils import (
-    prepare_wsireg_transform_data,
-)
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
 from wsireg.parameter_maps.reg_model import RegModel
 from wsireg.utils.im_utils import (
@@ -628,7 +625,7 @@ class WsiReg2D(object):
 
         reg_graph_edges = deepcopy(self.reg_graph_edges)
 
-        [rge.pop("reg_transforms", None) for rge in reg_graph_edges]
+        [rge.pop("transforms", None) for rge in reg_graph_edges]
 
         modalities_out = deepcopy(self.modalities)
         for mod, data in modalities_out.items():
@@ -775,9 +772,24 @@ class WsiReg2D(object):
                 else:
                     initial_transforms = src_reg_image.pre_reg_transforms
 
+                if initial_transforms:
+                    initial_transforms_rt = [
+                        RegTransform(t) for t in initial_transforms
+                    ]
+                    initial_transforms_idx = [
+                        idx for idx, _ in enumerate(initial_transforms_rt)
+                    ]
+                    initial_rt_seq = RegTransformSeq(
+                        initial_transforms_rt, initial_transforms_idx
+                    )
+
+                reg_tforms_rt = [RegTransform(t) for t in reg_tforms]
+                reg_tforms_idx = [0 for _ in reg_tforms_rt]
+                reg_rt_seq = RegTransformSeq(reg_tforms_rt, reg_tforms_idx)
+
                 reg_edge["transforms"] = {
-                    'initial': initial_transforms,
-                    'registration': reg_tforms,
+                    'initial': initial_rt_seq if initial_transforms else None,
+                    'registration': reg_rt_seq,
                 }
 
                 self.original_size_transforms.update(
@@ -787,7 +799,7 @@ class WsiReg2D(object):
                 reg_edge["registered"] = True
 
         self.transformations = self.reg_graph_edges
-        self.save_config(registered=True)
+        # self.save_config(registered=True)
 
     @property
     def transformations(self):
@@ -814,39 +826,50 @@ class WsiReg2D(object):
 
     def _collate_transformations(self):
         transforms = {}
-        for reg_edge in self.reg_graph_edges:
-            if reg_edge["transforms"]["initial"] is not None:
-                initial_transforms = [
-                    RegTransform(t) for t in reg_edge["transforms"]["initial"]
-                ]
-            else:
-                initial_transforms = []
-            reg_edge["reg_transforms"] = {
-                'initial': initial_transforms,
-                'registration': [
-                    RegTransform(t)
-                    for t in reg_edge["transforms"]["registration"]
-                ],
-            }
+        # for reg_edge in self.reg_graph_edges:
+        #     # if reg_edge["transforms"]["initial"]:
+        #     #     initial_transforms = [
+        #     #         RegTransform(t) for t in reg_edge["transforms"]["initial"]
+        #     #     ]
+        #     # else:
+        #     #     initial_transforms = []
+        #     reg_edge["reg_transforms"] = {
+        #         'initial': reg_edge["transforms"]["initial"],
+        #         'registration': reg_edge["transforms"]["registration"],
+        #     }
         edge_modality_pairs = [v['modalities'] for v in self.reg_graph_edges]
         for modality, tform_edges in self.transform_paths.items():
+            full_tform_seq = RegTransformSeq()
             for idx, tform_edge in enumerate(tform_edges):
                 reg_edge_tforms = self.reg_graph_edges[
                     edge_modality_pairs.index(tform_edge)
-                ]["reg_transforms"]
+                ]["transforms"]
                 if idx == 0:
                     transforms[modality] = {
-                        'initial': reg_edge_tforms['initial'],
-                        idx: reg_edge_tforms['registration'],
+                        f"initial-{tform_edges[idx]['source']}": reg_edge_tforms[
+                            'initial'
+                        ],
+                        f"{str(idx).zfill(3)}-to-{tform_edges[idx]['target']}": reg_edge_tforms[
+                            'registration'
+                        ],
                     }
+                    if reg_edge_tforms['initial']:
+                        full_tform_seq.append(reg_edge_tforms['initial'])
+                    full_tform_seq.append(reg_edge_tforms['registration'])
                 else:
-                    transforms[modality][idx] = reg_edge_tforms['registration']
+                    transforms[modality][
+                        f"{str(idx).zfill(3)}-to-{tform_edges[idx]['target']}"
+                    ] = reg_edge_tforms['registration']
+                    full_tform_seq.append(reg_edge_tforms['registration'])
+
+                transforms[modality]["full-transform-seq"] = full_tform_seq
 
         return transforms
 
     def _prepare_nonreg_image_transform(
         self, modality_key, to_original_size=True
     ):
+        transformations = None
         print(
             "transforming non-registered modality : {} ".format(modality_key)
         )
@@ -854,32 +877,33 @@ class WsiReg2D(object):
             self.project_name, modality_key
         )
         im_data = self.modalities[modality_key]
-        transformations = {"initial": None, "registered": None}
 
         if (
-            im_data["preprocessing"].rot_cc
+            im_data["preprocessing"].rot_cc != 0
             or im_data["preprocessing"].flip
             or im_data["preprocessing"].crop_to_mask_bbox
             or im_data["preprocessing"].mask_bbox
         ):
-
-            transformations.update(
-                {
-                    "initial": self._check_cache_modality(modality_key)[1][0],
-                    "registered": None,
-                }
+            _, im_initial_transforms, _, _ = self._check_cache_modality(
+                modality_key
             )
 
-        if to_original_size is True:
-            transformations.update(
-                {"registered": self.original_size_transforms.get(modality_key)}
+            transformations = RegTransformSeq(
+                [RegTransform(t) for t in im_initial_transforms[0]],
+                transform_seq_idx=[
+                    idx for idx in range(len(im_initial_transforms))
+                ],
             )
 
-        if (
-            transformations.get("initial") is None
-            and transformations.get("registered") is None
-        ):
-            transformations = None
+        if to_original_size and self.original_size_transforms[modality_key]:
+            orig_size_rt = RegTransformSeq(
+                RegTransform(self.original_size_transforms[modality_key]),
+                transform_seq_idx=[0],
+            )
+            if transformations:
+                transformations.append(orig_size_rt)
+            else:
+                transformations = orig_size_rt
 
         return im_data, transformations, output_path
 
@@ -892,14 +916,16 @@ class WsiReg2D(object):
     ):
         im_data = self.modalities[edge_key]
 
-        if attachment is True:
+        if attachment:
             final_modality = self.reg_paths[attachment_modality][-1]
-            transformations = deepcopy(
-                self.transformations[attachment_modality]
+            transformations = copy(
+                self.transformations[attachment_modality]["full-transform-seq"]
             )
         else:
             final_modality = self.reg_paths[edge_key][-1]
-            transformations = deepcopy(self.transformations[edge_key])
+            transformations = copy(
+                self.transformations[edge_key]["full-transform-seq"]
+            )
 
         print("transforming {} to {}".format(edge_key, final_modality))
 
@@ -908,16 +934,19 @@ class WsiReg2D(object):
             edge_key,
             final_modality,
         )
+
         if (
-            self.original_size_transforms.get(final_modality) is not None
-            and to_original_size is True
+            self.original_size_transforms.get(final_modality)
+            and to_original_size
         ):
+            print("adding transform to original size")
             original_size_transform = self.original_size_transforms[
                 final_modality
             ]
-            transformations.update(
-                {"orig": [RegTransform(original_size_transform)]}
+            orig_size_rt = RegTransformSeq(
+                RegTransform(original_size_transform), transform_seq_idx=[0]
             )
+            transformations.append(orig_size_rt)
 
         return im_data, transformations, output_path
 
@@ -932,20 +961,9 @@ class WsiReg2D(object):
             channel_colors=im_data.get("channel_colors"),
         )
 
-        ometiffwriter = OmeTiffWriter(tfregimage)
-
-        if transformations:
-            (
-                composite_transform,
-                itk_transforms,
-                final_transform,
-            ) = prepare_wsireg_transform_data(transformations)
-        else:
-            composite_transform, itk_transforms, final_transform = (
-                None,
-                None,
-                None,
-            )
+        ometiffwriter = OmeTiffWriter(
+            tfregimage, reg_transform_seq=transformations
+        )
 
         if (
             file_writer == "ome.tiff-bytile"
@@ -953,16 +971,11 @@ class WsiReg2D(object):
         ):
             im_fp = ometiffwriter.write_image_by_tile(
                 output_path.stem,
-                itk_transforms=itk_transforms,
-                composite_transform=composite_transform,
-                final_transform=final_transform,
                 output_dir=str(self.output_dir),
             )
         else:
             im_fp = ometiffwriter.write_image_by_plane(
                 output_path.stem,
-                composite_transform=composite_transform,
-                final_transform=final_transform,
                 output_dir=str(self.output_dir),
             )
 
@@ -982,13 +995,17 @@ class WsiReg2D(object):
                 im_ch_names.append(im_data.get("channel_names"))
 
                 try:
-                    transforms = deepcopy(self.transformations[sub_image])
+                    transforms = copy(
+                        self.transformations[sub_image]["full-transform-seq"]
+                    )
+
                 except KeyError:
                     transforms = None
 
                 try:
                     final_modalities.append(self.reg_paths[sub_image][-1])
                 except KeyError:
+
                     initial_transforms = self._check_cache_modality(sub_image)[
                         1
                     ][0]
@@ -996,8 +1013,12 @@ class WsiReg2D(object):
                         initial_transforms = [
                             RegTransform(t) for t in initial_transforms
                         ]
-                        final_modalities.append(sub_image)
-                        transforms = {"initial": initial_transforms}
+                        transforms = RegTransformSeq(
+                            initial_transforms,
+                            transform_seq_idx=[
+                                idx for idx in range(len(initial_transforms))
+                            ],
+                        )
                     else:
                         transforms = None
 
@@ -1009,18 +1030,18 @@ class WsiReg2D(object):
                 raise ValueError("final modalities do not match on merge")
 
             if (
-                self.original_size_transforms.get(final_modality) is not None
-                and to_original_size is True
+                self.original_size_transforms.get(final_modality)
+                and to_original_size
             ):
                 original_size_transform = self.original_size_transforms[
                     final_modality
                 ]
                 for transformation in transformations:
-                    if transformation is None:
-                        transformation = {}
-                    transformation.update(
-                        {"orig": [RegTransform(original_size_transform)]}
+                    orig_size_rt = RegTransformSeq(
+                        RegTransform(original_size_transform),
+                        transform_seq_idx=[0],
                     )
+                    transformation.append(orig_size_rt)
 
             output_path = self.output_dir / "{}-{}_merged-registered".format(
                 self.project_name,
@@ -1033,12 +1054,13 @@ class WsiReg2D(object):
                 channel_names=im_ch_names,
             )
 
-            merge_ometiffwriter = MergeOmeTiffWriter(merge_regimage)
+            merge_ometiffwriter = MergeOmeTiffWriter(
+                merge_regimage, reg_seq_transforms=transformations
+            )
 
             im_fp = merge_ometiffwriter.merge_write_image_by_plane(
                 output_path.stem,
                 sub_images,
-                transformations=transformations,
                 output_dir=str(self.output_dir),
             )
             return im_fp
@@ -1179,7 +1201,9 @@ class WsiReg2D(object):
                 set_data["shape_files"], source_res=set_data["image_res"]
             )
             rs.transform_shapes(
-                self.transformations[attachment_modality],
+                self.transformations[attachment_modality][
+                    "full-transform-seq"
+                ].reg_transforms,
             )
 
             output_path = (
@@ -1193,6 +1217,27 @@ class WsiReg2D(object):
             )
 
             rs.save_shape_data(output_path, transformed=True)
+
+    def _transforms_to_txt(
+        self, transformations: Dict[str, RegTransformSeq]
+    ) -> Dict[str, List[str]]:
+        tform_txt = dict()
+
+        for k, v in transformations.items():
+            if k == "full-transform-seq":
+                continue
+            if "initial" in k:
+                if v:
+                    for idx, rt in enumerate(v.reg_transforms):
+                        tform_txt.update(
+                            {f"{k}-{str(idx).zfill(2)}": rt.elastix_transform}
+                        )
+            else:
+                tform_txt.update(
+                    {f"{k}": [rt.elastix_transform for rt in v.reg_transforms]}
+                )
+
+        return tform_txt
 
     def save_transformations(self):
         """
@@ -1213,12 +1258,10 @@ class WsiReg2D(object):
                         final_modality,
                     )
                 )
-                out_transforms = get_elastix_transforms(
-                    self.transformations[key]
-                )
+                tform_txt = self._transforms_to_txt(self.transformations[key])
 
                 with open(output_path, 'w') as fp:
-                    json.dump(out_transforms, fp, indent=4)
+                    json.dump(tform_txt, fp, indent=1)
 
             for (
                 modality,
@@ -1236,12 +1279,10 @@ class WsiReg2D(object):
                     )
                 )
 
-                out_transforms = get_elastix_transforms(
-                    self.transformations[attachment_modality]
-                )
+                tform_txt = self._transforms_to_txt(self.transformations[key])
 
                 with open(output_path, 'w') as fp:
-                    json.dump(out_transforms, fp, indent=4)
+                    json.dump(tform_txt, fp, indent=4)
         else:
             print("registration has not been executed for the graph")
 
@@ -1383,8 +1424,24 @@ if __name__ == "__main__":
     import sys
 
     sys.exit(main())
+
+#
+# def config_to_WsiReg2D(config_filepath):
+#     reg_config = parse_check_reg_config(config_filepath)
+#
+#     reg_graph = WsiReg2D(
+#         reg_config.get("project_name"),
+#         reg_config.get("output_dir"),
+#         reg_config.get("cache_images"),
+#     )
+#     return reg_graph
+#
+#
 # config_filepath = "tests/fixtures/test-config1-local.yaml"
 # reg_graph = config_to_WsiReg2D(config_filepath)
 # reg_graph.add_data_from_config(config_filepath)
 #
 # self = reg_graph
+#
+# self.register_images()
+# self.transform_images()
