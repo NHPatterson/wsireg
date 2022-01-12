@@ -7,6 +7,7 @@ import numpy as np
 import cv2
 from wsireg.wsireg2d import WsiReg2D
 from wsireg.reg_shapes import RegShapes
+from wsireg.reg_images.loader import reg_image_loader
 from wsireg.utils.config_utils import parse_check_reg_config
 
 
@@ -18,6 +19,7 @@ config1_fp = str(Path(FIXTURES_DIR) / "test-config1.yaml")
 config2_fp = str(Path(FIXTURES_DIR) / "test-config2.yaml")
 config3_fp = str(Path(FIXTURES_DIR) / "test-config3.yaml")
 config4_fp = str(Path(FIXTURES_DIR) / "test-config4.yaml")
+config5_fp = str(Path(FIXTURES_DIR) / "test-config5.yaml")
 
 SKIP_PRIVATE = False
 REASON = "private data"
@@ -146,3 +148,20 @@ def test_wsireg_config_full_exp_DICE_ds(config_fp, data_out_dir):
         dice_vals.append(compute_dice(gt, test_mask))
 
     assert all(np.asarray(dice_vals) > 0.8)
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+@pytest.mark.parametrize(
+    "config_fp",
+    [
+        (config5_fp),
+    ],
+)
+def test_wsireg_config_full_merge_rgb_mc(config_fp, data_out_dir):
+    wsi_reg1 = config_to_WsiReg2D(config_fp, data_out_dir)
+    wsi_reg1.add_data_from_config(config_fp)
+    wsi_reg1.register_images()
+    im_fps = wsi_reg1.transform_images()
+    ri = reg_image_loader(im_fps[0], 1)
+
+    assert ri.im_dtype == np.uint16
+    assert ri.im_dims[0] == 9

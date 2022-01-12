@@ -4,8 +4,10 @@ import numpy as np
 from tifffile import TiffWriter
 import cv2
 import SimpleITK as sitk
+from wsireg.reg_images import RegImage
 from wsireg.reg_images.merge_reg_image import MergeRegImage
 from wsireg.utils.im_utils import (
+    SITK_TO_NP_DTYPE,
     get_pyramid_info,
     format_channel_names,
     prepare_ome_xml_str,
@@ -75,7 +77,12 @@ class MergeOmeTiffWriter:
     def _transform_check(self):
         out_size = []
         out_spacing = []
-        for im, t in zip(self.reg_image.images, self.reg_seq_transforms):
+
+        if not self.reg_seq_transforms:
+            rts = [None for _ in range(len(self.reg_image.images))]
+        else:
+            rts = self.reg_seq_transforms
+        for im, t in zip(self.reg_image.images, rts):
             if t:
                 out_size.append(t.reg_transforms[-1].output_size)
                 out_spacing.append(t.reg_transforms[-1].output_spacing)
@@ -102,13 +109,14 @@ class MergeOmeTiffWriter:
 
     def _prepare_image_info(
         self,
-        reg_image,
-        image_name,
+        reg_image: RegImage,
+        image_name: str,
+        im_dtype: np.dtype,
         reg_transform_seq: Optional[RegTransformSeq] = None,
-        channel_names=None,
-        write_pyramid=True,
-        tile_size=512,
-        compression="default",
+        channel_names: Optional[List[str]] = None,
+        write_pyramid: bool = True,
+        tile_size: int = 512,
+        compression: str = "default",
     ):
 
         if reg_transform_seq:
@@ -153,23 +161,37 @@ class MergeOmeTiffWriter:
             self.y_size,
             self.x_size,
             len(channel_names),
-            reg_image.im_dtype,
-            reg_image.is_rgb,
+            im_dtype,
+            False,
             PhysicalSizeX=self.PhysicalSizeX,
             PhysicalSizeY=self.PhysicalSizeY,
             PhysicalSizeXUnit="µm",
             PhysicalSizeYUnit="µm",
             Name=image_name,
-            Channel=None if reg_image.is_rgb else {"Name": channel_names},
+            Channel={"Name": channel_names},
         )
 
         self.subifds = self.n_pyr_levels - 1 if write_pyramid is True else None
 
         if compression == "default":
             print("using default compression")
-            self.compression = "jpeg" if reg_image.is_rgb else "deflate"
+            self.compression = "deflate"
         else:
             self.compression = compression
+
+    def _get_merge_dtype(self):
+        dtype_max_size = [
+            np.iinfo(r.im_dtype).max for r in self.reg_image.images
+        ]
+
+        merge_dtype_np = self.reg_image.images[
+            np.argmax(dtype_max_size)
+        ].im_dtype
+        for k, v in SITK_TO_NP_DTYPE.items():
+            if k < 12:
+                if v == merge_dtype_np:
+                    merge_dtype_sitk = k
+        return merge_dtype_sitk, merge_dtype_np
 
     def merge_write_image_by_plane(
         self,
@@ -180,6 +202,8 @@ class MergeOmeTiffWriter:
         tile_size=512,
         compression="default",
     ):
+        merge_dtype_sitk, merge_dtype_np = self._get_merge_dtype()
+
         self._length_checks(sub_image_names)
         self._create_channel_names(sub_image_names)
         self._transform_check()
@@ -189,6 +213,7 @@ class MergeOmeTiffWriter:
         self._prepare_image_info(
             self.reg_image.images[0],
             image_name,
+            merge_dtype_np,
             reg_transform_seq=self.reg_seq_transforms[0],
             write_pyramid=write_pyramid,
             tile_size=tile_size,
@@ -216,11 +241,15 @@ class MergeOmeTiffWriter:
                                 self.reg_image.images[m_idx].image_res,
                             )
                         )
+
                     else:
                         if len(full_image.GetSize()) > 2:
                             image = full_image[:, :, channel_idx]
                         else:
                             image = full_image
+
+                    if image.GetPixelIDValue() != merge_dtype_sitk:
+                        image = sitk.Cast(image, merge_dtype_sitk)
 
                     if self.reg_seq_transforms[m_idx]:
                         image = self.reg_seq_transforms[

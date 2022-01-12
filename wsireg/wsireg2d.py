@@ -1451,7 +1451,7 @@ class WsiReg2D(object):
                 self.transformations = self.reg_graph_edges
 
         if reg_config.get("merge_modalities"):
-            for mn, mm in reg_config["merge_modalities"]:
+            for mn, mm in reg_config["merge_modalities"].items():
                 self.add_merge_modalities(mn, mm)
 
     def reset_registered_modality(self, modalities):

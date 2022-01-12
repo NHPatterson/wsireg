@@ -1,0 +1,59 @@
+project_name: VAN0006-LK-2-85
+output_dir: fill
+cache_images: true
+modalities:
+  preAF-IMS:
+    image_filepath: private_data/VAN0006-LK-2-85-AF_preIMS_unregistered.czi
+    image_res: 0.65
+    preprocessing:
+      image_type: FL
+      contrast_enhance: true
+      as_uint8: true
+      downsampling: 4
+    output_res: 3.9
+
+  preAF-MxIF:
+    image_filepath: private_data/VAN0006-LK-2-86-AF_preMxIF_unregistered.czi
+    image_res: 0.65
+    preprocessing:
+      image_type: FL
+      contrast_enhance: true
+      as_uint8: true
+      rot_cc: 270
+      flip: h
+      downsampling: 4
+    output_res: 3.9
+
+  PAS-IMS:
+    image_filepath: private_data/VAN0006-LK-2-85-PAS_unregistered.scn
+    image_res: 0.5
+    preprocessing:
+      image_type: FL
+      contrast_enhance: false
+      as_uint8: true
+      rot_cc: -90
+      downsampling: 4
+    mask: null
+    output_res: 3.9
+
+reg_paths:
+  reg_path_0:
+    src_modality_name: preAF-MxIF
+    tgt_modality_name: preAF-IMS
+    thru_modality: null
+    reg_params:
+    - rigid
+    - affine
+    - nl
+  reg_path_1:
+    src_modality_name: PAS-IMS
+    tgt_modality_name: preAF-IMS
+    thru_modality: null
+    reg_params:
+      - rigid
+      - affine
+merge_modalities:
+  all-data-merge:
+    - preAF-IMS
+    - preAF-MxIF
+    - PAS-IMS
