@@ -226,7 +226,7 @@ def scale_shape_coordinates(poly: dict, scale_factor: float):
     return poly
 
 
-def invert_nonlinear_transforms(itk_transforms: list):
+def invert_nonrigid_transforms(itk_transforms: list):
     """
     Check list of sequential ITK transforms for non-linear (i.e., bspline) transforms
     Transformations need to be inverted to transform from moving to fixed space as transformations
@@ -252,7 +252,7 @@ def invert_nonlinear_transforms(itk_transforms: list):
     else:
         nl_idxs = np.where(np.array(tform_linear) == 0)[0]
         for nl_idx in nl_idxs:
-            if itk_transforms[nl_idx].inverse_transform is None:
+            if not itk_transforms[nl_idx].inverse_transform:
                 print(
                     f"transform at index {nl_idx} is non-linear and the inverse has not been computed\n"
                     "inverting displacement field(s)...\n"
@@ -287,7 +287,7 @@ def prepare_pt_transformation_data(transformations, compute_inverse=True):
             transformations
         )
     if compute_inverse:
-        transformations = invert_nonlinear_transforms(transformations)
+        transformations = invert_nonrigid_transforms(transformations)
     target_res = float(transformations[-1].output_spacing[0])
     return transformations, target_res
 

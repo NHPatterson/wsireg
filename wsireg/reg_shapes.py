@@ -1,10 +1,13 @@
+from typing import Union
+from pathlib import Path
 import json
+from wsireg.reg_transform_seq import RegTransformSeq
 from wsireg.utils.shape_utils import (
     shape_reader,
-    prepare_pt_transformation_data,
     transform_shapes,
     scale_shape_coordinates,
     insert_transformed_pts_gj,
+    invert_nonrigid_transforms,
 )
 
 
@@ -125,15 +128,19 @@ class RegShapes:
             for shape in self.shape_data
         ]
 
-    def transform_shapes(self, transformations, px_idx=True, output_idx=True):
+    def transform_shapes(
+        self,
+        transformations: Union[str, Path, RegTransformSeq],
+        px_idx=True,
+        output_idx=True,
+    ):
         """
         transform shapes using transformations data from wsireg
 
         Parameters
         ----------
         transformations
-            list of dict containing elastix transformation data or str to wsireg .json file containing
-            elastix transformation data
+            RegTransformSeq parsable object
         px_idx: bool
             whether shape points are specified in physical coordinates (i.e., microns) or
             in pixel indices
@@ -141,19 +148,22 @@ class RegShapes:
             whether transformed shape points should be output in physical coordinates (i.e., microns) or
             in pixel indices
         """
-        if self.itk_point_transforms is None:
-            (
-                self.itk_point_transforms,
-                self.target_res,
-            ) = prepare_pt_transformation_data(transformations)
+        if isinstance(transformations, (str, Path)):
+            transformations_seq = RegTransformSeq(transformations)
+        else:
+            transformations_seq = transformations
+
+        invert_nonrigid_transforms(
+            transformations_seq.reg_transforms_itk_order
+        )
 
         self.transformed_shape_data = transform_shapes(
             self.shape_data,
-            self.itk_point_transforms,
+            transformations_seq.reg_transforms_itk_order,
             px_idx=px_idx,
             source_res=self.source_res,
             output_idx=output_idx,
-            target_res=self.target_res,
+            target_res=transformations_seq.output_spacing[0],
         )
 
     def save_shape_data(self, output_fp, transformed=True):
