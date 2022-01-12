@@ -478,7 +478,7 @@ def test_wsireg_run_reg_wattachment(data_out_dir, disk_im_gry):
 
 
 @pytest.mark.usefixtures("disk_im_gry")
-def test_wsireg_run_reg(data_out_dir, disk_im_gry):
+def test_wsireg_run_reg_shapes(data_out_dir, disk_im_gry):
     wsi_reg = WsiReg2D("test_proj_run_wpts", str(data_out_dir))
     img_fp1 = str(disk_im_gry)
 
@@ -510,3 +510,236 @@ def test_wsireg_run_reg(data_out_dir, disk_im_gry):
 
     assert Path(im_fps[0]).exists() is True
     assert len(gj_files) > 0
+
+
+@pytest.mark.usefixtures("disk_im_gry")
+def test_wsireg_run_reg_changeres(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj_run_wpts", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        output_res=0.325,
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_reg_path(
+        "mod1", "mod2", reg_params=["rigid_test", "affine_test"]
+    )
+    wsi_reg.register_images()
+
+    im_fps = wsi_reg.transform_images(transform_non_reg=False)
+    regim = reg_image_loader(im_fps[0], 0.325)
+
+    assert regim.im_dims[1:] == (4096, 4096)
+
+
+@pytest.mark.usefixtures("disk_im_gry")
+def test_wsireg_run_reg_downsampling_m1(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj_run_ds1", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        preprocessing={"downsampling": 2},
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_reg_path(
+        "mod1", "mod2", reg_params=["rigid_test", "affine_test"]
+    )
+    wsi_reg.register_images()
+
+    im_fps = wsi_reg.transform_images(transform_non_reg=False)
+    regim = reg_image_loader(im_fps[0], 0.65)
+
+    assert regim.im_dims[1:] == (2048, 2048)
+
+
+@pytest.mark.usefixtures("disk_im_gry")
+def test_wsireg_run_reg_downsampling_m1_prepro(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj_run_ds2", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        preprocessing={"downsampling": 2, "rot_cc": 90},
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_reg_path(
+        "mod1", "mod2", reg_params=["rigid_test", "affine_test"]
+    )
+    wsi_reg.register_images()
+
+    im_fps = wsi_reg.transform_images(transform_non_reg=False)
+    regim = reg_image_loader(im_fps[0], 0.65)
+
+    assert regim.im_dims[1:] == (2048, 2048)
+
+
+@pytest.mark.usefixtures("disk_im_gry")
+def test_wsireg_run_reg_downsampling_m1m2(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj_run_ds3", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        preprocessing={"downsampling": 2},
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        preprocessing={"downsampling": 2},
+    )
+
+    wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])
+    wsi_reg.register_images()
+
+    im_fps = wsi_reg.transform_images(transform_non_reg=False)
+    regim = reg_image_loader(im_fps[0], 0.65)
+
+    assert regim.im_dims[1:] == (2048, 2048)
+
+
+@pytest.mark.usefixtures("disk_im_gry")
+def test_wsireg_run_reg_downsampling_m1m2_changeores(
+    data_out_dir, disk_im_gry
+):
+    wsi_reg = WsiReg2D("test_proj_run_ds4", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        preprocessing={"downsampling": 2},
+        output_res=(1.3, 1.3),
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        preprocessing={"downsampling": 2},
+    )
+
+    wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])
+    wsi_reg.register_images()
+
+    im_fps = wsi_reg.transform_images(transform_non_reg=False)
+    regim = reg_image_loader(im_fps[0], 0.65)
+
+    assert regim.im_dims[1:] == (1024, 1024)
+
+
+@pytest.mark.usefixtures("disk_im_gry")
+def test_wsireg_run_reg_downsampling_m2_prepro(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj_run_ds5", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        preprocessing={"downsampling": 2},
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        preprocessing={"rot_cc": 90, "downsampling": 2},
+    )
+
+    wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])
+    wsi_reg.register_images()
+
+    im_fps = wsi_reg.transform_images(transform_non_reg=True)
+    regim = reg_image_loader(im_fps[1], 0.65)
+
+    assert regim.im_dims[1:] == (2048, 2048)
+
+
+@pytest.mark.usefixtures("disk_im_gry")
+def test_wsireg_run_reg_downsampling_m1m2_merge(data_out_dir, disk_im_gry):
+    wsi_reg = WsiReg2D("test_proj_run_ds6", str(data_out_dir))
+    img_fp1 = str(disk_im_gry)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        preprocessing={"downsampling": 2, "rot_cc": 90},
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        preprocessing={"rot_cc": 90, "downsampling": 2},
+    )
+
+    wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])
+    wsi_reg.add_merge_modalities("mod12-merge", ["mod1", "mod2"])
+    wsi_reg.register_images()
+
+    im_fps = wsi_reg.transform_images(
+        transform_non_reg=True, remove_merged=True
+    )
+    regim = reg_image_loader(im_fps[0], 0.65)
+
+    assert regim.im_dims == (2, 2048, 2048)

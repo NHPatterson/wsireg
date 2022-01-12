@@ -199,20 +199,16 @@ def register_2d_images_itkelx(
     parameter_object_registration = itk.ParameterObject.New()
     for idx, pmap in enumerate(reg_params):
         if idx == 0:
-            pmap["WriteResultImage"] = (
-                ("true",) if return_image else ("false",)
-            )
+            pmap["WriteResultImage"] = ["true"] if return_image else ["false"]
             if target_image.mask is not None:
-                pmap["AutomaticTransformInitialization"] = ("false",)
+                pmap["AutomaticTransformInitialization"] = ["false"]
             else:
-                pmap["AutomaticTransformInitialization"] = ('true',)
+                pmap["AutomaticTransformInitialization"] = ['true']
 
             parameter_object_registration.AddParameterMap(pmap)
         else:
-            pmap["WriteResultImage"] = (
-                ("true",) if return_image else ("false",)
-            )
-            pmap["AutomaticTransformInitialization"] = ('false',)
+            pmap["WriteResultImage"] = ["true"] if return_image else ["false"]
+            pmap["AutomaticTransformInitialization"] = ['false']
             parameter_object_registration.AddParameterMap(pmap)
 
     selx.SetParameterObject(parameter_object_registration)

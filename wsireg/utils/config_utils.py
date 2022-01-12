@@ -20,14 +20,14 @@ def parse_check_reg_config(yaml_filepath):
     if reg_config.get("cache_images") is None:
         reg_config.update({"cache_images": True})
 
-    if reg_config.get("modalities") is not None:
+    if reg_config.get("modalities"):
         for key, val in reg_config["modalities"].items():
             [
                 check_for_key(key, val, ck)
                 for ck in ["image_filepath", "image_res"]
             ]
 
-    if reg_config.get("reg_paths") is not None:
+    if reg_config.get("reg_paths"):
 
         for key, val in reg_config["reg_paths"].items():
             [
@@ -41,7 +41,7 @@ def parse_check_reg_config(yaml_filepath):
             if isinstance(val.get("reg_params"), str):
                 val.update({"reg_params": [val.get("reg_params")]})
 
-    if reg_config.get("attachment_images") is not None:
+    if reg_config.get("attachment_images"):
 
         for key, val in reg_config["attachment_images"].items():
             [
@@ -53,7 +53,7 @@ def parse_check_reg_config(yaml_filepath):
                 ]
             ]
 
-    if reg_config.get("attachment_shapes") is not None:
+    if reg_config.get("attachment_shapes"):
 
         for key, val in reg_config["attachment_shapes"].items():
             [

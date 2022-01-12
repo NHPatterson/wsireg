@@ -5,9 +5,9 @@ import numpy as np
 from tifffile import imread, imwrite
 from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_images.merge_reg_image import MergeRegImage
-from wsireg.utils.tform_utils import prepare_wsireg_transform_data
 from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 from wsireg.writers.merge_ome_tiff_writer import MergeOmeTiffWriter
+from wsireg.reg_transform_seq import RegTransformSeq
 
 
 @pytest.fixture(scope="session")
@@ -19,14 +19,14 @@ def data_out_dir(tmpdir_factory):
 @pytest.mark.usefixtures("complex_transform")
 def test_OmeTiffWriter_by_plane(complex_transform, data_out_dir):
     reg_image = reg_image_loader(np.ones((1024, 1024), dtype=np.uint8), 1)
-    composite_transform, _, final_transform = prepare_wsireg_transform_data(
-        complex_transform
-    )
-    ometiffwriter = OmeTiffWriter(reg_image)
+    # composite_transform, _, final_transform = prepare_wsireg_transform_data(
+    #     complex_transform
+    # )
+    rts = RegTransformSeq(complex_transform)
+
+    ometiffwriter = OmeTiffWriter(reg_image, reg_transform_seq=rts)
     by_plane_fp = ometiffwriter.write_image_by_plane(
         "testimage_by_plane",
-        final_transform=final_transform,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
     by_plane_image = reg_image_loader(by_plane_fp, 2)
@@ -36,17 +36,11 @@ def test_OmeTiffWriter_by_plane(complex_transform, data_out_dir):
 @pytest.mark.usefixtures("complex_transform")
 def test_OmeTiffWriter_by_tile(complex_transform, data_out_dir):
     reg_image = reg_image_loader(np.ones((1024, 1024), dtype=np.uint8), 1)
-    (
-        composite_transform,
-        itk_transforms,
-        final_transform,
-    ) = prepare_wsireg_transform_data(complex_transform)
-    ometiffwriter = OmeTiffWriter(reg_image)
+    rts = RegTransformSeq(complex_transform)
+
+    ometiffwriter = OmeTiffWriter(reg_image, reg_transform_seq=rts)
     by_tile_fp = ometiffwriter.write_image_by_tile(
         "testimage_by_plane",
-        final_transform=final_transform,
-        itk_transforms=itk_transforms,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
     by_tile_image = reg_image_loader(by_tile_fp, 2)
@@ -56,24 +50,15 @@ def test_OmeTiffWriter_by_tile(complex_transform, data_out_dir):
 @pytest.mark.usefixtures("complex_transform")
 def test_OmeTiffWriter_compare_tile_plane(complex_transform, data_out_dir):
     reg_image = reg_image_loader(np.ones((1024, 1024), dtype=np.uint8), 1)
-    (
-        composite_transform,
-        itk_transforms,
-        final_transform,
-    ) = prepare_wsireg_transform_data(complex_transform)
-    ometiffwriter = OmeTiffWriter(reg_image)
+    rts = RegTransformSeq(complex_transform)
+    ometiffwriter = OmeTiffWriter(reg_image, reg_transform_seq=rts)
     by_tile_fp = ometiffwriter.write_image_by_tile(
         "testimage_by_tile",
-        final_transform=final_transform,
-        itk_transforms=itk_transforms,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
     by_tile_image = reg_image_loader(by_tile_fp, 2)
     by_plane_fp = ometiffwriter.write_image_by_plane(
         "testimage_by_plane",
-        final_transform=final_transform,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
     by_plane_image = reg_image_loader(by_plane_fp, 2)
@@ -86,28 +71,26 @@ def test_OmeTiffWriter_compare_tile_plane(complex_transform, data_out_dir):
 
 
 # tests if tile padding works appropriately
-@pytest.mark.usefixtures("complex_transform_larger")
-def test_OmeTiffWriter_by_tile_nondiv(complex_transform_larger, data_out_dir):
+@pytest.mark.usefixtures("complex_transform_larger_padded")
+def test_OmeTiffWriter_by_tile_nondiv(
+    complex_transform_larger_padded, data_out_dir
+):
     reg_image = reg_image_loader(np.ones((1024, 1024), dtype=np.uint8), 1)
-    (
-        composite_transform,
-        itk_transforms,
-        final_transform,
-    ) = prepare_wsireg_transform_data(complex_transform_larger)
-    ometiffwriter = OmeTiffWriter(reg_image)
+
+    rts = RegTransformSeq(complex_transform_larger_padded)
+
+    ometiffwriter = OmeTiffWriter(reg_image, reg_transform_seq=rts)
+
     by_tile_fp = ometiffwriter.write_image_by_tile(
         "testimage_by_tile_nd",
-        final_transform=final_transform,
-        itk_transforms=itk_transforms,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
     by_tile_image = reg_image_loader(by_tile_fp, 2)
 
     assert by_tile_image.im_dims == (
         1,
-        int(np.ceil(3099 / 512) * 512),
         int(np.ceil(2099 / 512) * 512),
+        int(np.ceil(3099 / 512) * 512),
     )
 
 
@@ -116,24 +99,17 @@ def test_OmeTiffWriter_compare_tile_plane_nondiv(
     complex_transform_larger, data_out_dir
 ):
     reg_image = reg_image_loader(np.ones((1024, 1024), dtype=np.uint8), 1)
-    (
-        composite_transform,
-        itk_transforms,
-        final_transform,
-    ) = prepare_wsireg_transform_data(complex_transform_larger)
-    ometiffwriter = OmeTiffWriter(reg_image)
+
+    rts = RegTransformSeq(complex_transform_larger)
+    ometiffwriter = OmeTiffWriter(reg_image, reg_transform_seq=rts)
+
     by_tile_fp = ometiffwriter.write_image_by_tile(
         "testimage_by_tile",
-        final_transform=final_transform,
-        itk_transforms=itk_transforms,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
     by_tile_image = reg_image_loader(by_tile_fp, 2)
     by_plane_fp = ometiffwriter.write_image_by_plane(
         "testimage_by_plane",
-        final_transform=final_transform,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
     by_plane_image = reg_image_loader(by_plane_fp, 2)
@@ -152,29 +128,20 @@ def test_OmeTiffWriter_compare_tile_plane_rgb(
     reg_image = reg_image_loader(
         np.random.randint(0, 255, (1024, 1024, 3), dtype=np.uint8), 1
     )
-    (
-        composite_transform,
-        itk_transforms,
-        final_transform,
-    ) = prepare_wsireg_transform_data(simple_transform_affine)
 
-    ometiffwriter = OmeTiffWriter(reg_image)
+    rts = RegTransformSeq(simple_transform_affine)
+    ometiffwriter = OmeTiffWriter(reg_image, reg_transform_seq=rts)
 
     by_tile_fp = ometiffwriter.write_image_by_tile(
         "testimage_by_tile",
-        final_transform=final_transform,
-        itk_transforms=itk_transforms,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
 
     by_plane_fp = ometiffwriter.write_image_by_plane(
         "testimage_by_plane",
-        final_transform=final_transform,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
-
+    Path(by_tile_fp).as_posix()
     im_tile = imread(by_tile_fp)
     im_plane = imread(by_plane_fp)
 
@@ -188,26 +155,17 @@ def test_OmeTiffWriter_compare_tile_plane_rgb_nl(
     reg_image = reg_image_loader(
         np.random.randint(0, 255, (1024, 1024, 3), dtype=np.uint8), 1
     )
-    (
-        composite_transform,
-        itk_transforms,
-        final_transform,
-    ) = prepare_wsireg_transform_data(simple_transform_affine_nl)
 
-    ometiffwriter = OmeTiffWriter(reg_image)
+    rts = RegTransformSeq(simple_transform_affine_nl)
+    ometiffwriter = OmeTiffWriter(reg_image, reg_transform_seq=rts)
 
     by_tile_fp = ometiffwriter.write_image_by_tile(
         "testimage_by_tile",
-        final_transform=final_transform,
-        itk_transforms=itk_transforms,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
 
     by_plane_fp = ometiffwriter.write_image_by_plane(
         "testimage_by_plane",
-        final_transform=final_transform,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
 
@@ -224,26 +182,16 @@ def test_OmeTiffWriter_compare_tile_plane_mc(
     reg_image = reg_image_loader(
         np.random.randint(0, 255, (3, 1024, 1024), dtype=np.uint8), 1
     )
-    (
-        composite_transform,
-        itk_transforms,
-        final_transform,
-    ) = prepare_wsireg_transform_data(simple_transform_affine)
-
-    ometiffwriter = OmeTiffWriter(reg_image)
+    rts = RegTransformSeq(simple_transform_affine)
+    ometiffwriter = OmeTiffWriter(reg_image, reg_transform_seq=rts)
 
     by_tile_fp = ometiffwriter.write_image_by_tile(
         "testimage_by_tile",
-        final_transform=final_transform,
-        itk_transforms=itk_transforms,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
 
     by_plane_fp = ometiffwriter.write_image_by_plane(
         "testimage_by_plane",
-        final_transform=final_transform,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
 
@@ -260,26 +208,16 @@ def test_OmeTiffWriter_compare_tile_plane_mc_nl(
     reg_image = reg_image_loader(
         np.random.randint(0, 255, (3, 1024, 1024), dtype=np.uint8), 1
     )
-    (
-        composite_transform,
-        itk_transforms,
-        final_transform,
-    ) = prepare_wsireg_transform_data(simple_transform_affine_nl)
-
-    ometiffwriter = OmeTiffWriter(reg_image)
+    rts = RegTransformSeq(simple_transform_affine_nl)
+    ometiffwriter = OmeTiffWriter(reg_image, reg_transform_seq=rts)
 
     by_tile_fp = ometiffwriter.write_image_by_tile(
         "testimage_by_tile",
-        final_transform=final_transform,
-        itk_transforms=itk_transforms,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
 
     by_plane_fp = ometiffwriter.write_image_by_plane(
         "testimage_by_plane",
-        final_transform=final_transform,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
 
@@ -370,37 +308,30 @@ def test_MergeOmeTiffWriter_mc(simple_transform_affine_nl, data_out_dir):
     reg_image2 = np.random.randint(0, 255, (3, 1024, 1024), dtype=np.uint8)
     reg_image3 = np.random.randint(0, 255, (3, 1024, 1024), dtype=np.uint8)
 
-    mreg_image = MergeRegImage([reg_image1, reg_image2, reg_image3], [1, 1, 1])
-
-    merge_ometiffwriter = MergeOmeTiffWriter(mreg_image)
+    mreg_image = MergeRegImage(
+        [reg_image1, reg_image2, reg_image3],
+        [1, 1, 1],
+        channel_names=[["1", "2", "3"], ["1", "2", "3"], ["1", "2", "3"]],
+    )
+    rts = RegTransformSeq(simple_transform_affine_nl)
+    merge_ometiffwriter = MergeOmeTiffWriter(
+        mreg_image, reg_seq_transforms=[rts, rts, rts]
+    )
 
     by_plane_fp = merge_ometiffwriter.merge_write_image_by_plane(
         "merge_testimage_by_plane",
         ["1", "2", "3"],
-        [
-            simple_transform_affine_nl,
-            simple_transform_affine_nl,
-            simple_transform_affine_nl,
-        ],
         output_dir=str(data_out_dir),
     )
 
     im_plane = imread(by_plane_fp)
 
-    (
-        composite_transform,
-        itk_transforms,
-        final_transform,
-    ) = prepare_wsireg_transform_data(simple_transform_affine_nl)
-
     reg_image1_loaded = reg_image_loader(reg_image1, 1)
 
-    ometiffwriter = OmeTiffWriter(reg_image1_loaded)
+    ometiffwriter = OmeTiffWriter(reg_image1_loaded, reg_transform_seq=rts)
 
     by_plane_fp_s1 = ometiffwriter.write_image_by_plane(
         "testimage_by_plane_s1",
-        final_transform=final_transform,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
 
@@ -408,12 +339,10 @@ def test_MergeOmeTiffWriter_mc(simple_transform_affine_nl, data_out_dir):
 
     reg_image2_loaded = reg_image_loader(reg_image2, 1)
 
-    ometiffwriter = OmeTiffWriter(reg_image2_loaded)
+    ometiffwriter = OmeTiffWriter(reg_image2_loaded, reg_transform_seq=rts)
 
     by_plane_fp_s2 = ometiffwriter.write_image_by_plane(
         "testimage_by_plane_s2",
-        final_transform=final_transform,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
 
@@ -421,12 +350,10 @@ def test_MergeOmeTiffWriter_mc(simple_transform_affine_nl, data_out_dir):
 
     reg_image3_loaded = reg_image_loader(reg_image3, 1)
 
-    ometiffwriter = OmeTiffWriter(reg_image3_loaded)
+    ometiffwriter = OmeTiffWriter(reg_image3_loaded, reg_transform_seq=rts)
 
     by_plane_fp_s3 = ometiffwriter.write_image_by_plane(
         "testimage_by_plane_s3",
-        final_transform=final_transform,
-        composite_transform=composite_transform,
         output_dir=str(data_out_dir),
     )
 

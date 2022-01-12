@@ -21,6 +21,7 @@ from tests.fixtures.im_fixtures import (
 from tests.fixtures.transform_fixtures import (
     complex_transform,
     complex_transform_larger,
+    complex_transform_larger_padded,
     simple_transform_affine,
     simple_transform_affine_nl,
     simple_transform_affine_large_output,

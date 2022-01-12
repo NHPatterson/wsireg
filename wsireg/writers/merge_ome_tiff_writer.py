@@ -1,32 +1,40 @@
+from typing import Optional, Union, List, Tuple
 from pathlib import Path
 import numpy as np
 from tifffile import TiffWriter
 import cv2
 import SimpleITK as sitk
-from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 from wsireg.reg_images.merge_reg_image import MergeRegImage
 from wsireg.utils.im_utils import (
-    transform_plane,
+    get_pyramid_info,
+    format_channel_names,
+    prepare_ome_xml_str,
 )
-from wsireg.utils.tform_utils import (
-    prepare_wsireg_transform_data,
-)
+from wsireg.reg_transform_seq import RegTransformSeq
 
 
-class MergeOmeTiffWriter(OmeTiffWriter):
-    def __init__(self, reg_image: MergeRegImage):
-        super().__init__(reg_image)
+class MergeOmeTiffWriter:
+    x_size: Optional[int] = None
+    y_size: Optional[int] = None
+    y_spacing: Optional[Union[int, float]] = None
+    x_spacing: Optional[Union[int, float]] = None
+    tile_size: int = 512
+    pyr_levels: Optional[List[Tuple[int, int]]] = None
+    n_pyr_levels: Optional[int] = None
+    PhysicalSizeY: Optional[Union[int, float]] = None
+    PhysicalSizeX: Optional[Union[int, float]] = None
+    subifds: Optional[int] = None
+    compression: str = "deflate"
 
-    def merge_write_image_by_plane(
+    def __init__(
         self,
-        image_name,
-        sub_image_names,
-        transformations=None,
-        output_dir="",
-        write_pyramid=True,
-        tile_size=512,
-        compression="default",
+        reg_images: MergeRegImage,
+        reg_seq_transforms: Optional[List[RegTransformSeq]] = None,
     ):
+        self.reg_image = reg_images
+        self.reg_seq_transforms = reg_seq_transforms
+
+    def _length_checks(self, sub_image_names):
 
         if isinstance(sub_image_names, list) is False:
             if sub_image_names is None:
@@ -38,37 +46,17 @@ class MergeOmeTiffWriter(OmeTiffWriter):
                     "MergeRegImage requires a list of image names for each image to merge"
                 )
 
-        if isinstance(transformations, list) is False:
-            if transformations is None:
-                transformations = [
-                    None for i in range(len(self.reg_image.images))
-                ]
-            else:
-                raise ValueError(
-                    "MergeRegImage requires a list of image transforms for each image to merge"
-                )
+        if self.reg_seq_transforms is None:
+            transformations = [None for i in range(len(self.reg_image.images))]
+        else:
+            transformations = self.reg_seq_transforms
 
         if len(transformations) != len(self.reg_image.images):
             raise ValueError(
                 "MergeRegImage number of transforms does not match number of images"
             )
 
-        def get_transform_data(transform_data):
-            if transform_data is not None:
-                (
-                    itk_composite,
-                    itk_transforms,
-                    final_transform,
-                ) = prepare_wsireg_transform_data(transform_data)
-            else:
-                itk_composite, itk_transforms, final_transform = (
-                    None,
-                    None,
-                    None,
-                )
-
-            return itk_composite, itk_transforms, final_transform
-
+    def _create_channel_names(self, sub_image_names):
         def prepare_channel_names(sub_image_name, channel_names):
             return [f"{sub_image_name} - {c}" for c in channel_names]
 
@@ -84,56 +72,124 @@ class MergeOmeTiffWriter(OmeTiffWriter):
             for item in sublist
         ]
 
-        merge_transform_data = [get_transform_data(t) for t in transformations]
-        composite_transforms = [
-            merge_transform_data[t][0]
-            for t in range(len(merge_transform_data))
-        ]
-        final_transforms = [
-            merge_transform_data[t][2]
-            for t in range(len(merge_transform_data))
-        ]
+    def _transform_check(self):
+        out_size = []
+        out_spacing = []
+        for im, t in zip(self.reg_image.images, self.reg_seq_transforms):
+            if t:
+                out_size.append(t.reg_transforms[-1].output_size)
+                out_spacing.append(t.reg_transforms[-1].output_spacing)
+            else:
+                out_im_size = (
+                    (im.im_dims[0], im.im_dims[1])
+                    if im.is_rgb
+                    else (im.im_dims[1], im.im_dims[2])
+                )
+                out_im_spacing = im.image_res
 
-        spacing_check = [
-            t.output_spacing for t in final_transforms if t is not None
-        ]
-        size_check = [t.output_size for t in final_transforms if t is not None]
-        no_transform_check = [
-            idx for idx, t in enumerate(final_transforms) if t is None
-        ]
+                out_size.append(out_im_size)
+                out_spacing.append(out_im_spacing)
 
-        for no_tform in no_transform_check:
-            size_check.extend(
-                [
-                    np.asarray(self.reg_image.images[no_tform].im_dims)[
-                        1:
-                    ].tolist()
-                ]
-            )
-            spacing_check.extend(
-                [
-                    [
-                        self.reg_image.images[no_tform].image_res,
-                        self.reg_image.images[no_tform].image_res,
-                    ]
-                ]
-            )
-
-        if all(spacing_check) is False:
+        if all(out_spacing) is False:
             raise ValueError(
                 "MergeRegImage all transforms output spacings and untransformed image spacings must match"
             )
 
-        if all(size_check) is False:
+        if all(out_size) is False:
             raise ValueError(
                 "MergeRegImage all transforms output sizes and untransformed image sizes must match"
             )
 
+    def _prepare_image_info(
+        self,
+        reg_image,
+        image_name,
+        reg_transform_seq: Optional[RegTransformSeq] = None,
+        channel_names=None,
+        write_pyramid=True,
+        tile_size=512,
+        compression="default",
+    ):
+
+        if reg_transform_seq:
+            self.x_size, self.y_size = reg_transform_seq.output_size
+            self.x_spacing, self.y_spacing = reg_transform_seq.output_spacing
+        else:
+            self.y_size, self.x_size = (
+                (reg_image.im_dims[0], reg_image.im_dims[1])
+                if reg_image.is_rgb
+                else (reg_image.im_dims[1], reg_image.im_dims[2])
+            )
+            self.y_spacing, self.x_spacing = (
+                reg_image.image_res,
+                reg_image.image_res,
+            )
+
+        self.tile_size = tile_size
+        # protect against too large tile size
+        while (
+            self.y_size / self.tile_size <= 1
+            or self.x_size / self.tile_size <= 1
+        ):
+            self.tile_size = self.tile_size // 2
+
+        self.pyr_levels, _ = get_pyramid_info(
+            self.y_size, self.x_size, reg_image.n_ch, self.tile_size
+        )
+        self.n_pyr_levels = len(self.pyr_levels)
+
+        if reg_transform_seq:
+            self.PhysicalSizeY = self.y_spacing
+            self.PhysicalSizeX = self.x_spacing
+        else:
+            self.PhysicalSizeY = reg_image.image_res
+            self.PhysicalSizeX = reg_image.image_res
+
+        channel_names = format_channel_names(
+            self.reg_image.channel_names, self.reg_image.n_ch
+        )
+
+        self.omexml = prepare_ome_xml_str(
+            self.y_size,
+            self.x_size,
+            len(channel_names),
+            reg_image.im_dtype,
+            reg_image.is_rgb,
+            PhysicalSizeX=self.PhysicalSizeX,
+            PhysicalSizeY=self.PhysicalSizeY,
+            PhysicalSizeXUnit="µm",
+            PhysicalSizeYUnit="µm",
+            Name=image_name,
+            Channel=None if reg_image.is_rgb else {"Name": channel_names},
+        )
+
+        self.subifds = self.n_pyr_levels - 1 if write_pyramid is True else None
+
+        if compression == "default":
+            print("using default compression")
+            self.compression = "jpeg" if reg_image.is_rgb else "deflate"
+        else:
+            self.compression = compression
+
+    def merge_write_image_by_plane(
+        self,
+        image_name,
+        sub_image_names,
+        output_dir="",
+        write_pyramid=True,
+        tile_size=512,
+        compression="default",
+    ):
+        self._length_checks(sub_image_names)
+        self._create_channel_names(sub_image_names)
+        self._transform_check()
+
         output_file_name = str(Path(output_dir) / f"{image_name}.ome.tiff")
 
-        self.prepare_image_info(
+        self._prepare_image_info(
+            self.reg_image.images[0],
             image_name,
-            final_transform=final_transforms,
+            reg_transform_seq=self.reg_seq_transforms[0],
             write_pyramid=write_pyramid,
             tile_size=tile_size,
             compression=compression,
@@ -166,12 +222,10 @@ class MergeOmeTiffWriter(OmeTiffWriter):
                         else:
                             image = full_image
 
-                    if composite_transforms[m_idx] is not None:
-                        image = transform_plane(
-                            image,
-                            final_transforms[m_idx],
-                            composite_transforms[m_idx],
-                        )
+                    if self.reg_seq_transforms[m_idx]:
+                        image = self.reg_seq_transforms[
+                            m_idx
+                        ].resampler.Execute(image)
 
                     if isinstance(image, sitk.Image):
                         image = sitk.GetArrayFromImage(image)
@@ -193,7 +247,7 @@ class MergeOmeTiffWriter(OmeTiffWriter):
                     # write channel data
                     print(
                         f" writing subimage index {m_idx} : {sub_image_names[m_idx]} - "
-                        f"channel {channel_idx} - shape: {image.shape}"
+                        f"channel index - {channel_idx} - shape: {image.shape}"
                     )
                     tif.write(
                         image,
