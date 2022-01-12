@@ -17,13 +17,13 @@ PRIVATE_DIR = os.path.join(HERE, "private_data")
 config1_fp = str(Path(FIXTURES_DIR) / "test-config1.yaml")
 config2_fp = str(Path(FIXTURES_DIR) / "test-config2.yaml")
 config3_fp = str(Path(FIXTURES_DIR) / "test-config3.yaml")
+config4_fp = str(Path(FIXTURES_DIR) / "test-config4.yaml")
 
 SKIP_PRIVATE = False
 REASON = "private data"
 
 if not os.path.exists(PRIVATE_DIR):
     SKIP_PRIVATE = True
-geojson_fp = "C:/pyproj/git/wsireg/tests/private_data/unreg_rois/VAN0006-LK-2-85-AF_preIMS_unregistered.geojson"
 
 
 def geojson_to_binary_image(geojson_fp: Union[str, Path]) -> sitk.Image:
@@ -122,3 +122,27 @@ def test_wsireg_config_full_exp_DICE(config_fp, data_out_dir):
         dice_vals.append(compute_dice(gt, test_mask))
 
     assert all(np.asarray(dice_vals) > 0.85)
+
+
+@pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
+@pytest.mark.parametrize(
+    "config_fp",
+    [
+        (config4_fp),
+    ],
+)
+def test_wsireg_config_full_exp_DICE_ds(config_fp, data_out_dir):
+    wsi_reg1 = config_to_WsiReg2D(config_fp, data_out_dir)
+    wsi_reg1.add_data_from_config(config_fp)
+    wsi_reg1.register_images()
+    shape_fps = wsi_reg1.transform_shapes()
+    gt = geojson_to_binary_image(
+        "private_data/unreg_rois/VAN0006-LK-2-85-AF_preIMS_unregistered.geojson"
+    )
+
+    dice_vals = []
+    for shape in shape_fps:
+        test_mask = geojson_to_binary_image(shape)
+        dice_vals.append(compute_dice(gt, test_mask))
+
+    assert all(np.asarray(dice_vals) > 0.8)
