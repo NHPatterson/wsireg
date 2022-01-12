@@ -10,13 +10,6 @@ from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_images import MergeRegImage, RegImage
 from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 from wsireg.writers.merge_ome_tiff_writer import MergeOmeTiffWriter
-from wsireg.utils.reg_utils import (
-    _prepare_reg_models,
-    register_2d_images_itkelx,
-    sitk_pmap_to_dict,
-    pmap_dict_to_json,
-    json_to_pmap_dict,
-)
 from wsireg.reg_shapes import RegShapes
 from wsireg.reg_transform import RegTransform
 from wsireg.reg_transform_seq import RegTransformSeq
@@ -26,6 +19,14 @@ from wsireg.parameter_maps.reg_model import RegModel
 from wsireg.utils.im_utils import (
     ARRAYLIKE_CLASSES,
 )
+from wsireg.utils.reg_utils import (
+    _prepare_reg_models,
+    register_2d_images_itkelx,
+    sitk_pmap_to_dict,
+    pmap_dict_to_json,
+    json_to_pmap_dict,
+)
+from wsireg.utils.shape_utils import invert_nonrigid_transforms
 
 
 class WsiReg2D(object):
@@ -544,14 +545,22 @@ class WsiReg2D(object):
                 original_size_transform,
             ) = self._check_cache_modality(modality_name)
 
-            if im_from_cache is True:
+            if im_from_cache:
                 if mod_data["preprocessing"].use_mask is False:
                     mod_data["mask"] = None
+                if mod_data["preprocessing"].downsampling > 1:
+                    image_res = (
+                        mod_data["image_res"]
+                        * mod_data["preprocessing"].downsampling
+                    )
                 mod_data["preprocessing"] = None
+
+            else:
+                image_res = mod_data["image_res"]
 
             return (
                 mod_data["image_filepath"],
-                mod_data["image_res"],
+                image_res,
                 mod_data["preprocessing"],
                 mod_data["transforms"],
                 mod_data["mask"],
@@ -917,6 +926,14 @@ class WsiReg2D(object):
             else:
                 transformations = orig_size_rt
 
+        if im_data["preprocessing"].downsampling and transformations:
+            if not im_data["output_res"]:
+                output_spacing_target = im_data["image_res"]
+                transformations.set_output_spacing(
+                    (output_spacing_target, output_spacing_target)
+                )
+            else:
+                transformations.set_output_spacing(im_data["output_res"])
         return im_data, transformations, output_path
 
     def _prepare_reg_image_transform(
@@ -960,7 +977,18 @@ class WsiReg2D(object):
             )
             transformations.append(orig_size_rt)
 
-        if im_data["output_res"]:
+        if im_data["preprocessing"].downsampling:
+            if not im_data["output_res"]:
+                output_spacing_target = self.modalities[final_modality][
+                    "image_res"
+                ]
+                transformations.set_output_spacing(
+                    (output_spacing_target, output_spacing_target)
+                )
+            else:
+                transformations.set_output_spacing(im_data["output_res"])
+
+        elif im_data["output_res"]:
             transformations.set_output_spacing(im_data["output_res"])
 
         return im_data, transformations, output_path
@@ -1036,6 +1064,29 @@ class WsiReg2D(object):
                         )
                     else:
                         transforms = None
+
+                if im_data["preprocessing"].downsampling and transforms:
+                    if not im_data["output_res"]:
+                        try:
+                            final_modality = self.reg_paths[sub_image][-1]
+                        except KeyError:
+                            final_modality = sub_image
+
+                        output_spacing_target = self.modalities[
+                            final_modality
+                        ]["image_res"]
+                        transforms.set_output_spacing(
+                            (output_spacing_target, output_spacing_target)
+                        )
+                    else:
+                        transforms.set_output_spacing(im_data["output_res"])
+
+                elif (
+                    im_data["output_res"]
+                    and sub_image != final_modality
+                    and transforms
+                ):
+                    transforms.set_output_spacing(im_data["output_res"])
 
                 transformations.append(transforms)
 
@@ -1202,8 +1253,19 @@ class WsiReg2D(object):
         Transform all attached shapes and write out shape data to geoJSON.
         """
         transformed_shapes_fps = []
+
+        # do inversion before any processing to ensure it is not computed twice
         for set_name, set_data in self.shape_sets.items():
             attachment_modality = set_data["attachment_modality"]
+            invert_nonrigid_transforms(
+                self.transformations[attachment_modality][
+                    "full-transform-seq"
+                ].reg_transforms_itk_order
+            )
+
+        for set_name, set_data in self.shape_sets.items():
+            attachment_modality = set_data["attachment_modality"]
+            im_data = self.modalities[attachment_modality]
 
             final_modality = self.reg_paths[attachment_modality][-1]
 
@@ -1216,11 +1278,23 @@ class WsiReg2D(object):
             rs = RegShapes(
                 set_data["shape_files"], source_res=set_data["image_res"]
             )
-            rs.transform_shapes(
-                self.transformations[attachment_modality][
-                    "full-transform-seq"
-                ].reg_transforms_itk_order,
+
+            transformations = copy(
+                self.transformations[attachment_modality]["full-transform-seq"]
             )
+
+            if im_data["output_res"]:
+                transformations.set_output_spacing(im_data["output_res"])
+
+            else:
+                output_spacing_target = self.modalities[final_modality][
+                    "image_res"
+                ]
+                transformations.set_output_spacing(
+                    (output_spacing_target, output_spacing_target)
+                )
+
+            rs.transform_shapes(transformations)
 
             output_path = (
                 self.output_dir
