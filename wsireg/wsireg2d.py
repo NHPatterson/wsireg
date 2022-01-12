@@ -553,8 +553,9 @@ class WsiReg2D(object):
                         mod_data["image_res"]
                         * mod_data["preprocessing"].downsampling
                     )
+                else:
+                    image_res = mod_data["image_res"]
                 mod_data["preprocessing"] = None
-
             else:
                 image_res = mod_data["image_res"]
 

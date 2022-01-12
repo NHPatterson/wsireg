@@ -130,7 +130,7 @@ class RegShapes:
 
     def transform_shapes(
         self,
-        transformations: Union[str, Path, RegTransformSeq],
+        transformations: Union[str, Path, dict, RegTransformSeq],
         px_idx=True,
         output_idx=True,
     ):
@@ -148,7 +148,7 @@ class RegShapes:
             whether transformed shape points should be output in physical coordinates (i.e., microns) or
             in pixel indices
         """
-        if isinstance(transformations, (str, Path)):
+        if isinstance(transformations, (str, Path, dict)):
             transformations_seq = RegTransformSeq(transformations)
         else:
             transformations_seq = transformations
