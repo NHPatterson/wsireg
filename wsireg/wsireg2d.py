@@ -744,27 +744,16 @@ class WsiReg2D(object):
                     mask=tgt_mask,
                 )
 
-                self._preprocessed_image_spacings.update(
-                    {
-                        src_name: (
-                            src_reg_image.image_res,
-                            src_reg_image.image_res,
-                        )
-                    }
-                )
-
-                self._preprocessed_image_spacings.update(
-                    {
-                        tgt_name: (
-                            tgt_reg_image.image_res,
-                            tgt_reg_image.image_res,
-                        )
-                    }
-                )
-
                 src_reg_image.read_reg_image()
                 tgt_reg_image.read_reg_image()
 
+                self._preprocessed_image_spacings.update(
+                    {src_name: src_reg_image.reg_image.GetSpacing()}
+                )
+
+                self._preprocessed_image_spacings.update(
+                    {tgt_name: tgt_reg_image.reg_image.GetSpacing()}
+                )
                 self._preprocessed_image_sizes.update(
                     {src_name: src_reg_image.reg_image.GetSize()}
                 )
