@@ -262,9 +262,7 @@ class MergeOmeTiffWriter:
                     options = dict(
                         tile=(tile_size, tile_size),
                         compression=self.compression,
-                        photometric="rgb"
-                        if merge_image.is_rgb
-                        else "minisblack",
+                        photometric="minisblack",
                         metadata=None,
                     )
                     # write OME-XML to the ImageDescription tag of the first page
