@@ -385,7 +385,7 @@ def test_MergeOmeTiffWriter_mix_merge(
     )
 
     by_plane_fp = merge_ometiffwriter.merge_write_image_by_plane(
-        "merge_testimage_by_plane",
+        "merge_testimage_by_plane_mix",
         ["1", "2", "3"],
         output_dir=str(data_out_dir),
     )

@@ -149,6 +149,7 @@ def test_wsireg_config_full_exp_DICE_ds(config_fp, data_out_dir):
 
     assert all(np.asarray(dice_vals) > 0.8)
 
+
 @pytest.mark.skipif(SKIP_PRIVATE, reason=REASON)
 @pytest.mark.parametrize(
     "config_fp",
@@ -164,4 +165,4 @@ def test_wsireg_config_full_merge_rgb_mc(config_fp, data_out_dir):
     ri = reg_image_loader(im_fps[0], 1)
 
     assert ri.im_dtype == np.uint16
-    assert ri.im_dims[0] == 9
+    assert ri.im_dims == (9, 3993, 3397)
