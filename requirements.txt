@@ -14,3 +14,4 @@ itk-elastix
 SimpleITK
 aicsimageio[czi]
 pydantic
+ome-types

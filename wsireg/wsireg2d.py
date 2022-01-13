@@ -1,4 +1,5 @@
 from typing import Union, Optional, List, Dict, Tuple, Any
+from warnings import warn
 import time
 import yaml
 from pathlib import Path
@@ -27,6 +28,7 @@ from wsireg.utils.reg_utils import (
     json_to_pmap_dict,
 )
 from wsireg.utils.shape_utils import invert_nonrigid_transforms
+from wsireg.utils.tform_utils import identity_elx_transform
 
 
 class WsiReg2D(object):
@@ -101,24 +103,28 @@ class WsiReg2D(object):
 
         self.pairwise = False
 
-        self._modalities = {}
+        self._modalities = dict()
         self._modality_names = []
-        self._reg_paths = {}
+        self._reg_paths = dict()
         self._reg_graph_edges = []
-        self._transform_paths = {}
+        self._transform_paths = dict()
 
         self._transformations = None
+        self._preprocessed_image_sizes: Dict[str, Tuple[int, int]] = dict()
+        self._preprocessed_image_spacings: Dict[
+            str, Union[Tuple[int, int], Tuple[float, float]]
+        ] = dict()
 
-        self.n_modalities = None
-        self.n_registrations = None
+        self.n_modalities: Optional[int] = None
+        self.n_registrations: Optional[int] = None
 
-        self.attachment_images = {}
+        self.attachment_images = dict()
 
-        self._shape_sets = {}
+        self._shape_sets = dict()
         self._shape_set_names = []
 
-        self.merge_modalities = {}
-        self.original_size_transforms = {}
+        self.merge_modalities = dict()
+        self.original_size_transforms = dict()
 
         if config:
             self.add_data_from_config(config)
@@ -741,6 +747,20 @@ class WsiReg2D(object):
                 src_reg_image.read_reg_image()
                 tgt_reg_image.read_reg_image()
 
+                self._preprocessed_image_spacings.update(
+                    {src_name: src_reg_image.reg_image.GetSpacing()}
+                )
+
+                self._preprocessed_image_spacings.update(
+                    {tgt_name: tgt_reg_image.reg_image.GetSpacing()}
+                )
+                self._preprocessed_image_sizes.update(
+                    {src_name: src_reg_image.reg_image.GetSize()}
+                )
+                self._preprocessed_image_sizes.update(
+                    {tgt_name: tgt_reg_image.reg_image.GetSize()}
+                )
+
                 if (
                     tgt_original_size_transform is None
                     and tgt_reg_image.original_size_transform is not None
@@ -847,18 +867,7 @@ class WsiReg2D(object):
         self._reg_graph_edges["reg_transforms"]
 
     def _collate_transformations(self):
-        transforms = {}
-        # for reg_edge in self.reg_graph_edges:
-        #     # if reg_edge["transforms"]["initial"]:
-        #     #     initial_transforms = [
-        #     #         RegTransform(t) for t in reg_edge["transforms"]["initial"]
-        #     #     ]
-        #     # else:
-        #     #     initial_transforms = []
-        #     reg_edge["reg_transforms"] = {
-        #         'initial': reg_edge["transforms"]["initial"],
-        #         'registration': reg_edge["transforms"]["registration"],
-        #     }
+        transforms = dict()
         edge_modality_pairs = [v['modalities'] for v in self.reg_graph_edges]
         for modality, tform_edges in self.transform_paths.items():
             full_tform_seq = RegTransformSeq()
@@ -889,15 +898,28 @@ class WsiReg2D(object):
         return transforms
 
     def _prepare_nonreg_image_transform(
-        self, modality_key, to_original_size=True
+        self,
+        modality_key,
+        attachment=False,
+        attachment_modality=None,
+        to_original_size=True,
     ):
-        transformations = None
+
         print(
-            "transforming non-registered modality : {} ".format(modality_key)
+            "preparing transforms for non-registered modality : {} ".format(
+                modality_key
+            )
         )
         output_path = self.output_dir / "{}-{}_registered".format(
             self.project_name, modality_key
         )
+
+        if attachment:
+            im_data_key = copy(modality_key)
+            modality_key = attachment_modality
+
+        transformations = None
+
         im_data = self.modalities[modality_key]
 
         if (
@@ -927,7 +949,7 @@ class WsiReg2D(object):
             else:
                 transformations = orig_size_rt
 
-        if im_data["preprocessing"].downsampling and transformations:
+        if im_data["preprocessing"].downsampling > 1 and transformations:
             if not im_data["output_res"]:
                 output_spacing_target = im_data["image_res"]
                 transformations.set_output_spacing(
@@ -935,6 +957,31 @@ class WsiReg2D(object):
                 )
             else:
                 transformations.set_output_spacing(im_data["output_res"])
+
+        elif im_data["preprocessing"].downsampling > 1 and not transformations:
+            transformations = RegTransformSeq(
+                [
+                    RegTransform(
+                        identity_elx_transform(
+                            self._preprocessed_image_sizes[modality_key],
+                            self._preprocessed_image_spacings[modality_key],
+                        )
+                    )
+                ],
+                transform_seq_idx=[0],
+            )
+
+            if not im_data["output_res"]:
+                output_spacing_target = im_data["image_res"]
+                transformations.set_output_spacing(
+                    (output_spacing_target, output_spacing_target)
+                )
+            else:
+                transformations.set_output_spacing(im_data["output_res"])
+
+        if attachment:
+            im_data = self.modalities[im_data_key]
+
         return im_data, transformations, output_path
 
     def _prepare_reg_image_transform(
@@ -944,8 +991,6 @@ class WsiReg2D(object):
         attachment_modality=None,
         to_original_size=True,
     ):
-        im_data = self.modalities[edge_key]
-
         if attachment:
             final_modality = self.reg_paths[attachment_modality][-1]
             transformations = copy(
@@ -957,13 +1002,17 @@ class WsiReg2D(object):
                 self.transformations[edge_key]["full-transform-seq"]
             )
 
-        print("transforming {} to {}".format(edge_key, final_modality))
-
         output_path = self.output_dir / "{}-{}_to_{}_registered".format(
             self.project_name,
             edge_key,
             final_modality,
         )
+
+        if attachment:
+            im_data_key = copy(edge_key)
+            edge_key = attachment_modality
+
+        im_data = self.modalities[edge_key]
 
         if (
             self.original_size_transforms.get(final_modality)
@@ -978,7 +1027,7 @@ class WsiReg2D(object):
             )
             transformations.append(orig_size_rt)
 
-        if im_data["preprocessing"].downsampling:
+        if im_data["preprocessing"].downsampling > 1:
             if not im_data["output_res"]:
                 output_spacing_target = self.modalities[final_modality][
                     "image_res"
@@ -991,6 +1040,9 @@ class WsiReg2D(object):
 
         elif im_data["output_res"]:
             transformations.set_output_spacing(im_data["output_res"])
+
+        if attachment:
+            im_data = self.modalities[im_data_key]
 
         return im_data, transformations, output_path
 
@@ -1026,111 +1078,82 @@ class WsiReg2D(object):
         return im_fp
 
     def _transform_write_merge_images(self, to_original_size=True):
+        def determine_attachment(sub_image):
+            if sub_image in self.attachment_images.keys():
+                attachment_modality = self.attachment_images[sub_image]
+                attachment = True
+            else:
+                attachment_modality = None
+                attachment = False
+            return attachment, attachment_modality
+
         for merge_name, sub_images in self.merge_modalities.items():
             im_fps = []
             im_res = []
             im_ch_names = []
             transformations = []
-            final_modalities = []
+
+            non_reg_modalities = self._find_nonreg_modalities()
+
             for sub_image in sub_images:
+                attachment, attachment_modality = determine_attachment(
+                    sub_image
+                )
                 im_data = self.modalities[sub_image]
                 im_fps.append(im_data["image_filepath"])
                 im_res.append(im_data["image_res"])
                 im_ch_names.append(im_data.get("channel_names"))
-
-                try:
-                    transforms = copy(
-                        self.transformations[sub_image]["full-transform-seq"]
-                    )
-
-                except KeyError:
-                    transforms = None
-
-                try:
-                    final_modalities.append(self.reg_paths[sub_image][-1])
-                except KeyError:
-
-                    initial_transforms = self._check_cache_modality(sub_image)[
-                        1
-                    ][0]
-                    if initial_transforms:
-                        initial_transforms = [
-                            RegTransform(t) for t in initial_transforms
-                        ]
-                        transforms = RegTransformSeq(
-                            initial_transforms,
-                            transform_seq_idx=[
-                                idx for idx in range(len(initial_transforms))
-                            ],
-                        )
-                    else:
-                        transforms = None
-
-                if im_data["preprocessing"].downsampling and transforms:
-                    if not im_data["output_res"]:
-                        try:
-                            final_modality = self.reg_paths[sub_image][-1]
-                        except KeyError:
-                            final_modality = sub_image
-
-                        output_spacing_target = self.modalities[
-                            final_modality
-                        ]["image_res"]
-                        transforms.set_output_spacing(
-                            (output_spacing_target, output_spacing_target)
-                        )
-                    else:
-                        transforms.set_output_spacing(im_data["output_res"])
-
-                elif (
-                    im_data["output_res"]
-                    and sub_image != final_modality
-                    and transforms
+                if (
+                    sub_image not in non_reg_modalities
+                    and attachment_modality not in non_reg_modalities
                 ):
-                    transforms.set_output_spacing(im_data["output_res"])
-
-                transformations.append(transforms)
-
-            if all(final_modalities):
-                final_modality = final_modalities[0]
-            else:
-                raise ValueError("final modalities do not match on merge")
-
-            if (
-                self.original_size_transforms.get(final_modality)
-                and to_original_size
-            ):
-                original_size_transform = self.original_size_transforms[
-                    final_modality
-                ]
-                for transformation in transformations:
-                    orig_size_rt = RegTransformSeq(
-                        RegTransform(original_size_transform),
-                        transform_seq_idx=[0],
+                    (
+                        _,
+                        sub_im_transforms,
+                        _,
+                    ) = self._prepare_reg_image_transform(
+                        sub_image,
+                        attachment=attachment,
+                        attachment_modality=attachment_modality,
+                        to_original_size=to_original_size,
                     )
-                    transformation.append(orig_size_rt)
 
-            output_path = self.output_dir / "{}-{}_merged-registered".format(
-                self.project_name,
-                merge_name,
-            )
+                else:
 
-            merge_regimage = MergeRegImage(
-                im_fps,
-                im_res,
-                channel_names=im_ch_names,
-            )
+                    (
+                        _,
+                        sub_im_transforms,
+                        _,
+                    ) = self._prepare_nonreg_image_transform(
+                        sub_image,
+                        attachment=attachment,
+                        attachment_modality=attachment_modality,
+                        to_original_size=to_original_size,
+                    )
 
-            merge_ometiffwriter = MergeOmeTiffWriter(
-                merge_regimage, reg_seq_transforms=transformations
-            )
+                transformations.append(sub_im_transforms)
 
-            im_fp = merge_ometiffwriter.merge_write_image_by_plane(
-                output_path.stem,
-                sub_images,
-                output_dir=str(self.output_dir),
-            )
-            return im_fp
+        output_path = self.output_dir / "{}-{}_merged-registered".format(
+            self.project_name,
+            merge_name,
+        )
+
+        merge_regimage = MergeRegImage(
+            im_fps,
+            im_res,
+            channel_names=im_ch_names,
+        )
+
+        merge_ometiffwriter = MergeOmeTiffWriter(
+            merge_regimage, reg_seq_transforms=transformations
+        )
+
+        im_fp = merge_ometiffwriter.merge_write_image_by_plane(
+            output_path.stem,
+            sub_images,
+            output_dir=str(self.output_dir),
+        )
+        return im_fp
 
     def transform_images(
         self,
@@ -1192,6 +1215,7 @@ class WsiReg2D(object):
                     attachment=False,
                     to_original_size=to_original_size,
                 )
+
                 im_fp = self._transform_write_image(
                     im_data,
                     transformations,
@@ -1204,16 +1228,30 @@ class WsiReg2D(object):
                 modality,
                 attachment_modality,
             ) in self.attachment_images.items():
-                (
-                    im_data,
-                    transformations,
-                    output_path,
-                ) = self._prepare_reg_image_transform(
-                    modality,
-                    attachment=True,
-                    attachment_modality=attachment_modality,
-                    to_original_size=to_original_size,
-                )
+                if modality in merge_modalities and remove_merged:
+                    continue
+                if attachment_modality in self._find_nonreg_modalities():
+                    (
+                        im_data,
+                        transformations,
+                        output_path,
+                    ) = self._prepare_nonreg_image_transform(
+                        modality,
+                        attachment=True,
+                        attachment_modality=attachment_modality,
+                        to_original_size=to_original_size,
+                    )
+                else:
+                    (
+                        im_data,
+                        transformations,
+                        output_path,
+                    ) = self._prepare_reg_image_transform(
+                        modality,
+                        attachment=True,
+                        attachment_modality=attachment_modality,
+                        to_original_size=to_original_size,
+                    )
 
                 im_fp = self._transform_write_image(
                     im_data,
@@ -1222,15 +1260,19 @@ class WsiReg2D(object):
                     file_writer=file_writer,
                 )
                 image_fps.append(im_fp)
+
             if len(self.merge_modalities.items()) > 0:
                 im_fp = self._transform_write_merge_images(
                     to_original_size=to_original_size
                 )
                 image_fps.append(im_fp)
 
-        if transform_non_reg is True:
+        if transform_non_reg:
             # preprocess and save unregistered nodes
             for modality in nonreg_keys:
+                if modality in merge_modalities and remove_merged:
+                    continue
+
                 (
                     im_data,
                     transformations,
@@ -1361,24 +1403,30 @@ class WsiReg2D(object):
                 modality,
                 attachment_modality,
             ) in self.attachment_images.items():
+                if attachment_modality not in self._find_nonreg_modalities():
 
-                final_modality = self.reg_paths[attachment_modality][-1]
+                    final_modality = self.reg_paths[attachment_modality][-1]
 
-                output_path = (
-                    self.output_dir
-                    / "{}-{}_to_{}_transformations.json".format(
-                        self.project_name,
-                        modality,
-                        final_modality,
+                    output_path = (
+                        self.output_dir
+                        / "{}-{}_to_{}_transformations.json".format(
+                            self.project_name,
+                            modality,
+                            final_modality,
+                        )
                     )
-                )
 
-                tform_txt = self._transforms_to_txt(self.transformations[key])
+                    tform_txt = self._transforms_to_txt(
+                        self.transformations[key]
+                    )
 
-                with open(output_path, 'w') as fp:
-                    json.dump(tform_txt, fp, indent=4)
+                    with open(output_path, 'w') as fp:
+                        json.dump(tform_txt, fp, indent=4)
         else:
-            print("registration has not been executed for the graph")
+            warn(
+                "registration has not been executed for the graph "
+                "no transformations to save"
+            )
 
     def add_data_from_config(self, config_filepath):
 
@@ -1451,7 +1499,7 @@ class WsiReg2D(object):
                 self.transformations = self.reg_graph_edges
 
         if reg_config.get("merge_modalities"):
-            for mn, mm in reg_config["merge_modalities"]:
+            for mn, mm in reg_config["merge_modalities"].items():
                 self.add_merge_modalities(mn, mm)
 
     def reset_registered_modality(self, modalities):

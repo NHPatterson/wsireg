@@ -1,3 +1,4 @@
+from typing import Tuple, Union
 from pathlib import Path
 import json
 import numpy as np
@@ -575,6 +576,16 @@ def sitk_transform_image(image, final_tform, composite_transform):
     resampler.SetTransform(composite_transform)
     image = resampler.Execute(image)
     return image
+
+
+def identity_elx_transform(
+    image_size: Tuple[int, int],
+    image_spacing: Union[Tuple[int, int], Tuple[float, float]],
+):
+    identity = BASE_RIG_TFORM
+    identity.update({"Size": [str(i) for i in image_size]})
+    identity.update({"Spacing": [str(i) for i in image_spacing]})
+    return identity
 
 
 #

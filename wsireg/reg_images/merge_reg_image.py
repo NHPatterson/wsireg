@@ -1,3 +1,4 @@
+from warnings import warn
 import numpy as np
 from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_images.reg_image import RegImage
@@ -56,13 +57,15 @@ class MergeRegImage(RegImage):
             images.append(imdata)
 
         if all([im.im_dtype == images[0].im_dtype for im in images]) is False:
-            raise ValueError(
-                "MergeRegImage requires a list of images with matching data type"
+            warn(
+                "MergeRegImage created with mixed data types, writing will cast "
+                "to the largest data type"
             )
 
         if any([im.is_rgb for im in images]) is True:
-            raise ValueError(
-                "MergeRegImage does not support merger of RGB images"
+            warn(
+                "MergeRegImage does not support writing merged interleaved RGB "
+                "Data will be written as multi-channel"
             )
 
         self.images = images

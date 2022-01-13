@@ -1,8 +1,7 @@
 import pytest
 from pathlib import Path
-from time import time
 import numpy as np
-from tifffile import imread, imwrite
+from tifffile import imread
 from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_images.merge_reg_image import MergeRegImage
 from wsireg.writers.ome_tiff_writer import OmeTiffWriter
@@ -363,3 +362,34 @@ def test_MergeOmeTiffWriter_mc(simple_transform_affine_nl, data_out_dir):
     assert np.array_equal(im_plane[0:3, :, :], im_plane_s1)
     assert np.array_equal(im_plane[3:6, :, :], im_plane_s2)
     assert np.array_equal(im_plane[6:9, :, :], im_plane_s3)
+
+
+@pytest.mark.usefixtures("simple_transform_affine_nl")
+def test_MergeOmeTiffWriter_mix_merge(
+    simple_transform_affine_nl, data_out_dir
+):
+
+    reg_image1 = np.random.randint(0, 255, (1024, 1024, 3), dtype=np.uint16)
+    reg_image2 = np.random.randint(0, 255, (3, 1024, 1024), dtype=np.uint16)
+    reg_image3 = np.random.randint(0, 255, (3, 1024, 1024), dtype=np.uint8)
+
+    mreg_image = MergeRegImage(
+        [reg_image1, reg_image2, reg_image3],
+        [1, 1, 1],
+        channel_names=[["1", "2", "3"], ["1", "2", "3"], ["1", "2", "3"]],
+    )
+
+    rts = RegTransformSeq(simple_transform_affine_nl)
+    merge_ometiffwriter = MergeOmeTiffWriter(
+        mreg_image, reg_seq_transforms=[rts, rts, rts]
+    )
+
+    by_plane_fp = merge_ometiffwriter.merge_write_image_by_plane(
+        "merge_testimage_by_plane_mix",
+        ["1", "2", "3"],
+        output_dir=str(data_out_dir),
+    )
+
+    im_plane = imread(by_plane_fp)
+
+    assert im_plane.shape[0] == 9
