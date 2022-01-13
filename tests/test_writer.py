@@ -363,8 +363,11 @@ def test_MergeOmeTiffWriter_mc(simple_transform_affine_nl, data_out_dir):
     assert np.array_equal(im_plane[3:6, :, :], im_plane_s2)
     assert np.array_equal(im_plane[6:9, :, :], im_plane_s3)
 
+
 @pytest.mark.usefixtures("simple_transform_affine_nl")
-def test_MergeOmeTiffWriter_mix_merge(simple_transform_affine_nl, data_out_dir):
+def test_MergeOmeTiffWriter_mix_merge(
+    simple_transform_affine_nl, data_out_dir
+):
 
     reg_image1 = np.random.randint(0, 255, (1024, 1024, 3), dtype=np.uint16)
     reg_image2 = np.random.randint(0, 255, (3, 1024, 1024), dtype=np.uint16)
