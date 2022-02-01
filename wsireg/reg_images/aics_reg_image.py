@@ -1,14 +1,16 @@
 import warnings
-import SimpleITK as sitk
-import numpy as np
+
 import dask.array as da
+import numpy as np
+import SimpleITK as sitk
+from aicsimageio import AICSImage
+
 from wsireg.reg_images import RegImage
 from wsireg.utils.im_utils import (
+    ensure_dask_array,
     guess_rgb,
     read_preprocess_array,
-    ensure_dask_array,
 )
-from aicsimageio import AICSImage
 
 
 class AICSRegImage(RegImage):

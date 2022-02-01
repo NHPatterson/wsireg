@@ -1,12 +1,14 @@
-import pytest
 from pathlib import Path
+
 import numpy as np
+import pytest
 from tifffile import imread
+
 from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_images.merge_reg_image import MergeRegImage
-from wsireg.writers.ome_tiff_writer import OmeTiffWriter
-from wsireg.writers.merge_ome_tiff_writer import MergeOmeTiffWriter
 from wsireg.reg_transform_seq import RegTransformSeq
+from wsireg.writers.merge_ome_tiff_writer import MergeOmeTiffWriter
+from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 
 
 @pytest.fixture(scope="session")

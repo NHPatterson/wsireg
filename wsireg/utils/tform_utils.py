@@ -1,20 +1,21 @@
-from typing import Tuple, Union
-from pathlib import Path
 import json
-import numpy as np
+from pathlib import Path
+from typing import Tuple, Union
+
 import itk
+import numpy as np
 import SimpleITK as sitk
-from wsireg.utils.reg_utils import json_to_pmap_dict
-from wsireg.utils.itk_im_conversions import (
-    sitk_image_to_itk_image,
-    itk_image_to_sitk_image,
-)
+
 from wsireg.parameter_maps.transformations import (
-    BASE_RIG_TFORM,
     BASE_AFF_TFORM,
+    BASE_RIG_TFORM,
 )
 from wsireg.reg_transform import RegTransform
-
+from wsireg.utils.itk_im_conversions import (
+    itk_image_to_sitk_image,
+    sitk_image_to_itk_image,
+)
+from wsireg.utils.reg_utils import json_to_pmap_dict
 
 NUMERIC_ELX_PARAMETERS = {
     "CenterOfRotationPoint": np.float64,

@@ -1,6 +1,8 @@
-import pytest
 import os
 from pathlib import Path
+
+import pytest
+
 from wsireg.reg_transform_seq import RegTransformSeq
 
 HERE = os.path.dirname(__file__)

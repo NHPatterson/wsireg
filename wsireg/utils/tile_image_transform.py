@@ -1,15 +1,13 @@
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
-import SimpleITK as sitk
-import numpy as np
-import zarr
+
 import dask.array as da
-from wsireg.utils.tform_utils import (
-    ELX_TO_ITK_INTERPOLATORS,
-)
-from wsireg.utils.shape_utils import (
-    prepare_pt_transformation_data,
-)
+import numpy as np
+import SimpleITK as sitk
+import zarr
+
+from wsireg.utils.shape_utils import prepare_pt_transformation_data
+from wsireg.utils.tform_utils import ELX_TO_ITK_INTERPOLATORS
 
 
 def tile_pad_output_size(y_size, x_size, tile_size=512):

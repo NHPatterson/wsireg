@@ -1,8 +1,10 @@
-import pytest
 import os
+
 import numpy as np
-from wsireg.reg_images.loader import reg_image_loader
+import pytest
+
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
+from wsireg.reg_images.loader import reg_image_loader
 
 # private data logic borrowed from https://github.com/cgohlke/tifffile/tests/test_tifffile.py
 HERE = os.path.dirname(__file__)

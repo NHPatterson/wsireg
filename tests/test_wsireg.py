@@ -1,14 +1,16 @@
-import pytest
 import os
 import random
 import string
-import numpy as np
 from pathlib import Path
-from tifffile import TiffFile
+
+import numpy as np
+import pytest
 from ome_types import from_xml
-from wsireg.wsireg2d import WsiReg2D
-from wsireg.reg_images.loader import reg_image_loader
+from tifffile import TiffFile
+
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
+from wsireg.reg_images.loader import reg_image_loader
+from wsireg.wsireg2d import WsiReg2D
 
 HERE = os.path.dirname(__file__)
 GEOJSON_FP = os.path.join(HERE, "fixtures/polygons.geojson")

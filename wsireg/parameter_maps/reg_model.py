@@ -1,6 +1,7 @@
-from typing import Tuple, Union, List, Dict
-from pathlib import Path
 from enum import Enum, EnumMeta
+from pathlib import Path
+from typing import Dict, List, Tuple, Union
+
 from wsireg.parameter_maps.reg_params import DEFAULT_REG_PARAM_MAPS
 
 DEFAULT_REG_PARAM_MAPS.keys()

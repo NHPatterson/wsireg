@@ -1,22 +1,23 @@
-from typing import Optional, Union, Dict, Any
 from copy import deepcopy
+from typing import Any, Dict, Optional, Union
+
+import itk
 import numpy as np
 import SimpleITK as sitk
-import itk
+
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
 from wsireg.utils.im_utils import (
+    compute_mask_to_bbox,
     contrast_enhance,
     sitk_inv_int,
     sitk_max_int_proj,
-    # transform_to_ome_zarr,
-    compute_mask_to_bbox,
     transform_plane,
 )
 from wsireg.utils.tform_utils import (
     gen_aff_tform_flip,
+    gen_rig_to_original,
     gen_rigid_tform_rot,
     gen_rigid_translation,
-    gen_rig_to_original,
     prepare_wsireg_transform_data,
 )
 

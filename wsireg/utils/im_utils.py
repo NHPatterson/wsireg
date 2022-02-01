@@ -1,26 +1,25 @@
-from pathlib import Path
 import multiprocessing
 import warnings
 from concurrent.futures import ThreadPoolExecutor
-import numpy as np
-import cv2
-import SimpleITK as sitk
-from tifffile import (
-    create_output,
-    TiffFile,
-    xml2dict,
-    TiffWriter,
-    imread,
-    OmeXml,
-)
-from czifile import CziFile
-import zarr
-import dask.array as da
-from wsireg.utils.tform_utils import (
-    sitk_transform_image,
-)
-from wsireg.parameter_maps.preprocessing import BoundingBox
+from pathlib import Path
 
+import cv2
+import dask.array as da
+import numpy as np
+import SimpleITK as sitk
+import zarr
+from czifile import CziFile
+from tifffile import (
+    OmeXml,
+    TiffFile,
+    TiffWriter,
+    create_output,
+    imread,
+    xml2dict,
+)
+
+from wsireg.parameter_maps.preprocessing import BoundingBox
+from wsireg.utils.tform_utils import sitk_transform_image
 
 TIFFFILE_EXTS = [".scn", ".tif", ".tiff", ".ndpi", ".svs"]
 
@@ -1517,9 +1516,9 @@ def ome_tifffile_to_arraylike(image_filepath):
         image = image[0]
 
     image = da.from_zarr(image)
-
-    if is_rgb is False and samples_per_pixel >= 3:
-        image = image.transpose(1, 2, 0)
+    if samples_per_pixel:
+        if is_rgb is False and samples_per_pixel >= 3:
+            image = image.transpose(1, 2, 0)
 
     return image, image_filepath
 

@@ -1,12 +1,12 @@
-from typing import Union, Optional, List, Dict, Tuple, Any
 import json
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import numpy as np
 import SimpleITK as sitk
+
 from wsireg.reg_transform import RegTransform
-from wsireg.utils.tform_utils import (
-    ELX_TO_ITK_INTERPOLATORS,
-)
+from wsireg.utils.tform_utils import ELX_TO_ITK_INTERPOLATORS
 
 
 class RegTransformSeq:

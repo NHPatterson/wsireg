@@ -1,7 +1,9 @@
-import pytest
 import os
 from copy import deepcopy
+
 import numpy as np
+import pytest
+
 from wsireg.reg_shapes import RegShapes
 
 HERE = os.path.dirname(__file__)
