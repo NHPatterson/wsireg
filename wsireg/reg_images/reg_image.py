@@ -6,13 +6,20 @@ import numpy as np
 import SimpleITK as sitk
 
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
-from wsireg.utils.im_utils import (  # transform_to_ome_zarr,
-    compute_mask_to_bbox, contrast_enhance, sitk_inv_int, sitk_max_int_proj,
-    transform_plane)
-from wsireg.utils.tform_utils import (gen_aff_tform_flip, gen_rig_to_original,
-                                      gen_rigid_tform_rot,
-                                      gen_rigid_translation,
-                                      prepare_wsireg_transform_data)
+from wsireg.utils.im_utils import (
+    compute_mask_to_bbox,
+    contrast_enhance,
+    sitk_inv_int,
+    sitk_max_int_proj,
+    transform_plane,
+)
+from wsireg.utils.tform_utils import (
+    gen_aff_tform_flip,
+    gen_rig_to_original,
+    gen_rigid_tform_rot,
+    gen_rigid_translation,
+    prepare_wsireg_transform_data,
+)
 
 
 class RegImage:

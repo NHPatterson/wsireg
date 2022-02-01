@@ -3,7 +3,7 @@ from warnings import warn
 import numpy as np
 
 from wsireg.reg_images.loader import reg_image_loader
-from wsireg.reg_images.reg_image import RegImage
+from wsireg.reg_images import RegImage
 from wsireg.utils.im_utils import transform_to_ome_tiff_merge
 from wsireg.utils.tform_utils import prepare_wsireg_transform_data
 

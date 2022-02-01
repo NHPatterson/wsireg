@@ -9,8 +9,14 @@ import numpy as np
 import SimpleITK as sitk
 import zarr
 from czifile import CziFile
-from tifffile import (OmeXml, TiffFile, TiffWriter, create_output, imread,
-                      xml2dict)
+from tifffile import (
+    OmeXml,
+    TiffFile,
+    TiffWriter,
+    create_output,
+    imread,
+    xml2dict,
+)
 
 from wsireg.parameter_maps.preprocessing import BoundingBox
 from wsireg.utils.tform_utils import sitk_transform_image

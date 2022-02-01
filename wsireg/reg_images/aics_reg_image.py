@@ -6,8 +6,11 @@ import SimpleITK as sitk
 from aicsimageio import AICSImage
 
 from wsireg.reg_images import RegImage
-from wsireg.utils.im_utils import (ensure_dask_array, guess_rgb,
-                                   read_preprocess_array)
+from wsireg.utils.im_utils import (
+    ensure_dask_array,
+    guess_rgb,
+    read_preprocess_array,
+)
 
 
 class AICSRegImage(RegImage):

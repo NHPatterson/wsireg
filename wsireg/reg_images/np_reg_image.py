@@ -5,8 +5,11 @@ import numpy as np
 import SimpleITK as sitk
 
 from wsireg.reg_images import RegImage
-from wsireg.utils.im_utils import (ensure_dask_array, guess_rgb,
-                                   read_preprocess_array)
+from wsireg.utils.im_utils import (
+    ensure_dask_array,
+    guess_rgb,
+    read_preprocess_array,
+)
 
 
 class NumpyRegImage(RegImage):

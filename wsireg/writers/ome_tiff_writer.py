@@ -8,16 +8,21 @@ from tifffile import TiffWriter
 
 from wsireg.reg_images import RegImage
 from wsireg.reg_transform_seq import RegTransformSeq
-from wsireg.utils.im_utils import (format_channel_names, get_pyramid_info,
-                                   prepare_ome_xml_str)
-from wsireg.utils.tile_image_transform import (add_tile_location_on_moving,
-                                               compute_sub_res,
-                                               determine_moving_tile_padding,
-                                               generate_tile_coords,
-                                               itk_transform_tiles,
-                                               subres_zarr_to_tiles,
-                                               tile_pad_output_size,
-                                               zarr_to_tiles)
+from wsireg.utils.im_utils import (
+    format_channel_names,
+    get_pyramid_info,
+    prepare_ome_xml_str,
+)
+from wsireg.utils.tile_image_transform import (
+    add_tile_location_on_moving,
+    compute_sub_res,
+    determine_moving_tile_padding,
+    generate_tile_coords,
+    itk_transform_tiles,
+    subres_zarr_to_tiles,
+    tile_pad_output_size,
+    zarr_to_tiles,
+)
 
 
 class OmeTiffWriter:

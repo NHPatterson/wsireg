@@ -6,11 +6,15 @@ import itk
 import numpy as np
 import SimpleITK as sitk
 
-from wsireg.parameter_maps.transformations import (BASE_AFF_TFORM,
-                                                   BASE_RIG_TFORM)
+from wsireg.parameter_maps.transformations import (
+    BASE_AFF_TFORM,
+    BASE_RIG_TFORM,
+)
 from wsireg.reg_transform import RegTransform
-from wsireg.utils.itk_im_conversions import (itk_image_to_sitk_image,
-                                             sitk_image_to_itk_image)
+from wsireg.utils.itk_im_conversions import (
+    itk_image_to_sitk_image,
+    sitk_image_to_itk_image,
+)
 from wsireg.utils.reg_utils import json_to_pmap_dict
 
 NUMERIC_ELX_PARAMETERS = {

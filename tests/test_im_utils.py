@@ -7,14 +7,21 @@ import zarr
 from tifffile import imread
 
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
-from wsireg.utils.im_utils import (CziRegImageReader, czi_tile_grayscale,
-                                   ensure_dask_array, get_sitk_image_info,
-                                   get_tifffile_info, grayscale, guess_rgb,
-                                   read_preprocess_array, sitk_backend,
-                                   tf_get_largest_series,
-                                   tifffile_dask_backend,
-                                   tifffile_zarr_backend,
-                                   zarr_get_base_pyr_layer)
+from wsireg.utils.im_utils import (
+    CziRegImageReader,
+    czi_tile_grayscale,
+    ensure_dask_array,
+    get_sitk_image_info,
+    get_tifffile_info,
+    grayscale,
+    guess_rgb,
+    read_preprocess_array,
+    sitk_backend,
+    tf_get_largest_series,
+    tifffile_dask_backend,
+    tifffile_zarr_backend,
+    zarr_get_base_pyr_layer,
+)
 
 # private data logic borrowed from https://github.com/cgohlke/tifffile/tests/test_tifffile.py
 HERE = os.path.dirname(__file__)

@@ -9,8 +9,12 @@ from tifffile import TiffWriter
 from wsireg.reg_images import RegImage
 from wsireg.reg_images.merge_reg_image import MergeRegImage
 from wsireg.reg_transform_seq import RegTransformSeq
-from wsireg.utils.im_utils import (SITK_TO_NP_DTYPE, format_channel_names,
-                                   get_pyramid_info, prepare_ome_xml_str)
+from wsireg.utils.im_utils import (
+    SITK_TO_NP_DTYPE,
+    format_channel_names,
+    get_pyramid_info,
+    prepare_ome_xml_str,
+)
 
 
 class MergeOmeTiffWriter:

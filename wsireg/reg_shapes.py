@@ -6,10 +6,14 @@ import cv2
 import numpy as np
 
 from wsireg.reg_transform_seq import RegTransformSeq
-from wsireg.utils.shape_utils import (get_int_dtype, insert_transformed_pts_gj,
-                                      invert_nonrigid_transforms,
-                                      scale_shape_coordinates, shape_reader,
-                                      transform_shapes)
+from wsireg.utils.shape_utils import (
+    get_int_dtype,
+    insert_transformed_pts_gj,
+    invert_nonrigid_transforms,
+    scale_shape_coordinates,
+    shape_reader,
+    transform_shapes,
+)
 
 
 class RegShapes:
