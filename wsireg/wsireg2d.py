@@ -32,6 +32,9 @@ from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 
 
 class WsiReg2D(object):
+    project_name: Optional[str] = None
+    output_dir: Optional[Path] = None
+    image_cache: Optional[Path] = None
     """
     Class to define a 2D registration graph and execute the registrations and transformations of the graph
 
@@ -84,21 +87,14 @@ class WsiReg2D(object):
 
     def __init__(
         self,
-        project_name: str,
-        output_dir: str,
+        project_name: Optional[str] = None,
+        output_dir: Optional[str, Path] = None,
         cache_images: bool = True,
         config: Optional[Union[str, Path]] = None,
     ):
 
-        if project_name is None:
-            self.project_name = 'RegProj'
-        else:
-            self.project_name = project_name
+        self.setup_project_output(project_name, output_dir)
 
-        if output_dir is None:
-            output_dir = "./"
-        self.output_dir = Path(output_dir)
-        self.image_cache = self.output_dir / ".imcache_{}".format(project_name)
         self.cache_images = cache_images
 
         self.pairwise = False
@@ -128,6 +124,23 @@ class WsiReg2D(object):
 
         if config:
             self.add_data_from_config(config)
+
+    def setup_project_output(
+        self,
+        project_name: Optional[str] = None,
+        output_dir: Optional[str, Path] = None,
+    ) -> None:
+        if project_name is None:
+            self.project_name = 'RegProj'
+        else:
+            self.project_name = project_name
+
+        if output_dir is None:
+            output_dir = "./"
+
+        self.output_dir = Path(output_dir)
+
+        self.image_cache = self.output_dir / ".imcache_{}".format(project_name)
 
     @property
     def modalities(self):
