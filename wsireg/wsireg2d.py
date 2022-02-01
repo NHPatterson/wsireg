@@ -11,7 +11,7 @@ import yaml
 
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
 from wsireg.parameter_maps.reg_model import RegModel
-from wsireg.reg_images import MergeRegImage
+from wsireg.reg_images import RegImage, MergeRegImage
 from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_shapes import RegShapes
 from wsireg.reg_transform import RegTransform
@@ -575,7 +575,7 @@ class WsiReg2D(object):
             )
 
     def _cache_images(
-        self, modality_name: str, reg_image: "wsireg.reg_images.RegImage"
+        self, modality_name: str, reg_image: RegImage
     ) -> None:
 
         cache_im_fp = self.image_cache / "{}_prepro.tiff".format(modality_name)
