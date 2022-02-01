@@ -33,7 +33,7 @@ from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 
 class WsiReg2D(object):
     project_name: Optional[str] = None
-    output_dir: Optional[Path] = None
+    output_dir: Optional[Union[str,Path]] = None
     image_cache: Optional[Path] = None
     """
     Class to define a 2D registration graph and execute the registrations and transformations of the graph
@@ -128,7 +128,7 @@ class WsiReg2D(object):
     def setup_project_output(
         self,
         project_name: Optional[str] = None,
-        output_dir: Optional[str, Path] = None,
+        output_dir: Optional[Union[str, Path]] = None,
     ) -> None:
         if project_name is None:
             self.project_name = 'RegProj'
