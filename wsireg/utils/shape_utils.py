@@ -1,14 +1,15 @@
+import json
+import zipfile
 from copy import deepcopy
 from pathlib import Path
-import json
-import numpy as np
-import SimpleITK as sitk
+
 import cv2
 import geojson
+import numpy as np
+import SimpleITK as sitk
+
 from wsireg.reg_transform import RegTransform
-from wsireg.utils.tform_utils import (
-    wsireg_transforms_to_itk_composite,
-)
+from wsireg.utils.tform_utils import wsireg_transforms_to_itk_composite
 
 GJ_SHAPE_TYPE = {
     "polygon": geojson.Polygon,
@@ -89,7 +90,14 @@ def read_geojson(json_file: str):
             "shape_type": str - indicates GeoJSON shape_type (Polygon, MultiPolygon, etc.)
             "shape_name": str - name inherited from QuPath GeoJSON
     """
-    gj_data = json.load(open(json_file, "r"))
+    if Path(json_file).suffix != ".zip":
+        gj_data = json.load(open(json_file, "r"))
+    else:
+        with zipfile.ZipFile(json_file, "r") as z:
+            for filename in z.namelist():
+                with z.open(filename) as f:
+                    data = f.read()
+                    gj_data = json.loads(data.decode("utf-8"))
 
     shapes_np = [gj_to_np(s) for s in gj_data]
     gj_data = [add_unamed(gj) for gj in gj_data]
@@ -177,7 +185,7 @@ def shape_reader(shape_data, **kwargs):
             if Path(sh).is_file():
                 sh_fp = Path(sh)
 
-                if sh_fp.suffix in [".json", ".geojson"]:
+                if sh_fp.suffix in [".json", ".geojson", ".zip"]:
                     out_shape_gj, out_shape_np = read_geojson(str(sh_fp))
                 # elif sh_fp.suffix == ".cz":
                 #     out_shape_gj = read_zen_shapes(str(sh_fp))

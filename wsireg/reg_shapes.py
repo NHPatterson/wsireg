@@ -1,14 +1,15 @@
-from typing import Union
-from pathlib import Path
 import json
+from pathlib import Path
+from typing import Tuple, Union
+
+import cv2
+import numpy as np
+
 from wsireg.reg_transform_seq import RegTransformSeq
-from wsireg.utils.shape_utils import (
-    shape_reader,
-    transform_shapes,
-    scale_shape_coordinates,
-    insert_transformed_pts_gj,
-    invert_nonrigid_transforms,
-)
+from wsireg.utils.shape_utils import (get_int_dtype, insert_transformed_pts_gj,
+                                      invert_nonrigid_transforms,
+                                      scale_shape_coordinates, shape_reader,
+                                      transform_shapes)
 
 
 class RegShapes:
@@ -193,3 +194,32 @@ class RegShapes:
             ),
             indent=1,
         )
+
+    def draw_mask(
+        self,
+        output_size: Tuple[int, int],
+        transformed: bool = False,
+        labels: bool = False,
+    ):
+        if labels:
+            im_dtype = get_int_dtype(self.n_shapes)
+        else:
+            im_dtype = np.uint8
+
+        mask = np.zeros(output_size[::-1], dtype=im_dtype)
+
+        if transformed:
+            shapes = self.transformed_shape_data
+        else:
+            shapes = self.shape_data
+
+        # if all([sh["name"] for sh in self.shape_data]):
+
+        for idx, sh in enumerate(shapes):
+            mask = cv2.fillPoly(
+                mask,
+                pts=[sh["array"].astype(np.int32)],
+                color=idx + 1 if labels else np.iinfo(im_dtype).max,
+            )
+
+        return mask
