@@ -1,4 +1,5 @@
 from copy import deepcopy
+
 import SimpleITK as sitk
 
 

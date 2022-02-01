@@ -1,26 +1,23 @@
-from typing import Optional, Union, List, Tuple
 from pathlib import Path
-import numpy as np
-from tifffile import TiffWriter
+from typing import List, Optional, Tuple, Union
+
 import cv2
+import numpy as np
 import SimpleITK as sitk
-from wsireg.utils.im_utils import (
-    get_pyramid_info,
-    format_channel_names,
-    prepare_ome_xml_str,
-)
-from wsireg.utils.tile_image_transform import (
-    add_tile_location_on_moving,
-    determine_moving_tile_padding,
-    generate_tile_coords,
-    itk_transform_tiles,
-    zarr_to_tiles,
-    compute_sub_res,
-    subres_zarr_to_tiles,
-    tile_pad_output_size,
-)
+from tifffile import TiffWriter
+
 from wsireg.reg_images import RegImage
 from wsireg.reg_transform_seq import RegTransformSeq
+from wsireg.utils.im_utils import (format_channel_names, get_pyramid_info,
+                                   prepare_ome_xml_str)
+from wsireg.utils.tile_image_transform import (add_tile_location_on_moving,
+                                               compute_sub_res,
+                                               determine_moving_tile_padding,
+                                               generate_tile_coords,
+                                               itk_transform_tiles,
+                                               subres_zarr_to_tiles,
+                                               tile_pad_output_size,
+                                               zarr_to_tiles)
 
 
 class OmeTiffWriter:
@@ -323,7 +320,7 @@ class OmeTiffWriter:
                         resampled_zarray_subres, orig_shape = compute_sub_res(
                             self.reg_image,
                             resampled_zarray,
-                            2 ** pyr_idx,
+                            2**pyr_idx,
                             self.tile_size,
                             self.reg_image.is_rgb,
                         )
@@ -382,7 +379,7 @@ class OmeTiffWriter:
                             ) = compute_sub_res(
                                 self.reg_image,
                                 resampled_zarray,
-                                2 ** pyr_idx,
+                                2**pyr_idx,
                                 self.tile_size,
                                 self.reg_image.is_rgb,
                             )

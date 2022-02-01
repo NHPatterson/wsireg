@@ -438,7 +438,7 @@ DEFAULT_REG_PARAM_MAPS = {
         "FinalGridSpacingInPhysicalUnits": ['200'],
         "FixedImageDimension": ['2'],
         "FixedImagePyramid": ['FixedRecursiveImagePyramid'],
-        "FixedImagePyramidSchedule": [str(int(2 ** 2)), str(int(2 ** 2))],
+        "FixedImagePyramidSchedule": [str(int(2**2)), str(int(2**2))],
         "FixedInternalImagePixelType": ['float'],
         "GridSpacingSchedule": [
             '8',
@@ -457,7 +457,7 @@ DEFAULT_REG_PARAM_MAPS = {
         "Metric": ['AdvancedMattesMutualInformation'],
         "MovingImageDimension": ['2'],
         "MovingImagePyramid": ['MovingRecursiveImagePyramid'],
-        "MovingImagePyramidSchedule": [str(int(2 ** 2)), str(int(2 ** 2))],
+        "MovingImagePyramidSchedule": [str(int(2**2)), str(int(2**2))],
         "MovingInternalImagePixelType": ['float'],
         "NewSamplesEveryIteration": ['true'],
         "NumberOfHistogramBins": ['32'],

@@ -1,25 +1,20 @@
-import pytest
 import os
-import numpy as np
-import zarr
+
 import dask.array as da
+import numpy as np
+import pytest
+import zarr
 from tifffile import imread
-from wsireg.utils.im_utils import (
-    zarr_get_base_pyr_layer,
-    ensure_dask_array,
-    read_preprocess_array,
-    tifffile_zarr_backend,
-    tifffile_dask_backend,
-    sitk_backend,
-    guess_rgb,
-    grayscale,
-    czi_tile_grayscale,
-    CziRegImageReader,
-    tf_get_largest_series,
-    get_sitk_image_info,
-    get_tifffile_info,
-)
+
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
+from wsireg.utils.im_utils import (CziRegImageReader, czi_tile_grayscale,
+                                   ensure_dask_array, get_sitk_image_info,
+                                   get_tifffile_info, grayscale, guess_rgb,
+                                   read_preprocess_array, sitk_backend,
+                                   tf_get_largest_series,
+                                   tifffile_dask_backend,
+                                   tifffile_zarr_backend,
+                                   zarr_get_base_pyr_layer)
 
 # private data logic borrowed from https://github.com/cgohlke/tifffile/tests/test_tifffile.py
 HERE = os.path.dirname(__file__)

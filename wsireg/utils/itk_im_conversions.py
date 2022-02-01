@@ -1,5 +1,5 @@
-import SimpleITK as sitk
 import itk
+import SimpleITK as sitk
 
 
 def itk_image_to_sitk_image(image):

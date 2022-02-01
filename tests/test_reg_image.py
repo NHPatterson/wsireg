@@ -1,7 +1,8 @@
-import pytest
-from wsireg.reg_images.loader import reg_image_loader
-import SimpleITK as sitk
 import itk
+import pytest
+import SimpleITK as sitk
+
+from wsireg.reg_images.loader import reg_image_loader
 
 
 @pytest.mark.usefixtures("disk_im_mch")

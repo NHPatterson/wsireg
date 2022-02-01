@@ -1,34 +1,31 @@
-from typing import Union, Optional, List, Dict, Tuple, Any
-from warnings import warn
-import time
-import yaml
-from pathlib import Path
-from copy import copy, deepcopy
 import json
+import time
+from copy import copy, deepcopy
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+from warnings import warn
+
 import numpy as np
 import SimpleITK as sitk
-from wsireg.reg_images.loader import reg_image_loader
+import yaml
+
+from wsireg.parameter_maps.preprocessing import ImagePreproParams
+from wsireg.parameter_maps.reg_model import RegModel
 from wsireg.reg_images import MergeRegImage, RegImage
-from wsireg.writers.ome_tiff_writer import OmeTiffWriter
-from wsireg.writers.merge_ome_tiff_writer import MergeOmeTiffWriter
+from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_shapes import RegShapes
 from wsireg.reg_transform import RegTransform
 from wsireg.reg_transform_seq import RegTransformSeq
 from wsireg.utils.config_utils import parse_check_reg_config
-from wsireg.parameter_maps.preprocessing import ImagePreproParams
-from wsireg.parameter_maps.reg_model import RegModel
-from wsireg.utils.im_utils import (
-    ARRAYLIKE_CLASSES,
-)
-from wsireg.utils.reg_utils import (
-    _prepare_reg_models,
-    register_2d_images_itkelx,
-    sitk_pmap_to_dict,
-    pmap_dict_to_json,
-    json_to_pmap_dict,
-)
+from wsireg.utils.im_utils import ARRAYLIKE_CLASSES
+from wsireg.utils.reg_utils import (_prepare_reg_models, json_to_pmap_dict,
+                                    pmap_dict_to_json,
+                                    register_2d_images_itkelx,
+                                    sitk_pmap_to_dict)
 from wsireg.utils.shape_utils import invert_nonrigid_transforms
 from wsireg.utils.tform_utils import identity_elx_transform
+from wsireg.writers.merge_ome_tiff_writer import MergeOmeTiffWriter
+from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 
 
 class WsiReg2D(object):

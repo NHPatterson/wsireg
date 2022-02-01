@@ -1,18 +1,16 @@
-from typing import Optional, Union, List, Tuple
 from pathlib import Path
-import numpy as np
-from tifffile import TiffWriter
+from typing import List, Optional, Tuple, Union
+
 import cv2
+import numpy as np
 import SimpleITK as sitk
+from tifffile import TiffWriter
+
 from wsireg.reg_images import RegImage
 from wsireg.reg_images.merge_reg_image import MergeRegImage
-from wsireg.utils.im_utils import (
-    SITK_TO_NP_DTYPE,
-    get_pyramid_info,
-    format_channel_names,
-    prepare_ome_xml_str,
-)
 from wsireg.reg_transform_seq import RegTransformSeq
+from wsireg.utils.im_utils import (SITK_TO_NP_DTYPE, format_channel_names,
+                                   get_pyramid_info, prepare_ome_xml_str)
 
 
 class MergeOmeTiffWriter:

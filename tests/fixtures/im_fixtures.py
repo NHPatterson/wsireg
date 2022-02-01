@@ -1,8 +1,8 @@
-import pytest
-import numpy as np
 import dask.array as da
+import numpy as np
+import pytest
 import zarr
-from tifffile import TiffWriter, imwrite, imread
+from tifffile import TiffWriter, imread, imwrite
 
 
 @pytest.fixture

@@ -1,17 +1,12 @@
 from pathlib import Path
+
 from tifffile import TiffFile
-from wsireg.reg_images import (
-    CziRegImage,
-    SitkRegImage,
-    NumpyRegImage,
-    # AICSRegImage,
-)
-from wsireg.utils.im_utils import (
-    TIFFFILE_EXTS,
-    ARRAYLIKE_CLASSES,
-    tifffile_to_arraylike,
-    ome_tifffile_to_arraylike,
-)
+
+from wsireg.reg_images import (CziRegImage, NumpyRegImage,  # AICSRegImage,
+                               SitkRegImage)
+from wsireg.utils.im_utils import (ARRAYLIKE_CLASSES, TIFFFILE_EXTS,
+                                   ome_tifffile_to_arraylike,
+                                   tifffile_to_arraylike)
 
 
 def reg_image_loader(

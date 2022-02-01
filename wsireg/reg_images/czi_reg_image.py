@@ -1,10 +1,8 @@
 import numpy as np
 import SimpleITK as sitk
+
 from wsireg.reg_images import RegImage
-from wsireg.utils.im_utils import (
-    guess_rgb,
-    CziRegImageReader,
-)
+from wsireg.utils.im_utils import CziRegImageReader, guess_rgb
 
 
 class CziRegImage(RegImage):

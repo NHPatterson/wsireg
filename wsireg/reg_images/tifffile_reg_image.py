@@ -1,15 +1,14 @@
 import warnings
+
 import SimpleITK as sitk
 from tifffile import TiffFile
+
 from wsireg.reg_images.reg_image import RegImage
-from wsireg.utils.im_utils import (
-    guess_rgb,
-    get_tifffile_info,
-    tf_get_largest_series,
-    tifffile_dask_backend,
-    tifffile_zarr_backend,
-    tf_zarr_read_single_ch,
-)
+from wsireg.utils.im_utils import (get_tifffile_info, guess_rgb,
+                                   tf_get_largest_series,
+                                   tf_zarr_read_single_ch,
+                                   tifffile_dask_backend,
+                                   tifffile_zarr_backend)
 
 
 class TiffFileRegImage(RegImage):

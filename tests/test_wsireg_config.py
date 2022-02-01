@@ -1,15 +1,16 @@
-import pytest
-from typing import Union
 import os
 from pathlib import Path
-import SimpleITK as sitk
-import numpy as np
-import cv2
-from wsireg.wsireg2d import WsiReg2D
-from wsireg.reg_shapes import RegShapes
-from wsireg.reg_images.loader import reg_image_loader
-from wsireg.utils.config_utils import parse_check_reg_config
+from typing import Union
 
+import cv2
+import numpy as np
+import pytest
+import SimpleITK as sitk
+
+from wsireg.reg_images.loader import reg_image_loader
+from wsireg.reg_shapes import RegShapes
+from wsireg.utils.config_utils import parse_check_reg_config
+from wsireg.wsireg2d import WsiReg2D
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.join(HERE, "fixtures")

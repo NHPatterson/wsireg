@@ -1,13 +1,13 @@
-from typing import List, Dict, Union
 import json
 from pathlib import Path
+from typing import Dict, List, Union
+
+import itk
 import numpy as np
 import SimpleITK as sitk
-import itk
+
 from wsireg.parameter_maps.reg_model import RegModel
-from wsireg.utils.itk_im_conversions import (
-    itk_image_to_sitk_image,
-)
+from wsireg.utils.itk_im_conversions import itk_image_to_sitk_image
 
 NP_TO_SITK_DTYPE = {
     np.dtype(np.int8): 0,

@@ -1,12 +1,9 @@
 import numpy as np
 import SimpleITK as sitk
+
 from wsireg.reg_images.reg_image import RegImage
-from wsireg.utils.im_utils import (
-    guess_rgb,
-    get_sitk_image_info,
-    sitk_vect_to_gs,
-    ensure_dask_array,
-)
+from wsireg.utils.im_utils import (ensure_dask_array, get_sitk_image_info,
+                                   guess_rgb, sitk_vect_to_gs)
 
 
 class SitkRegImage(RegImage):

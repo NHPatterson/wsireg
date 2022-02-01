@@ -1,5 +1,6 @@
-from typing import Optional, Tuple, Union, List, NamedTuple, Callable, Dict
 from enum import Enum
+from typing import Callable, Dict, List, NamedTuple, Optional, Tuple, Union
+
 from pydantic import BaseModel, validator
 
 
