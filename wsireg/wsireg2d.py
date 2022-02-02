@@ -33,7 +33,7 @@ from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 
 class WsiReg2D(object):
     project_name: Optional[str] = None
-    output_dir: Optional[Union[str,Path]] = None
+    output_dir: Optional[Union[str, Path]] = None
     image_cache: Optional[Path] = None
     """
     Class to define a 2D registration graph and execute the registrations and transformations of the graph
@@ -88,7 +88,7 @@ class WsiReg2D(object):
     def __init__(
         self,
         project_name: Optional[str] = None,
-        output_dir: Optional[str, Path] = None,
+        output_dir: Optional[Union[str, Path]] = None,
         cache_images: bool = True,
         config: Optional[Union[str, Path]] = None,
     ):
@@ -587,9 +587,7 @@ class WsiReg2D(object):
                 original_size_transform,
             )
 
-    def _cache_images(
-        self, modality_name: str, reg_image: RegImage
-    ) -> None:
+    def _cache_images(self, modality_name: str, reg_image: RegImage) -> None:
 
         cache_im_fp = self.image_cache / "{}_prepro.tiff".format(modality_name)
 

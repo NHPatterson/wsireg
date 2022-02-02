@@ -1,12 +1,12 @@
 numpy
 opencv-python
 tifffile>=2020.10.1
+zarr==2.10.3
 czifile
 imagecodecs
 lxml
 geojson
 pyYAML
-zarr
 toolz
 dask
 fsspec
