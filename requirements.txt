@@ -1,7 +1,7 @@
 numpy
 opencv-python
+zarr>=2.10.3
 tifffile>=2020.10.1
-zarr==2.10.3
 czifile
 imagecodecs
 lxml
