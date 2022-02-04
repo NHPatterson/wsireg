@@ -639,7 +639,7 @@ class WsiReg2D(object):
 
         return non_reg_modalities
 
-    def save_config(self, registered=False):
+    def save_config(self, output_file_path:Optional[Union[str,Path]]=None,registered:bool=False):
         ts = time.strftime('%Y%m%d-%H%M%S')
         status = "registered" if registered is True else "setup"
 
@@ -672,6 +672,8 @@ class WsiReg2D(object):
         for mod, data in modalities_out.items():
             if isinstance(data["image_filepath"], ARRAYLIKE_CLASSES):
                 data["image_filepath"] = "ArrayLike"
+            if isinstance(data["preprocessing"], ImagePreproParams):
+                data["preprocessing"] = deepcopy(data["preprocessing"]).dict(exclude_none=True, exclude_defaults=True)
 
         config = {
             "project_name": self.project_name,
@@ -693,12 +695,14 @@ class WsiReg2D(object):
             else None,
         }
 
-        output_path = (
-            self.output_dir
-            / f"{ts}-{self.project_name}-configuration-{status}.yaml"
-        )
+        if not output_file_path:
+            output_file_path = (
+                self.output_dir
+                / f"{ts}-{self.project_name}-configuration-{status}.yaml"
+            )
 
-        with open(str(output_path), "w") as f:
+
+        with open(str(output_file_path), "w") as f:
             yaml.dump(config, f, sort_keys=False)
 
     def register_images(self, parallel=False):
@@ -941,16 +945,17 @@ class WsiReg2D(object):
             or im_data["preprocessing"].crop_to_mask_bbox
             or im_data["preprocessing"].mask_bbox
         ):
+
             _, im_initial_transforms, _, _ = self._check_cache_modality(
                 modality_key
             )
-
-            transformations = RegTransformSeq(
-                [RegTransform(t) for t in im_initial_transforms[0]],
-                transform_seq_idx=[
-                    idx for idx in range(len(im_initial_transforms))
-                ],
-            )
+            if any(im_initial_transforms):
+                transformations = RegTransformSeq(
+                    [RegTransform(t) for t in im_initial_transforms[0]],
+                    transform_seq_idx=[
+                        idx for idx in range(len(im_initial_transforms))
+                    ],
+                )
 
         if to_original_size and self.original_size_transforms[modality_key]:
             orig_size_rt = RegTransformSeq(
@@ -1526,10 +1531,102 @@ class WsiReg2D(object):
             modality_idx = edge_keys.index(modality)
             self.reg_graph_edges[modality_idx]["registered"] = False
 
+    def _remove_modality_data(self, modality: str) -> None:
+        if modality in self.modality_names:
+            # remove top level
+            self.modalities.pop(modality)
+            self.modality_names.pop(self.modality_names.index(modality))
 
-def main():
-    import argparse
+        to_rm = []
+        for merge_name, merge_mods in self.merge_modalities.items():
+            if modality in merge_mods:
+                to_rm.append(merge_name)
 
+        [self.merge_modalities.pop(k) for k in to_rm]
+
+        self.n_modalities = len(self.modality_names)
+
+    def _remove_reg_paths(self, modality: str) -> None:
+        # remove registrations
+        if modality in self.reg_paths.keys():
+            self.reg_paths.pop(modality)
+
+        # remove any reg paths including modality as target or thru
+        to_rm = []
+        for k, v in self.reg_paths.items():
+            if modality in v:
+                to_rm.append(k)
+
+        [self.reg_paths.pop(k) for k in to_rm]
+
+        # remove any reg paths including modality as target or thru
+        to_rm = []
+        for k, v in self.transform_paths.items():
+            for reg in v:
+                if reg["source"] == modality or reg["target"] == modality:
+                    to_rm.append(k)
+
+        to_rm = list(np.unique(to_rm))
+
+        edges_to_rm = []
+        for idx, edge in enumerate(self.reg_graph_edges):
+            if (
+                edge["modalities"]["source"] in to_rm
+                or edge["modalities"]["target"] in to_rm
+            ):
+                edges_to_rm.append(idx)
+
+        [self.transform_paths.pop(k) for k in to_rm]
+
+        for idx in sorted(edges_to_rm)[::-1]:
+            self.reg_graph_edges.pop(idx)
+
+        self.n_registrations = len(self._reg_graph_edges)
+
+    def _remove_attachments(self, modality: str):
+        to_rm = []
+        for k, v in self.attachment_images.items():
+            if modality == v:
+                to_rm.append(k)
+
+        [self.attachment_images.pop(k) for k in to_rm]
+        [self.modalities.pop(k) for k in to_rm]
+        [self.modality_names.pop(self.modality_names.index(k)) for k in to_rm]
+
+        self.shape_sets.pop(modality)
+        self.shape_set_names.pop(self.shape_set_names.index(modality))
+
+        self.n_modalities = len(self.modality_names)
+
+    def remove_merge_modality(self, merge_modality: str) -> None:
+        try:
+            self.merge_modalities.pop(merge_modality)
+        except KeyError:
+            warn(f"merge modality {merge_modality} not found")
+
+    def remove_modality(self, modality: str) -> None:
+
+        if modality in self.modality_names:
+            self._remove_modality_data(modality)
+            self._remove_reg_paths(modality)
+
+        elif modality in self.shape_set_names:
+            self._remove_attachments(modality)
+
+        else:
+            warn(
+                f"{modality} not found in modalities: {', '.join(self.modality_names)}"
+                f"or shape sets {self.shape_set_names}"
+            )
+
+
+def main(
+    graph_configuration: Union[str,Path,WsiReg2D],
+    write_images: bool = True,
+    to_original_size: bool = False,
+    transform_non_reg: bool = True,
+    remove_merged: bool = True
+):
     def config_to_WsiReg2D(config_filepath):
         reg_config = parse_check_reg_config(config_filepath)
 
@@ -1540,6 +1637,32 @@ def main():
         )
         return reg_graph
 
+    if isinstance(graph_configuration, (str, Path)):
+        reg_graph = config_to_WsiReg2D(config_filepath)
+        reg_graph.add_data_from_config(config_filepath)
+    elif isinstance(graph_configuration, WsiReg2D):
+        reg_graph = graph_configuration
+
+    reg_graph.register_images()
+
+    reg_graph.save_transformations()
+
+    if write_images:
+        reg_graph.transform_images(
+            file_writer=file_writer,
+            to_original_size=to_original_size,
+            transform_non_reg=transform_non_reg,
+            remove_merged=remove_merged,
+        )
+
+    if reg_graph.shape_sets:
+        reg_graph.transform_shapes()
+
+
+if __name__ == "__main__":
+    import sys
+    import argparse
+
     parser = argparse.ArgumentParser(
         description='Load Whole Slide Image 2D Registration Graph from configuration file'
     )
@@ -1548,41 +1671,44 @@ def main():
         "config_filepath",
         metavar="C",
         type=str,
-        nargs=1,
         help="full filepath for .yaml configuration file",
     )
     parser.add_argument(
         "--fw",
         type=str,
-        nargs=1,
         help="how to write output registered images: ome.tiff, ome.zarr (default: ome.tiff)",
     )
 
     parser.add_argument('--write_im', dest='write_im', action='store_true')
     parser.add_argument('--no_write_im', dest='write_im', action='store_false')
-    parser.set_defaults(write_im=True)
+
+    parser.add_argument('--remove_merged', dest='remove_merged', action='store_true')
+    parser.add_argument('--write_merge_indiv', dest='remove_merged', action='store_false')
+
+    parser.add_argument('--tform_non_reg', dest='transform_non_reg', action='store_true')
+    parser.add_argument('--no_tform_non_reg', dest='transform_non_reg', action='store_false')
+
+    parser.add_argument('--to_orig_size', dest='to_original_size', action='store_true')
+    parser.add_argument('--to_cropped', dest='to_original_size', action='store_false')
+
+    parser.set_defaults(write_im=True,
+                        remove_merged=True,
+                        transform_non_reg=True,
+                        to_original_size=False)
 
     args = parser.parse_args()
-    config_filepath = args.config_filepath[0]
+    config_filepath = args.config_filepath
+
     if args.fw is None:
         file_writer = "ome.tiff"
     else:
-        file_writer = args.fw[0]
-
-    reg_graph = config_to_WsiReg2D(config_filepath)
-    reg_graph.add_data_from_config(config_filepath)
-
-    reg_graph.register_images()
-    reg_graph.save_transformations()
-
-    if args.write_im:
-        reg_graph.transform_images(file_writer=file_writer)
-
-    if reg_graph.shape_sets:
-        reg_graph.transform_shapes()
-
-
-if __name__ == "__main__":
-    import sys
-
-    sys.exit(main())
+        file_writer = args.fw
+    print(args)
+    main(
+        config_filepath,
+        write_images=args.write_im,
+        to_original_size=args.to_original_size,
+        transform_non_reg=args.transform_non_reg,
+        remove_merged=args.remove_merged,
+    )
+    sys.exit()
