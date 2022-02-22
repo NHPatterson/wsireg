@@ -1546,6 +1546,9 @@ class WsiReg2D(object):
 
         self.n_modalities = len(self.modality_names)
 
+        if modality in self.attachment_images.keys():
+            self.attachment_images.pop(modality)
+
     def _remove_reg_paths(self, modality: str) -> None:
         # remove registrations
         if modality in self.reg_paths.keys():
@@ -1616,7 +1619,7 @@ class WsiReg2D(object):
         else:
             warn(
                 f"{modality} not found in modalities: {', '.join(self.modality_names)}"
-                f"or shape sets {self.shape_set_names}"
+                f" or shape sets {self.shape_set_names}"
             )
 
 

@@ -1026,6 +1026,7 @@ def test_wsireg_remove_modality(data_out_dir):
     wsi_reg.remove_modality("pas-attach")
     assert wsi_reg.n_modalities == 4
     assert "pas-attach" not in wsi_reg.modality_names
+    assert "pas-attach" not in wsi_reg.attachment_images.keys()
 
     wsi_reg.remove_modality("pas-shape")
     assert len(wsi_reg.shape_set_names) == 0
