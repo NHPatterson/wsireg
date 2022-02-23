@@ -6,7 +6,7 @@ import numpy as np
 import SimpleITK as sitk
 from tifffile import TiffWriter
 
-from wsireg.reg_images import RegImage
+from wsireg.reg_images.reg_image import RegImage
 from wsireg.reg_images.merge_reg_image import MergeRegImage
 from wsireg.reg_transform_seq import RegTransformSeq
 from wsireg.utils.im_utils import (
@@ -90,9 +90,9 @@ class MergeOmeTiffWriter:
                 out_spacing.append(t.reg_transforms[-1].output_spacing)
             else:
                 out_im_size = (
-                    (im.im_dims[0], im.im_dims[1])
+                    (im.shape[0], im.shape[1])
                     if im.is_rgb
-                    else (im.im_dims[1], im.im_dims[2])
+                    else (im.shape[1], im.shape[2])
                 )
                 out_im_spacing = im.image_res
 
@@ -126,9 +126,9 @@ class MergeOmeTiffWriter:
             self.x_spacing, self.y_spacing = reg_transform_seq.output_spacing
         else:
             self.y_size, self.x_size = (
-                (reg_image.im_dims[0], reg_image.im_dims[1])
+                (reg_image.shape[0], reg_image.shape[1])
                 if reg_image.is_rgb
-                else (reg_image.im_dims[1], reg_image.im_dims[2])
+                else (reg_image.shape[1], reg_image.shape[2])
             )
             self.y_spacing, self.x_spacing = (
                 reg_image.image_res,

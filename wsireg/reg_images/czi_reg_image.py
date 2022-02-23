@@ -1,7 +1,11 @@
+import warnings
+from typing import Tuple
+
+import dask.array as da
 import numpy as np
 import SimpleITK as sitk
 
-from wsireg.reg_images import RegImage
+from wsireg.reg_images.reg_image import RegImage
 from wsireg.utils.im_utils import CziRegImageReader, guess_rgb
 
 
@@ -17,31 +21,34 @@ class CziRegImage(RegImage):
         channel_colors=None,
     ):
         super(CziRegImage, self).__init__(preprocessing)
-        self.image_filepath = image
-        self.image_res = image_res
-        self.image = None
-        self.czi = CziRegImageReader(self.image_filepath)
+        self._path = image
+        self._image_res = image_res
+
+        self.czi = CziRegImageReader(self._path)
         self.reader = "czi"
 
+        scene_idx = self.czi.axes.index('S')
+
+        if self.czi.shape[scene_idx] > 1:
+            raise ValueError('multi scene czis not allowed at this time')
+
         (
-            self.ch_dim_idx,
-            self.y_dim_idx,
-            self.x_dim_idx,
-            self.im_dims,
-            self.im_dtype,
+            self._shape,
+            self._im_dtype,
         ) = self._get_image_info()
 
-        self.im_dims = tuple(self.im_dims)
-        self.is_rgb = guess_rgb(self.im_dims)
-        self.n_ch = self.im_dims[2] if self.is_rgb else self.im_dims[0]
+        self._is_rgb = guess_rgb(self._shape)
+        self._n_ch = self._shape[2] if self.is_rgb else self._shape[0]
 
-        self.reg_image = None
-        self.mask = self.read_mask(mask)
+        self._dask_image = self._prepare_dask_image()
+
+        if mask:
+            self._mask = self.read_mask(mask)
 
         self.pre_reg_transforms = pre_reg_transforms
 
-        self.channel_names = channel_names
-        self.channel_colors = channel_colors
+        self._channel_names = channel_names
+        self._channel_colors = channel_colors
         self.original_size_transform = None
 
     def _get_image_info(self):
@@ -63,13 +70,35 @@ class CziRegImage(RegImage):
 
         im_dtype = self.czi.dtype
 
-        return ch_dim_idx, y_dim_idx, x_dim_idx, im_dims, im_dtype
+        im_dims = (int(im_dims[0]), int(im_dims[1]), int(im_dims[2]))
+
+        return im_dims, im_dtype
+
+    def _prepare_dask_image(self) -> da.Array:
+        ch_dim = self._shape[1:] if not self._is_rgb else self._shape[:2]
+        chunks = ((1,) * self._n_ch, (ch_dim[0],), (ch_dim[1],))
+        dask_image = da.map_blocks(
+            self._czi_read_single_channel,
+            chunks=chunks,
+            dtype=self.im_dtype,
+            meta=np.array((), dtype=self._im_dtype),
+        )
+        return dask_image
+
+    def _czi_read_single_channel(self, block_id: Tuple[int, ...]):
+        channel_idx = block_id[0]
+        if self.is_rgb is False:
+            image = self.czi.sub_asarray(
+                channel_idx=[channel_idx],
+            )
+        else:
+            image = self.czi.sub_asarray_rgb(
+                channel_idx=[channel_idx], greyscale=False
+            )
+
+        return np.expand_dims(np.squeeze(image), axis=0)
 
     def read_reg_image(self):
-        scene_idx = self.czi.axes.index('S')
-
-        if self.czi.shape[scene_idx] > 1:
-            raise ValueError('multi scene czis not allowed at this time')
         if self.is_rgb:
             reg_image = self.czi.sub_asarray_rgb(greyscale=True)
         else:
@@ -84,13 +113,12 @@ class CziRegImage(RegImage):
         self.preprocess_image(reg_image)
 
     def read_single_channel(self, channel_idx: int):
-        if self.is_rgb is False:
-            image = self.czi.sub_asarray(
-                channel_idx=[channel_idx],
+        if channel_idx > (self.n_ch - 1):
+            warnings.warn(
+                "channel_idx exceeds number of channels, reading channel at channel_idx == 0"
             )
-        else:
-            image = self.czi.sub_asarray_rgb(
-                channel_idx=[channel_idx], greyscale=False
-            )
+            channel_idx = 0
+
+        image = self._dask_image[channel_idx, :, :].compute()
 
         return image

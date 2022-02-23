@@ -1,14 +1,13 @@
 import warnings
 
-import dask.array as da
 import numpy as np
 import SimpleITK as sitk
 
-from wsireg.reg_images import RegImage
+from wsireg.reg_images.reg_image import RegImage
 from wsireg.utils.im_utils import (
     ensure_dask_array,
     guess_rgb,
-    read_preprocess_array,
+    preprocess_dask_array,
 )
 
 
@@ -25,48 +24,44 @@ class NumpyRegImage(RegImage):
         image_filepath=None,
     ):
         super(NumpyRegImage, self).__init__(preprocessing)
-        self.image_filepath = image_filepath
-        self.image_res = image_res
+        self._path = image_filepath
+        self._image_res = image_res
         self.reader = "numpy"
 
-        self.image = ensure_dask_array(image)
-        self.image = da.squeeze(self.image)
+        dask_image = ensure_dask_array(image)
+        self._dask_image = (
+            dask_image.reshape(1, *dask_image.shape)
+            if len(dask_image.shape) == 2
+            else dask_image
+        )
 
-        (
-            self.im_dims,
-            self.im_dtype,
-        ) = self._get_image_info()
+        self._shape, self._im_dtype = self._get_image_info()
 
-        self.im_dims = tuple(self.im_dims)
-        self.is_rgb = guess_rgb(self.im_dims)
+        self._is_rgb = guess_rgb(self._shape)
 
-        self.n_ch = self.im_dims[2] if self.is_rgb else self.im_dims[0]
+        self._n_ch = self._shape[2] if self._is_rgb else self._shape[0]
 
-        self.reg_image = None
-        self.mask = self.read_mask(mask)
+        if mask is not None:
+            self._mask = self.read_mask(mask)
 
         self.pre_reg_transforms = pre_reg_transforms
 
-        self.channel_names = channel_names
-        self.channel_colors = channel_colors
+        self._channel_names = channel_names
+        self._channel_colors = channel_colors
         self.original_size_transform = None
 
     def _get_image_info(self):
-        im_dims = self.image.shape
-        if len(im_dims) == 2:
-            im_dims = np.concatenate([[1], im_dims])
-        im_dtype = self.image.dtype
+        im_dims = self._dask_image.shape
+        im_dtype = self._dask_image.dtype
         return im_dims, im_dtype
 
     def read_reg_image(self):
-
-        reg_image = read_preprocess_array(
-            self.image, preprocessing=self.preprocessing, force_rgb=self.is_rgb
-        )
+        reg_image = self._dask_image
+        reg_image = preprocess_dask_array(reg_image, self.preprocessing)
 
         if (
-            self.preprocessing
-            and self.preprocessing.as_uint8
+            self.preprocessing is not None
+            and self.preprocessing.as_uint8 is True
             and reg_image.GetPixelID() != sitk.sitkUInt8
         ):
             reg_image = sitk.RescaleIntensity(reg_image)
@@ -74,18 +69,16 @@ class NumpyRegImage(RegImage):
 
         self.preprocess_image(reg_image)
 
-    def read_single_channel(self, channel_idx: int):
+    def read_single_channel(self, channel_idx: int) -> np.ndarray:
         if channel_idx > (self.n_ch - 1):
             warnings.warn(
                 "channel_idx exceeds number of channels, reading channel at channel_idx == 0"
             )
             channel_idx = 0
-        if self.n_ch > 1:
-            if self.is_rgb:
-                image = self.image[:, :, channel_idx]
-            else:
-                image = self.image[channel_idx, :, :]
-        else:
-            image = self.image
 
-        return np.asarray(image)
+        if self._is_rgb:
+            image = self._dask_image[:, :, channel_idx].compute()
+        else:
+            image = self._dask_image[channel_idx, :, :].compute()
+
+        return image

@@ -1,16 +1,18 @@
 import warnings
+from typing import List, Tuple
 
+import dask.array as da
+import numpy as np
 import SimpleITK as sitk
+from ome_types import from_xml
 from tifffile import TiffFile
 
 from wsireg.reg_images.reg_image import RegImage
 from wsireg.utils.im_utils import (
     get_tifffile_info,
     guess_rgb,
-    tf_get_largest_series,
-    tf_zarr_read_single_ch,
-    tifffile_dask_backend,
-    tifffile_zarr_backend,
+    preprocess_dask_array,
+    tifffile_to_dask,
 )
 
 
@@ -26,55 +28,98 @@ class TiffFileRegImage(RegImage):
         channel_colors=None,
     ):
         super(TiffFileRegImage, self).__init__(preprocessing)
-        self.image_filepath = image_fp
-        self.image_res = image_res
-        self.image = None
-        self.tf = TiffFile(self.image_filepath)
+        self._path = image_fp
+        self._image_res = image_res
+        self.tf = TiffFile(self._path)
         self.reader = "tifffile"
 
         (
-            self.im_dims,
-            self.im_dtype,
+            self._shape,
+            self._im_dtype,
+            self.largest_series,
         ) = self._get_image_info()
 
-        self.im_dims = tuple(self.im_dims)
-        self.is_rgb = guess_rgb(self.im_dims)
+        self._get_dim_info()
 
-        self.n_ch = self.im_dims[2] if self.is_rgb else self.im_dims[0]
-        self.mask = self.read_mask(mask)
+        self._dask_image = self._get_dask_image()
+
+        if mask:
+            self._mask = self.read_mask(mask)
 
         self.pre_reg_transforms = pre_reg_transforms
 
-        self.channel_names = channel_names
-        self.channel_colors = channel_colors
+        self._channel_names = channel_names
+        self._channel_colors = channel_colors
         self.original_size_transform = None
 
-    def _get_image_info(self):
+    def _get_image_info(self) -> Tuple[Tuple[int, int, int], np.dtype, int]:
         if len(self.tf.series) > 1:
             warnings.warn(
                 "The tiff contains multiple series, "
                 "the largest series will be read by default"
             )
 
-        im_dims, im_dtype = get_tifffile_info(self.image_filepath)
+        im_dims, im_dtype, largest_series = get_tifffile_info(self._path)
 
-        return im_dims, im_dtype
+        im_dims = (int(im_dims[0]), int(im_dims[1]), int(im_dims[2]))
+
+        return im_dims, im_dtype, largest_series
+
+    def _get_dim_info(self) -> None:
+        if self._shape:
+            if self.tf.ome_metadata:
+                self.ome_metadata = from_xml(self.tf.ome_metadata)
+                spp = (
+                    self.ome_metadata.images[self.largest_series]
+                    .pixels.channels[0]
+                    .samples_per_pixel
+                )
+                interleaved = self.ome_metadata.images[
+                    self.largest_series
+                ].pixels.interleaved
+
+                if spp and spp > 1:
+                    self._is_rgb = True
+                else:
+                    self._is_rgb = False
+
+                if guess_rgb(self._shape) is False:
+                    self._channel_axis = 0
+                    self._is_interleaved = False
+                elif interleaved and guess_rgb(self._shape):
+                    self._is_interleaved = True
+                    self._channel_axis = len(self._shape) - 1
+
+            else:
+                self._is_rgb = guess_rgb(self._shape)
+                self._is_interleaved = self._is_rgb
+                if self._is_rgb:
+                    self._channel_axis = len(self._shape) - 1
+                else:
+                    self._channel_axis = 0
+
+            self._n_ch = self._shape[self._channel_axis]
+
+    def _get_dask_image(self) -> List[da.Array]:
+        dask_image = tifffile_to_dask(self._path, self.largest_series, level=0)
+        dask_image = (
+            dask_image.reshape(1, *dask_image.shape)
+            if len(dask_image.shape) == 2
+            else dask_image
+        )
+
+        if self._is_rgb and not self._is_interleaved:
+            dask_image = da.rollaxis(dask_image, 0, 3)
+
+        return dask_image
 
     def read_reg_image(self):
-        largest_series = tf_get_largest_series(self.image_filepath)
-
-        try:
-            reg_image = tifffile_dask_backend(
-                self.image_filepath, largest_series, self.preprocessing
-            )
-        except ValueError:
-            reg_image = tifffile_zarr_backend(
-                self.image_filepath, largest_series, self.preprocessing
-            )
+        reg_image = self._dask_image
+        reg_image = preprocess_dask_array(reg_image, self.preprocessing)
 
         if (
             self.preprocessing is not None
-            and self.preprocessing.get('as_uint8') is True
+            and self.preprocessing.as_uint8 is True
             and reg_image.GetPixelID() != sitk.sitkUInt8
         ):
             reg_image = sitk.RescaleIntensity(reg_image)
@@ -88,7 +133,9 @@ class TiffFileRegImage(RegImage):
                 "channel_idx exceeds number of channels, reading channel at channel_idx == 0"
             )
             channel_idx = 0
-        image = tf_zarr_read_single_ch(
-            self.image_filepath, channel_idx, self.is_rgb
-        )
+        if self._is_rgb:
+            image = self._dask_image[:, :, channel_idx].compute()
+        else:
+            image = self._dask_image[channel_idx, :, :].compute()
+
         return image
