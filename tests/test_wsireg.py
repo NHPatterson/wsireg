@@ -980,3 +980,54 @@ def test_wsireg_run_reg_downsampling_from_cache(data_out_dir, disk_im_gry):
     assert regim_cache.im_dims == regim_nocache.im_dims
     assert regim_cache_br.im_dims == regim_nocache_br.im_dims
     assert regim_cache_attach.im_dims == regim_nocache_attach.im_dims
+
+
+def test_wsireg_remove_modality(data_out_dir):
+    pstr = gen_project_name_str()
+
+    wsi_reg = WsiReg2D(pstr, str(data_out_dir))
+
+    wsi_reg.add_modality("preAF-IMS", "", 0.65)
+    wsi_reg.add_modality("preAF-MxIF", "", 0.65)
+    wsi_reg.add_modality("mxif1", "", 0.65)
+    wsi_reg.add_modality("mxif2", "", 0.65)
+    wsi_reg.add_modality("mxif3", "", 0.65)
+    wsi_reg.add_modality("pas", "", 0.65)
+
+    wsi_reg.add_reg_path("preAF-MxIF", "preAF-IMS", reg_params=["rigid"])
+    wsi_reg.add_reg_path(
+        "mxif1", "preAF-IMS", thru_modality="preAF-MxIF", reg_params=["rigid"]
+    )
+    wsi_reg.add_reg_path(
+        "mxif2", "preAF-IMS", thru_modality="mxif1", reg_params=["rigid"]
+    )
+    wsi_reg.add_reg_path(
+        "mxif3", "preAF-IMS", thru_modality="mxif1", reg_params=["rigid"]
+    )
+    wsi_reg.add_reg_path("pas", "preAF-IMS", reg_params=["rigid"])
+
+    wsi_reg.add_attachment_images("pas", "pas-attach", "", 0.65)
+    wsi_reg.add_attachment_shapes("pas", "pas-shape", "")
+
+    wsi_reg.add_merge_modalities("mxif-merge-1-2", ["mxif1", "mxif2"])
+    assert len(wsi_reg.merge_modalities.keys()) == 1
+
+    wsi_reg.remove_modality("pas")
+    assert wsi_reg.n_registrations == 4
+    assert wsi_reg.n_modalities == 6
+    assert "PAS" not in wsi_reg.reg_paths.keys()
+
+    wsi_reg.remove_modality("mxif1")
+    assert wsi_reg.n_registrations == 1
+    assert wsi_reg.n_modalities == 5
+    assert "mxif1" not in wsi_reg.reg_paths.keys()
+    assert len(wsi_reg.merge_modalities.keys()) == 0
+
+    wsi_reg.remove_modality("pas-attach")
+    assert wsi_reg.n_modalities == 4
+    assert "pas-attach" not in wsi_reg.modality_names
+    assert "pas-attach" not in wsi_reg.attachment_images.keys()
+
+    wsi_reg.remove_modality("pas-shape")
+    assert len(wsi_reg.shape_set_names) == 0
+    assert wsi_reg.shape_sets.get("pas-shape") is None

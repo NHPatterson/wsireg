@@ -105,3 +105,6 @@ class ImagePreproParams(BaseModel):
             return _transform_custom_proc(v)
         else:
             return v
+
+    class Config:
+        use_enum_names = True
