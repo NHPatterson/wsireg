@@ -31,7 +31,7 @@ def test_OmeTiffWriter_by_plane(complex_transform, data_out_dir):
         output_dir=str(data_out_dir),
     )
     by_plane_image = reg_image_loader(by_plane_fp, 2)
-    assert by_plane_image.im_dims == (1, 1024, 1024)
+    assert by_plane_image.shape == (1, 1024, 1024)
 
 
 @pytest.mark.usefixtures("complex_transform")
@@ -45,7 +45,7 @@ def test_OmeTiffWriter_by_tile(complex_transform, data_out_dir):
         output_dir=str(data_out_dir),
     )
     by_tile_image = reg_image_loader(by_tile_fp, 2)
-    assert by_tile_image.im_dims == (1, 1024, 1024)
+    assert by_tile_image.shape == (1, 1024, 1024)
 
 
 @pytest.mark.usefixtures("complex_transform")
@@ -67,7 +67,7 @@ def test_OmeTiffWriter_compare_tile_plane(complex_transform, data_out_dir):
     ch0_im_tile = by_tile_image.read_single_channel(0)
     ch0_im_plane = by_plane_image.read_single_channel(0)
 
-    assert by_plane_image.im_dims == by_tile_image.im_dims
+    assert by_plane_image.shape == by_tile_image.shape
     assert np.array_equal(ch0_im_tile, ch0_im_plane)
 
 
@@ -88,7 +88,7 @@ def test_OmeTiffWriter_by_tile_nondiv(
     )
     by_tile_image = reg_image_loader(by_tile_fp, 2)
 
-    assert by_tile_image.im_dims == (
+    assert by_tile_image.shape == (
         1,
         int(np.ceil(2099 / 512) * 512),
         int(np.ceil(3099 / 512) * 512),

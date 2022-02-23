@@ -1,8 +1,12 @@
+import pytest
+import os
 import dask.array as da
 import numpy as np
-import pytest
 import zarr
-from tifffile import TiffWriter, imread, imwrite
+from tifffile import TiffWriter, imwrite
+
+HERE = os.path.dirname(__file__)
+GEOJSON_FP = os.path.join(HERE, "polygons.geojson")
 
 
 @pytest.fixture
@@ -15,6 +19,11 @@ def mask_np():
     mask_im = np.zeros((2048, 2048), dtype=np.uint8)
     mask_im[256:1792, 256:1792] = 255
     return mask_im
+
+
+@pytest.fixture
+def mask_geojson():
+    return GEOJSON_FP
 
 
 @pytest.fixture

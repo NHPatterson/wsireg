@@ -6,7 +6,7 @@ import numpy as np
 import SimpleITK as sitk
 from tifffile import TiffWriter
 
-from wsireg.reg_images import RegImage
+from wsireg.reg_images.reg_image import RegImage
 from wsireg.reg_transform_seq import RegTransformSeq
 from wsireg.utils.im_utils import (
     format_channel_names,
@@ -61,9 +61,9 @@ class OmeTiffWriter:
             self.x_spacing, self.y_spacing = reg_transform_seq.output_spacing
         else:
             self.y_size, self.x_size = (
-                (self.reg_image.im_dims[0], self.reg_image.im_dims[1])
+                (self.reg_image.shape[0], self.reg_image.shape[1])
                 if self.reg_image.is_rgb
-                else (self.reg_image.im_dims[1], self.reg_image.im_dims[2])
+                else (self.reg_image.shape[1], self.reg_image.shape[2])
             )
             self.y_spacing, self.x_spacing = None, None
 
@@ -141,16 +141,16 @@ class OmeTiffWriter:
         print(f"saving to {output_file_name}")
         with TiffWriter(output_file_name, bigtiff=True) as tif:
             if self.reg_image.reader == "sitk":
-                self.reg_image.read_full_image()
+                self.reg_image._read_full_image()
+
             for channel_idx in range(self.reg_image.n_ch):
                 print(f"transforming : {channel_idx}")
-                if self.reg_image.reader != "sitk":
-                    image = self.reg_image.read_single_channel(channel_idx)
-                    image = np.squeeze(image)
-                    image = sitk.GetImageFromArray(image)
-                    image.SetSpacing(
-                        (self.reg_image.image_res, self.reg_image.image_res)
-                    )
+                image = self.reg_image.read_single_channel(channel_idx)
+                image = np.squeeze(image)
+                image = sitk.GetImageFromArray(image)
+                image.SetSpacing(
+                    (self.reg_image.image_res, self.reg_image.image_res)
+                )
 
                 if self.reg_transform_seq:
                     image = self.reg_transform_seq.resampler.Execute(image)

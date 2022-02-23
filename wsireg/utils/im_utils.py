@@ -2,6 +2,7 @@ import multiprocessing
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import List, Optional, Tuple, Union
 
 import cv2
 import dask.array as da
@@ -18,7 +19,7 @@ from tifffile import (
     xml2dict,
 )
 
-from wsireg.parameter_maps.preprocessing import BoundingBox
+from wsireg.parameter_maps.preprocessing import BoundingBox, ImagePreproParams
 from wsireg.utils.tform_utils import sitk_transform_image
 
 TIFFFILE_EXTS = [".scn", ".tif", ".tiff", ".ndpi", ".svs"]
@@ -95,6 +96,31 @@ def ensure_dask_array(image):
 
     # handles np.ndarray _and_ other array like objects.
     return da.from_array(image)
+
+
+def preprocess_dask_array(
+    array: da.Array, preprocessing: Optional[ImagePreproParams] = None
+):
+    is_rgb = guess_rgb(array.shape)
+    if is_rgb:
+        if preprocessing:
+            image_out = np.asarray(grayscale(array, is_interleaved=is_rgb))
+            image_out = sitk.GetImageFromArray(image_out)
+        else:
+            image_out = np.asarray(array)
+            image_out = sitk.GetImageFromArray(image_out, isVector=True)
+
+    elif len(array.shape) == 2:
+        image_out = sitk.GetImageFromArray(np.asarray(array))
+    else:
+        if preprocessing:
+            if preprocessing.ch_indices and len(array.shape) > 2:
+                chs = list(preprocessing.ch_indices)
+                array = array[chs, :, :]
+
+        image_out = sitk.GetImageFromArray(np.squeeze(np.asarray(array)))
+
+    return image_out
 
 
 def read_preprocess_array(array, preprocessing, force_rgb=None):
@@ -528,7 +554,7 @@ class CziRegImageReader(CziFile):
         return out
 
 
-def tf_get_largest_series(image_filepath):
+def tf_get_largest_series(image_filepath: Union[str, Path]) -> int:
     """
     Determine largest series for .scn files by examining metadata
     For other multi-series files, find the one with the most pixels
@@ -563,7 +589,7 @@ def tf_get_largest_series(image_filepath):
                 for series in tf_im.series
             ]
         )
-    return largest_series
+    return int(largest_series)
 
 
 def get_sitk_image_info(image_filepath):
@@ -603,7 +629,22 @@ def get_sitk_image_info(image_filepath):
     return im_dims, im_dtype
 
 
-def get_tifffile_info(image_filepath):
+def tifffile_to_dask(
+    im_fp: Union[str, Path], largest_series: int, level=int
+) -> Union[da.Array, List[da.Array]]:
+    imdata = zarr.open(
+        imread(im_fp, aszarr=True, series=largest_series, level=level)
+    )
+    if isinstance(imdata, zarr.hierarchy.Group):
+        imdata = [da.from_zarr(imdata[z]) for z in imdata.array_keys()]
+    else:
+        imdata = da.from_zarr(imdata)
+    return imdata
+
+
+def get_tifffile_info(
+    image_filepath: Union[str, Path]
+) -> Tuple[Tuple[int, int, int], np.dtype, int]:
     largest_series = tf_get_largest_series(image_filepath)
     zarr_im = zarr.open(
         imread(image_filepath, aszarr=True, series=largest_series)
@@ -614,7 +655,7 @@ def get_tifffile_info(image_filepath):
         im_dims = np.concatenate([[1], im_dims])
     im_dtype = zarr_im.dtype
 
-    return im_dims, im_dtype
+    return im_dims, im_dtype, largest_series
 
 
 def tf_zarr_read_single_ch(
@@ -1405,7 +1446,7 @@ def sitk_vect_to_gs(image):
     return sitk.GetImageFromArray(image, isVector=False)
 
 
-def sitk_max_int_proj(image):
+def sitk_max_int_proj(image: sitk.Image) -> sitk.Image:
     """
     Finds maximum intensity projection of multi-channel SimpleITK image
 
@@ -1521,158 +1562,3 @@ def ome_tifffile_to_arraylike(image_filepath):
             image = image.transpose(1, 2, 0)
 
     return image, image_filepath
-
-
-#
-#
-# def prepare_np_image(image, preprocessing):
-#     """
-#     preprocess images stored as numpy arrays
-#
-#     Parameters
-#     ----------
-#     image:np.ndarray
-#         image data
-#     preprocessing:dict
-#         whether to do some read-time pre-processing
-#         - greyscale conversion (at the tile level)
-#         - read individual or range of channels (at the tile level)
-#
-#     Returns
-#     -------
-#     image:sitk.Image
-#         image ready for registration
-#     """
-#     is_rgb = guess_rgb(image.shape)
-#
-#     # greyscale an RGB np array
-#     if preprocessing is not None:
-#         if is_rgb:
-#             image = grayscale(image)
-#             is_rgb = False
-#
-#         # select channels for registration if multi-channel
-#         if image.ndim > 2 and preprocessing.get("ch_indices") is not None:
-#             image = np.squeeze(image[preprocessing.get("ch_indices"), :, :])
-#
-#     # pass nparray to sitk image
-#     image = sitk.GetImageFromArray(image, isVector=is_rgb)
-#
-#     # sitk preprocessing
-#     if (
-#         preprocessing is not None
-#         and preprocessing.get('as_uint8') is True
-#         and image.GetPixelID() != sitk.sitkUInt8
-#     ):
-#         image = sitk.RescaleIntensity(image)
-#         image = sitk.Cast(image, sitk.sitkUInt8)
-#
-#     return image
-#
-#
-# def read_image(image_filepath, preprocessing):
-#     """
-#     Convenience function to read images
-#
-#     Parameters
-#     ----------
-#     image_filepath : str
-#         file path to image
-#     preprocessing
-#         read time preprocessing dict ("as_uint8" and "ch_indices")
-#     Returns
-#     -------
-#     image: sitk.Image
-#         SimpleITK image of image data from czi, scn or other image formats read by SimpleITK
-#     """
-#
-#     fp_ext = Path(image_filepath).suffix.lower()
-#
-#     if fp_ext == '.czi':
-#         czi = CziRegImageReader(image_filepath)
-#         scene_idx = czi.axes.index('S')
-#
-#         if czi.shape[scene_idx] > 1:
-#             raise ValueError('multi scene czis not allowed at this time')
-#
-#         if preprocessing is None:
-#             image = czi.asarray()
-#         else:
-#             image = czi.sub_asarray(
-#                 channel_idx=preprocessing['ch_indices'],
-#                 as_uint8=preprocessing['as_uint8'],
-#             )
-#         image = np.squeeze(image)
-#
-#         image = sitk.GetImageFromArray(image)
-#
-#     # find out other WSI formats read by tifffile
-#     elif fp_ext in TIFFFILE_EXTS:
-#         largest_series = tf_get_largest_series(image_filepath)
-#
-#         try:
-#             image = tifffile_dask_backend(
-#                 image_filepath, largest_series, preprocessing
-#             )
-#         except ValueError:
-#             image = tifffile_zarr_backend(
-#                 image_filepath, largest_series, preprocessing
-#             )
-#
-#         if (
-#             preprocessing is not None
-#             and preprocessing.get('as_uint8') is True
-#             and image.GetPixelID() != sitk.sitkUInt8
-#         ):
-#             image = sitk.RescaleIntensity(image)
-#             image = sitk.Cast(image, sitk.sitkUInt8)
-#     else:
-#         image = sitk_backend(image_filepath, preprocessing)
-#
-#     return image
-
-#
-# def get_im_info(image_filepath):
-#     """
-#     Use CziFile and tifffile to get image dimension and other information.
-#
-#     Parameters
-#     ----------
-#     image_filepath: str
-#         filepath to the image file
-#
-#     Returns
-#     -------
-#     im_dims: np.ndarray
-#         image dimensions in np.ndarray
-#     im_dtype: np.dtype
-#         data type of the image
-#     reader:str
-#         whether to use "czifile" or "tifffile" to read the image
-#     """
-#     if Path(image_filepath).suffix.lower() == ".czi":
-#         czi = CziFile(image_filepath)
-#         ch_dim_idx = czi.axes.index('C')
-#         y_dim_idx = czi.axes.index('Y')
-#         x_dim_idx = czi.axes.index('X')
-#         im_dims = np.array(czi.shape)[[ch_dim_idx, y_dim_idx, x_dim_idx]]
-#         im_dtype = czi.dtype
-#         reader = "czi"
-#
-#     elif Path(image_filepath).suffix.lower() in TIFFFILE_EXTS:
-#         largest_series = tf_get_largest_series(image_filepath)
-#         zarr_im = zarr.open(
-#             imread(image_filepath, aszarr=True, series=largest_series)
-#         )
-#         zarr_im = zarr_get_base_pyr_layer(zarr_im)
-#         im_dims = np.squeeze(zarr_im.shape)
-#         if len(im_dims) == 2:
-#             im_dims = np.concatenate([[1], im_dims])
-#         im_dtype = zarr_im.dtype
-#         reader = "tifffile"
-#
-#     else:
-#         im_dims, im_dtype = get_sitk_image_info(image_filepath)
-#         reader = "sitk"
-#
-#     return im_dims, im_dtype, reader

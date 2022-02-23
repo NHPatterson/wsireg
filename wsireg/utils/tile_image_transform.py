@@ -157,7 +157,7 @@ def itk_transform_tiles(
     if tform_reg_im.is_rgb:
         resample_zarray = zgrp.create_dataset(
             'temparray',
-            shape=(y_size, x_size, tform_reg_im.im_dims[-1]),
+            shape=(y_size, x_size, tform_reg_im.shape[-1]),
             chunks=(tile_size, tile_size),
             dtype=tform_reg_im.im_dtype,
         )
@@ -169,11 +169,11 @@ def itk_transform_tiles(
             dtype=tform_reg_im.im_dtype,
         )
     if tform_reg_im.is_rgb:
-        y_size_moving = tform_reg_im.im_dims[0]
-        x_size_moving = tform_reg_im.im_dims[1]
+        y_size_moving = tform_reg_im.shape[0]
+        x_size_moving = tform_reg_im.shape[1]
     else:
-        y_size_moving = tform_reg_im.im_dims[1]
-        x_size_moving = tform_reg_im.im_dims[2]
+        y_size_moving = tform_reg_im.shape[1]
+        x_size_moving = tform_reg_im.shape[2]
 
     def transform_tile(tile):
         tile_resampler = wsireg_tile_transform_to_resampler(tile)
@@ -195,7 +195,7 @@ def itk_transform_tiles(
             y_max = 1
 
         if tform_reg_im.is_rgb:
-            image = tform_reg_im.image[y_min:y_max, x_min:x_max, :]
+            image = tform_reg_im.dask_image[y_min:y_max, x_min:x_max, :]
             image = sitk.GetImageFromArray(image, isVector=True)
             image.SetSpacing((tform_reg_im.image_res, tform_reg_im.image_res))
             image.SetOrigin(
@@ -203,14 +203,16 @@ def itk_transform_tiles(
             )
 
         elif tform_reg_im.n_ch == 1:
-            image = tform_reg_im.image[y_min:y_max, x_min:x_max]
+            image = da.squeeze(tform_reg_im.dask_image)[
+                y_min:y_max, x_min:x_max
+            ]
             image = sitk.GetImageFromArray(image, isVector=False)
             image.SetSpacing((tform_reg_im.image_res, tform_reg_im.image_res))
             image.SetOrigin(
                 image.TransformIndexToPhysicalPoint([int(x_min), int(y_min)])
             )
         else:
-            image = tform_reg_im.image[ch_idx, y_min:y_max, x_min:x_max]
+            image = tform_reg_im.dask_image[ch_idx, y_min:y_max, x_min:x_max]
             image = sitk.GetImageFromArray(image, isVector=False)
             image.SetSpacing((tform_reg_im.image_res, tform_reg_im.image_res))
             image.SetOrigin(
