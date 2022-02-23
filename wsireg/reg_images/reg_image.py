@@ -1,11 +1,16 @@
+import json
+from abc import ABC
 from copy import deepcopy
-from typing import Any, Dict, Optional, Union
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
 
+import dask.array as da
 import itk
 import numpy as np
 import SimpleITK as sitk
 
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
+from wsireg.reg_shapes import RegShapes
 from wsireg.utils.im_utils import (
     compute_mask_to_bbox,
     contrast_enhance,
@@ -22,72 +27,124 @@ from wsireg.utils.tform_utils import (
 )
 
 
-class RegImage:
-    """
-    Image container class for reading images and preparing them for registration.
-    Does two forms of preprocessing:
-    Intensity preprocessing, modifying intensity values for best registration
-    Spatial preprocessing, rotating and flipping images prior to registration for best alignment
+class RegImage(ABC):
+    """Base class for registration images"""
+    _path: Union[str, Path]
 
-    After preprocessing, images destined for registration should always be a single channel 2D image
+    # image data
+    _dask_image: da.Array
+    _reg_image: Union[sitk.Image, itk.Image]
+    _mask: Optional[Union[sitk.Image, itk.Image]] = None
 
-    Attributes
-    ----------
-    image_filepath : str or np.array
-        filepath to image to be processed or a numpy array of the image
-    image_res : int or float
-        Physical spacing (xy resolution) of the image (units are assumed to be the same for each image in experiment but are not
-        defined)
-        Does not yet support isotropic resolution
-    preprocessing : ImagePreproParams
-        preprocessing to apply to the image
-    transforms: list
-        list of elastix transformation data to apply to an image during preprocessing
-    mask : str or np.ndarray
-        filepath of a mask image to be processed or a numpy array of the mask
-        all values => 1 are considered WITHIN the mask
-    """
+    # image dimension information
+    _shape: Tuple[int, int, int]
+    _n_ch: int
+    _im_dtype: np.dtype
+
+    # channel information
+    _channel_axis: int
+    _is_rgb: bool
+    _is_interleaved: bool
+    _channel_names: List[str]
+    _channel_colors: List[str]
+
+    # scaling information
+    _image_res: Union[Tuple[int, int], Tuple[float, float]]
+
+    # reg image preprocessing
+    _preprocessing: Optional[ImagePreproParams] = None
 
     def __init__(
-        self,
-        preprocessing: Optional[
-            Union[ImagePreproParams, Dict[str, Any]]
-        ] = None,
+        self, preprocessing: Optional[Union[ImagePreproParams, Dict]] = None
     ):
-        self.image = None
-        self.reg_image = None
-        self.original_size_transform = None
         if preprocessing:
             if isinstance(preprocessing, ImagePreproParams):
-                self.preprocessing = preprocessing
+                self._preprocessing = preprocessing
             elif isinstance(preprocessing, dict):
-                self.preprocessing = ImagePreproParams(**preprocessing)
+                self._preprocessing = ImagePreproParams(**preprocessing)
         else:
-            self.preprocessing = ImagePreproParams()
+            self._preprocessing = ImagePreproParams()
 
-        self.pre_reg_transforms = None
-        self.original_size_transform = None
-        self.channel_names = None
-        self.channel_colors = None
+    @property
+    def path(self) -> Union[str, Path]:
+        return self._path
 
-        return
+    @property
+    def shape(self) -> Tuple[int, int, int]:
+        return self._shape
 
-    def read_mask(self, mask):
-        if mask is not None:
-            if isinstance(mask, np.ndarray):
+    @property
+    def n_ch(self) -> int:
+        return self._n_ch
+
+    @property
+    def im_dtype(self) -> np.dtype:
+        return self._im_dtype
+
+    @property
+    def is_rgb(self) -> bool:
+        return self._is_rgb
+
+    @property
+    def is_interleaved(self) -> bool:
+        return self._is_interleaved
+
+    @property
+    def channel_axis(self) -> int:
+        return self._channel_axis
+
+    @property
+    def image_res(self) -> Union[float, int]:
+        return self._image_res
+
+    @property
+    def channel_names(self) -> List[str]:
+        return self._channel_names
+
+    @property
+    def channel_colors(self) -> List[str]:
+        return self._channel_colors
+
+    @property
+    def dask_image(self) -> da.Array:
+        return self._dask_image
+
+    @property
+    def mask(self) -> Optional[Union[sitk.Image, itk.Image]]:
+        return self._mask
+
+    @property
+    def reg_image(self) -> Union[sitk.Image, itk.Image]:
+        return self._reg_image
+
+    @property
+    def preprocessing(self) -> Optional[ImagePreproParams]:
+        return self._preprocessing
+
+    def read_mask(
+        self, mask: Union[str, Path, sitk.Image, np.ndarray]
+    ) -> sitk.Image:
+        if isinstance(mask, np.ndarray):
+            mask = sitk.GetImageFromArray(mask)
+        elif isinstance(mask, (str, Path)):
+            if Path(mask).suffix.lower() == ".geojson":
+                out_shape = self.shape[:2] if self.is_rgb else self.shape[1:]
+                mask_shapes = RegShapes(mask)
+                mask = mask_shapes.draw_mask(out_shape, labels=False)
                 mask = sitk.GetImageFromArray(mask)
-            elif isinstance(mask, str):
+            else:
                 mask = sitk.ReadImage(mask)
-            elif isinstance(mask, sitk.Image):
-                mask = mask
+        elif isinstance(mask, sitk.Image):
+            mask = mask
 
-            mask.SetSpacing((self.image_res, self.image_res))
+        mask.SetSpacing((self.image_res, self.image_res))
 
         return mask
 
     def preprocess_reg_image_intensity(
-        self, image, preprocessing: ImagePreproParams
-    ):
+        self, image: sitk.Image, preprocessing: ImagePreproParams
+    ) -> sitk.Image:
+        """Preprocess intensity features to single channel image"""
 
         if preprocessing.image_type.value == "FL":
             preprocessing.invert_intensity = False
@@ -116,8 +173,12 @@ class RegImage:
         return image
 
     def preprocess_reg_image_spatial(
-        self, image, preprocessing: ImagePreproParams, imported_transforms=None
-    ):
+        self,
+        image: sitk.Image,
+        preprocessing: ImagePreproParams,
+        imported_transforms=None,
+    ) -> Tuple[sitk.Image, List[Dict]]:
+        """Perform spatial transformations"""
 
         transforms = []
         original_size = image.GetSize()
@@ -134,10 +195,10 @@ class RegImage:
                 (preprocessing.downsampling, preprocessing.downsampling),
             )
 
-            if self.mask is not None:
-                self.mask.SetSpacing((self.image_res, self.image_res))
-                self.mask = sitk.Shrink(
-                    self.mask,
+            if self._mask is not None:
+                self._mask.SetSpacing((self.image_res, self.image_res))
+                self._mask = sitk.Shrink(
+                    self._mask,
                     (
                         preprocessing.downsampling,
                         preprocessing.downsampling,
@@ -161,10 +222,10 @@ class RegImage:
 
             image = transform_plane(image, final_tform, composite_transform)
 
-            if self.mask is not None:
-                self.mask.SetSpacing((image_res, image_res))
-                self.mask = transform_plane(
-                    self.mask, final_tform, composite_transform
+            if self._mask is not None:
+                self._mask.SetSpacing((image_res, image_res))
+                self._mask = transform_plane(
+                    self._mask, final_tform, composite_transform
                 )
             transforms.append(rot_tform)
 
@@ -183,18 +244,18 @@ class RegImage:
 
             image = transform_plane(image, final_tform, composite_transform)
 
-            if self.mask is not None:
-                self.mask.SetSpacing((image_res, image_res))
-                self.mask = transform_plane(
-                    self.mask, final_tform, composite_transform
+            if self._mask is not None:
+                self._mask.SetSpacing((image_res, image_res))
+                self._mask = transform_plane(
+                    self._mask, final_tform, composite_transform
                 )
 
             transforms.append(flip_tform)
 
-        if self.mask and preprocessing.crop_to_mask_bbox:
+        if self._mask and preprocessing.crop_to_mask_bbox:
             print("computing mask bounding box")
             if preprocessing.mask_bbox is None:
-                mask_bbox = compute_mask_to_bbox(self.mask)
+                mask_bbox = compute_mask_to_bbox(self._mask)
                 preprocessing.mask_bbox = mask_bbox
 
         if preprocessing.mask_bbox:
@@ -223,16 +284,16 @@ class RegImage:
                 original_size, deepcopy(translation_transform)
             )
 
-            if self.mask is not None:
-                self.mask.SetSpacing((image_res, image_res))
-                self.mask = transform_plane(
-                    self.mask, final_tform, composite_transform
+            if self._mask is not None:
+                self._mask.SetSpacing((image_res, image_res))
+                self._mask = transform_plane(
+                    self._mask, final_tform, composite_transform
                 )
             transforms.append(translation_transform)
 
         return image, transforms
 
-    def preprocess_image(self, reg_image):
+    def preprocess_image(self, reg_image: sitk.Image) -> None:
 
         reg_image = self.preprocess_reg_image_intensity(
             reg_image, self.preprocessing
@@ -257,44 +318,171 @@ class RegImage:
         if len(pre_reg_transforms) > 0:
             self.pre_reg_transforms = pre_reg_transforms
 
-        self.reg_image = reg_image
+        self._reg_image = reg_image
 
-    def reg_image_sitk_to_itk(self, cast_to_float32=True):
-        origin = self.reg_image.GetOrigin()
-        spacing = self.reg_image.GetSpacing()
+    def reg_image_sitk_to_itk(self, cast_to_float32: bool = True) -> None:
+        origin = self._reg_image.GetOrigin()
+        spacing = self._reg_image.GetSpacing()
         # direction = image.GetDirection()
-        is_vector = self.reg_image.GetNumberOfComponentsPerPixel() > 1
+        is_vector = self._reg_image.GetNumberOfComponentsPerPixel() > 1
         if cast_to_float32 is True:
-            self.reg_image = sitk.Cast(self.reg_image, sitk.sitkFloat32)
-            self.reg_image = sitk.GetArrayFromImage(self.reg_image)
+            self._reg_image = sitk.Cast(self._reg_image, sitk.sitkFloat32)
+            self._reg_image = sitk.GetArrayFromImage(self._reg_image)
         else:
-            self.reg_image = sitk.GetArrayFromImage(self.reg_image)
+            self._reg_image = sitk.GetArrayFromImage(self._reg_image)
 
-        self.reg_image = itk.GetImageFromArray(
-            self.reg_image, is_vector=is_vector
+        self._reg_image = itk.GetImageFromArray(
+            self._reg_image, is_vector=is_vector
         )
-        self.reg_image.SetOrigin(origin)
-        self.reg_image.SetSpacing(spacing)
+        self._reg_image.SetOrigin(origin)
+        self._reg_image.SetSpacing(spacing)
 
-        if self.mask is not None:
-            origin = self.mask.GetOrigin()
-            spacing = self.mask.GetSpacing()
+        if self._mask is not None:
+            origin = self._mask.GetOrigin()
+            spacing = self._mask.GetSpacing()
             # direction = image.GetDirection()
-            is_vector = self.mask.GetNumberOfComponentsPerPixel() > 1
+            is_vector = self._mask.GetNumberOfComponentsPerPixel() > 1
             if cast_to_float32 is True:
-                self.mask = sitk.Cast(self.mask, sitk.sitkFloat32)
-                self.mask = sitk.GetArrayFromImage(self.mask)
+                self._mask = sitk.Cast(self._mask, sitk.sitkFloat32)
+                self._mask = sitk.GetArrayFromImage(self._mask)
             else:
-                self.mask = sitk.GetArrayFromImage(self.mask)
+                self._mask = sitk.GetArrayFromImage(self._mask)
 
-            self.mask = itk.GetImageFromArray(self.mask, is_vector=is_vector)
-            self.mask.SetOrigin(origin)
-            self.mask.SetSpacing(spacing)
+            self._mask = itk.GetImageFromArray(self._mask, is_vector=is_vector)
+            self._mask.SetOrigin(origin)
+            self._mask.SetSpacing(spacing)
 
             mask_im_type = itk.Image[itk.UC, 2]
-            self.mask = itk.binary_threshold_image_filter(
-                self.mask,
+            self._mask = itk.binary_threshold_image_filter(
+                self._mask,
                 lower_threshold=1,
                 inside_value=1,
-                ttype=(type(self.mask), mask_im_type),
+                ttype=(type(self._mask), mask_im_type),
             )
+
+    @staticmethod
+    def _get_all_cache_data_fps(output_dir: Union[str, Path], image_tag: str):
+        output_dir = Path(output_dir)
+
+        out_image_fp = output_dir / f"{image_tag}_prepro.tiff"
+        out_params_fp = output_dir / f"{image_tag}_preprocessing_params.json"
+        out_mask_fp = output_dir / f"{image_tag}_prepro_mask.tiff"
+        out_init_tform_fp = output_dir / f"{image_tag}_init_tforms.json"
+        out_osize_tform_fp = output_dir / f"{image_tag}_orig_size_tform.json"
+
+        return (
+            out_image_fp,
+            out_params_fp,
+            out_mask_fp,
+            out_init_tform_fp,
+            out_osize_tform_fp,
+        )
+
+    def check_cache_preprocessing(
+        self, output_dir: Union[str, Path], image_tag: str
+    ):
+        (
+            out_image_fp,
+            out_params_fp,
+            out_mask_fp,
+            _,
+            _,
+        ) = self._get_all_cache_data_fps(output_dir, image_tag)
+
+        if out_image_fp.exists() and out_params_fp.exists():
+            cached_preprocessing = ImagePreproParams.parse_file(out_params_fp)
+            return self.preprocessing == cached_preprocessing
+        else:
+            return False
+
+    def cache_image_data(
+        self, output_dir: Union[str, Path], image_tag: str, check: bool = True
+    ):
+
+        (
+            out_image_fp,
+            out_params_fp,
+            out_mask_fp,
+            out_init_tform_fp,
+            out_osize_tform_fp,
+        ) = self._get_all_cache_data_fps(output_dir, image_tag)
+
+        if check:
+            read_from_cache = self.check_cache_preprocessing(
+                output_dir, image_tag
+            )
+        else:
+            read_from_cache = False
+
+        if not read_from_cache:
+            print(f"Writing preprocessed image for {image_tag}")
+            sitk.WriteImage(
+                self.reg_image, str(out_image_fp), useCompression=True
+            )
+            print(f"Finished writing preprocessed image for {image_tag}")
+            json.dump(
+                deepcopy(
+                    self.preprocessing.dict(
+                        exclude_none=True, exclude_defaults=True
+                    )
+                ),
+                open(out_params_fp, "w"),
+            )
+            json.dump(self.pre_reg_transforms, open(out_init_tform_fp, "w"))
+
+            if self._mask is not None:
+                print(f"Writing preprocessed mask for {image_tag}")
+                sitk.WriteImage(
+                    self.mask, str(out_mask_fp), useCompression=True
+                )
+                print(f"Finished writing preprocessed mask for {image_tag}")
+
+            if self.original_size_transform:
+                json.dump(
+                    self.original_size_transform, open(out_osize_tform_fp, "w")
+                )
+
+    def load_from_cache(self, output_dir: Union[str, Path], image_tag: str):
+        (
+            image_fp,
+            params_fp,
+            mask_fp,
+            init_tform_fp,
+            osize_tform_fp,
+        ) = self._get_all_cache_data_fps(output_dir, image_tag)
+
+        read_from_cache = self.check_cache_preprocessing(output_dir, image_tag)
+
+        if read_from_cache:
+            self._reg_image = sitk.ReadImage(str(image_fp))
+            self._preprocessing = ImagePreproParams(
+                **json.load(open(params_fp, "r"))
+            )
+            self.pre_reg_transforms = json.load(open(init_tform_fp, "r"))
+            if osize_tform_fp.exists():
+                self.original_size_transform = json.load(
+                    open(osize_tform_fp, "r")
+                )
+
+            if mask_fp.exists():
+                self._mask = sitk.ReadImage(str(mask_fp))
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def load_orignal_size_transform(
+        output_dir: Union[str, Path], image_tag: str
+    ):
+        (
+            _,
+            _,
+            _,
+            init_tform_fp,
+            _,
+        ) = RegImage._get_all_cache_data_fps(output_dir, image_tag)
+
+        if init_tform_fp.exists():
+            return [json.load(open(init_tform_fp, "r"))]
+        else:
+            return []
