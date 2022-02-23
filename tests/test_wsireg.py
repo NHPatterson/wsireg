@@ -1103,3 +1103,71 @@ def test_wsireg_run_reg_w_override(data_out_dir, disk_im_mch):
 
     assert not np.array_equal(or_mod2, pp_mod2)
     assert not np.array_equal(or_mod3, pp_mod3)
+
+@pytest.mark.usefixtures("disk_im_mch")
+def test_wsireg_run_reg_reload_from_cache(data_out_dir, disk_im_mch):
+    img_fp1 = str(disk_im_mch)
+    output_dir = str(data_out_dir)
+    pname = gen_project_name_str()
+    wsi_reg = WsiReg2D(pname, output_dir)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])
+
+    wsi_reg.register_images()
+
+    pp_mod1_r1 = reg_image_loader(
+        wsi_reg.image_cache / "mod1_prepro.tiff", 1
+    ).dask_image.compute()
+    pp_mod2_r1 = reg_image_loader(
+        wsi_reg.image_cache / "mod2_prepro.tiff", 1
+    ).dask_image.compute()
+
+    # run registration again, loading data from cache
+    wsi_reg = WsiReg2D(pname, output_dir)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        preprocessing={"ch_indices":[1]}
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+        preprocessing={"ch_indices": [1]}
+    )
+
+    wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])
+    wsi_reg.register_images()
+
+    pp_mod1_r2 = reg_image_loader(
+        wsi_reg.image_cache / "mod1_prepro.tiff", 1
+    ).dask_image.compute()
+    pp_mod2_r2 = reg_image_loader(
+        wsi_reg.image_cache / "mod2_prepro.tiff", 1
+    ).dask_image.compute()
+
+    assert not np.array_equal(pp_mod1_r1, pp_mod1_r2)
+    assert not np.array_equal(pp_mod2_r1, pp_mod2_r2)
