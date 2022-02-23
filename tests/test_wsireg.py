@@ -260,10 +260,10 @@ def test_wsireg_run_reg_with_crop(data_out_dir, disk_im_gry):
     registered_image_crop = reg_image_loader(im_fps[0], 1)
     unregistered_image_crop = reg_image_loader(im_fps[1], 1)
     #
-    assert registered_image_nocrop.im_dims[1:] == (2048, 2048)
-    assert unregistered_image_nocrop.im_dims[1:] == (2048, 2048)
-    assert registered_image_crop.im_dims[1:] == (512, 512)
-    assert unregistered_image_crop.im_dims[1:] == (512, 512)
+    assert registered_image_nocrop.shape[1:] == (2048, 2048)
+    assert unregistered_image_nocrop.shape[1:] == (2048, 2048)
+    assert registered_image_crop.shape[1:] == (512, 512)
+    assert unregistered_image_crop.shape[1:] == (512, 512)
 
 
 @pytest.mark.usefixtures("disk_im_gry")
@@ -310,10 +310,10 @@ def test_wsireg_run_reg_with_flip_crop(data_out_dir, disk_im_gry):
     registered_image_crop = reg_image_loader(im_fps[0], 1)
     unregistered_image_crop = reg_image_loader(im_fps[1], 1)
 
-    assert registered_image_nocrop.im_dims[1:] == (2048, 2048)
-    assert unregistered_image_nocrop.im_dims[1:] == (2048, 2048)
-    assert registered_image_crop.im_dims[1:] == (512, 512)
-    assert unregistered_image_crop.im_dims[1:] == (512, 512)
+    assert registered_image_nocrop.shape[1:] == (2048, 2048)
+    assert unregistered_image_nocrop.shape[1:] == (2048, 2048)
+    assert registered_image_crop.shape[1:] == (512, 512)
+    assert unregistered_image_crop.shape[1:] == (512, 512)
 
 
 @pytest.mark.usefixtures("disk_im_gry")
@@ -365,8 +365,8 @@ def test_wsireg_run_reg_with_crop_merge(data_out_dir, disk_im_gry):
     )
     wsi_reg.save_transformations()
     registered_image_crop = reg_image_loader(im_fps[0], 1)
-    assert registered_image_nocrop.im_dims[1:] == (2048, 2048)
-    assert registered_image_crop.im_dims[1:] == (512, 512)
+    assert registered_image_nocrop.shape[1:] == (2048, 2048)
+    assert registered_image_crop.shape[1:] == (512, 512)
 
 
 def test_wsireg_run_reg_wmerge(data_out_dir, disk_im_gry):
@@ -398,7 +398,7 @@ def test_wsireg_run_reg_wmerge(data_out_dir, disk_im_gry):
     im_fps = wsi_reg.transform_images(transform_non_reg=True)
     merged_im = reg_image_loader(im_fps[0], 0.65)
     assert Path(im_fps[0]).exists() is True
-    assert merged_im.im_dims == (2, 2048, 2048)
+    assert merged_im.shape == (2, 2048, 2048)
 
 
 def test_wsireg_run_reg_wmerge_and_indiv(data_out_dir, disk_im_gry):
@@ -449,7 +449,7 @@ def test_wsireg_run_reg_wmerge_and_indiv(data_out_dir, disk_im_gry):
     assert Path(im_fps[1]).exists() is True
     assert Path(im_fps[2]).exists() is True
     assert Path(im_fps[3]).exists() is True
-    assert merged_im.im_dims == (2, 2048, 2048)
+    assert merged_im.shape == (2, 2048, 2048)
 
 
 def test_wsireg_run_reg_wattachment(data_out_dir, disk_im_gry):
@@ -488,8 +488,13 @@ def test_wsireg_run_reg_wattachment(data_out_dir, disk_im_gry):
     attachim = reg_image_loader(im_fps[1], 0.65)
     attachim2 = reg_image_loader(im_fps[2], 0.65)
 
-    assert np.array_equal(regim.image.compute(), attachim.image.compute())
-    assert np.array_equal(im1, attachim2.image.compute())
+    assert np.array_equal(
+        np.squeeze(regim.dask_image.compute()),
+        np.squeeze(attachim.dask_image.compute()),
+    )
+    assert np.array_equal(
+        np.squeeze(im1), np.squeeze(attachim2.dask_image.compute())
+    )
 
 
 def test_wsireg_run_reg_wattachment_ds2(data_out_dir, disk_im_gry):
@@ -530,8 +535,13 @@ def test_wsireg_run_reg_wattachment_ds2(data_out_dir, disk_im_gry):
     attachim = reg_image_loader(im_fps[1], 0.65)
     attachim2 = reg_image_loader(im_fps[2], 0.65)
 
-    assert np.array_equal(regim.image.compute(), attachim.image.compute())
-    assert np.array_equal(im1, attachim2.image.compute())
+    assert np.array_equal(
+        np.squeeze(regim.dask_image.compute()),
+        np.squeeze(attachim.dask_image.compute()),
+    )
+    assert np.array_equal(
+        np.squeeze(im1), np.squeeze(attachim2.dask_image.compute())
+    )
 
 
 @pytest.mark.usefixtures("disk_im_gry")
@@ -599,7 +609,7 @@ def test_wsireg_run_reg_changeres(data_out_dir, disk_im_gry):
     im_fps = wsi_reg.transform_images(transform_non_reg=False)
     regim = reg_image_loader(im_fps[0], 0.325)
 
-    assert regim.im_dims[1:] == (4096, 4096)
+    assert regim.shape[1:] == (4096, 4096)
 
 
 @pytest.mark.usefixtures("disk_im_gry")
@@ -632,7 +642,7 @@ def test_wsireg_run_reg_downsampling_m1(data_out_dir, disk_im_gry):
     im_fps = wsi_reg.transform_images(transform_non_reg=False)
     regim = reg_image_loader(im_fps[0], 0.65)
 
-    assert regim.im_dims[1:] == (2048, 2048)
+    assert regim.shape[1:] == (2048, 2048)
 
 
 @pytest.mark.usefixtures("disk_im_gry")
@@ -665,7 +675,7 @@ def test_wsireg_run_reg_downsampling_m1_prepro(data_out_dir, disk_im_gry):
     im_fps = wsi_reg.transform_images(transform_non_reg=False)
     regim = reg_image_loader(im_fps[0], 0.65)
 
-    assert regim.im_dims[1:] == (2048, 2048)
+    assert regim.shape[1:] == (2048, 2048)
 
 
 @pytest.mark.usefixtures("disk_im_gry")
@@ -697,7 +707,7 @@ def test_wsireg_run_reg_downsampling_m1m2(data_out_dir, disk_im_gry):
     im_fps = wsi_reg.transform_images(transform_non_reg=False)
     regim = reg_image_loader(im_fps[0], 0.65)
 
-    assert regim.im_dims[1:] == (2048, 2048)
+    assert regim.shape[1:] == (2048, 2048)
 
 
 @pytest.mark.usefixtures("disk_im_gry")
@@ -732,7 +742,7 @@ def test_wsireg_run_reg_downsampling_m1m2_changeores(
     im_fps = wsi_reg.transform_images(transform_non_reg=False)
     regim = reg_image_loader(im_fps[0], 0.65)
 
-    assert regim.im_dims[1:] == (1024, 1024)
+    assert regim.shape[1:] == (1024, 1024)
 
 
 @pytest.mark.usefixtures("disk_im_gry")
@@ -764,7 +774,7 @@ def test_wsireg_run_reg_downsampling_m2_prepro(data_out_dir, disk_im_gry):
     im_fps = wsi_reg.transform_images(transform_non_reg=True)
     regim = reg_image_loader(im_fps[1], 0.65)
 
-    assert regim.im_dims[1:] == (2048, 2048)
+    assert regim.shape[1:] == (2048, 2048)
 
 
 @pytest.mark.usefixtures("disk_im_gry")
@@ -799,7 +809,7 @@ def test_wsireg_run_reg_downsampling_m1m2_merge(data_out_dir, disk_im_gry):
     )
     regim = reg_image_loader(im_fps[0], 0.65)
 
-    assert regim.im_dims == (2, 2048, 2048)
+    assert regim.shape == (2, 2048, 2048)
 
 
 @pytest.mark.usefixtures("disk_im_gry")
@@ -836,7 +846,7 @@ def test_wsireg_run_reg_downsampling_m1m2_merge_no_prepro(
     )
     regim = reg_image_loader(im_fps[0], 0.65)
 
-    assert regim.im_dims == (2, 2048, 2048)
+    assert regim.shape == (2, 2048, 2048)
 
 
 @pytest.mark.usefixtures("disk_im_gry")
@@ -883,7 +893,7 @@ def test_wsireg_run_reg_downsampling_m1m2_merge_ds_attach(
     regim = reg_image_loader(im_fps[0], 0.65)
     ome_data = from_xml(TiffFile(im_fps[0]).ome_metadata)
 
-    assert regim.im_dims == (3, 2048, 2048)
+    assert regim.shape == (3, 2048, 2048)
     assert ome_data.images[0].pixels.physical_size_x == 0.65
     assert ome_data.images[0].pixels.physical_size_y == 0.65
     assert ome_data.images[0].pixels.size_x == 2048
@@ -974,12 +984,9 @@ def test_wsireg_run_reg_downsampling_from_cache(data_out_dir, disk_im_gry):
     regim_cache_attach = reg_image_loader(im_fps_cache[1], 0.65)
     regim_cache_br = reg_image_loader(im_fps_cache[2], 0.65)
 
-    regim_nocache_attach.im_dims
-    regim_cache_attach.im_dims
-
-    assert regim_cache.im_dims == regim_nocache.im_dims
-    assert regim_cache_br.im_dims == regim_nocache_br.im_dims
-    assert regim_cache_attach.im_dims == regim_nocache_attach.im_dims
+    assert regim_cache.shape == regim_nocache.shape
+    assert regim_cache_br.shape == regim_nocache_br.shape
+    assert regim_cache_attach.shape == regim_nocache_attach.shape
 
 
 def test_wsireg_remove_modality(data_out_dir):
@@ -1031,3 +1038,68 @@ def test_wsireg_remove_modality(data_out_dir):
     wsi_reg.remove_modality("pas-shape")
     assert len(wsi_reg.shape_set_names) == 0
     assert wsi_reg.shape_sets.get("pas-shape") is None
+
+
+@pytest.mark.usefixtures("disk_im_mch")
+def test_wsireg_run_reg_w_override(data_out_dir, disk_im_mch):
+    wsi_reg = WsiReg2D(gen_project_name_str(), str(data_out_dir))
+    img_fp1 = str(disk_im_mch)
+
+    wsi_reg.add_modality(
+        "mod1",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_modality(
+        "mod2",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+    wsi_reg.add_modality(
+        "mod3",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+    wsi_reg.add_modality(
+        "mod4",
+        img_fp1,
+        0.65,
+        channel_names=["test"],
+        channel_colors=["red"],
+    )
+
+    wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])
+    wsi_reg.add_reg_path("mod4", "mod3", reg_params=["rigid_test"])
+    wsi_reg.add_reg_path(
+        "mod2",
+        "mod3",
+        reg_params=["rigid_test"],
+        override_prepro={
+            "source": {"ch_indices": [1]},
+            "target": {"ch_indices": [1]},
+        },
+    )
+    wsi_reg.register_images()
+
+    or_mod2 = reg_image_loader(
+        wsi_reg.image_cache / "mod2-mod3-override_prepro.tiff", 1
+    ).dask_image.compute()
+    or_mod3 = reg_image_loader(
+        wsi_reg.image_cache / "mod3-mod2-override_prepro.tiff", 1
+    ).dask_image.compute()
+    pp_mod2 = reg_image_loader(
+        wsi_reg.image_cache / "mod2_prepro.tiff", 1
+    ).dask_image.compute()
+    pp_mod3 = reg_image_loader(
+        wsi_reg.image_cache / "mod3_prepro.tiff", 1
+    ).dask_image.compute()
+
+    assert not np.array_equal(or_mod2, pp_mod2)
+    assert not np.array_equal(or_mod3, pp_mod3)
