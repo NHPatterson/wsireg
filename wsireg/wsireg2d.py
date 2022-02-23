@@ -6,12 +6,13 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from warnings import warn
 
 import numpy as np
-import SimpleITK as sitk
 import yaml
 
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
 from wsireg.parameter_maps.reg_model import RegModel
-from wsireg.reg_images import RegImage, MergeRegImage
+from wsireg.reg_images import MergeRegImage
+from wsireg.reg_images.reg_image import RegImage
+
 from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_shapes import RegShapes
 from wsireg.reg_transform import RegTransform
@@ -20,8 +21,6 @@ from wsireg.utils.config_utils import parse_check_reg_config
 from wsireg.utils.im_utils import ARRAYLIKE_CLASSES
 from wsireg.utils.reg_utils import (
     _prepare_reg_models,
-    json_to_pmap_dict,
-    pmap_dict_to_json,
     register_2d_images_itkelx,
     sitk_pmap_to_dict,
 )
@@ -389,11 +388,29 @@ class WsiReg2D(object):
             )
         else:
             self._reg_paths.update({src_modality: [tgt_modality]})
+        if override_prepro:
+            if override_prepro.get("source"):
+                source_override = ImagePreproParams(
+                    **override_prepro.get("source")
+                )
+            else:
+                source_override = None
+
+            if override_prepro.get("target"):
+                target_override = ImagePreproParams(
+                    **override_prepro.get("target")
+                )
+            else:
+                target_override = None
+        else:
+            source_override = None
+            target_override = None
 
         self.reg_graph_edges = {
             'modalities': {'source': src_modality, 'target': thru_modality},
             'params': reg_params,
-            "override_prepro": override_prepro,
+            "source_override": source_override,
+            "target_override": target_override,
         }
         self.transform_paths = self._reg_paths
 
@@ -503,125 +520,6 @@ class WsiReg2D(object):
                     return extended_path
         return None
 
-    def _check_cache_modality(self, modality_name: str):
-        cache_im_fp = self.image_cache / "{}_prepro.tiff".format(modality_name)
-        cache_transform_fp = cache_im_fp.parent / "{}_init_tforms.json".format(
-            cache_im_fp.stem
-        )
-        cache_osize_tform_fp = (
-            self.image_cache
-            / "{}_orig_size_tform.json".format(cache_im_fp.stem)
-        )
-
-        if cache_im_fp.exists() is True:
-            im_fp = str(cache_im_fp)
-            im_from_cache = True
-        else:
-            im_fp = self.modalities[modality_name]["image_filepath"]
-            im_from_cache = False
-
-        if cache_transform_fp.exists() is True:
-            im_initial_transforms = [json_to_pmap_dict(cache_transform_fp)]
-        else:
-            im_initial_transforms = None
-
-        if cache_osize_tform_fp.exists() is True:
-            osize_tform = json_to_pmap_dict(cache_osize_tform_fp)
-        else:
-            osize_tform = None
-
-        return im_fp, im_initial_transforms, im_from_cache, osize_tform
-
-    def _prepare_modality(
-        self, modality_name: str, reg_edge: dict, src_or_tgt: str
-    ) -> Tuple:
-        mod_data = self.modalities[modality_name].copy()
-
-        if reg_edge.get("override_prepro") is not None:
-            override_preprocessing = reg_edge.get("override_prepro")[
-                src_or_tgt
-            ]
-        else:
-            override_preprocessing = None
-
-        if override_preprocessing is not None:
-            mod_data["preprocessing"] = override_preprocessing
-
-            return (
-                mod_data["image_filepath"],
-                mod_data["image_res"],
-                mod_data["preprocessing"],
-                None,
-                mod_data["mask"],
-                None,
-            )
-        else:
-
-            (
-                mod_data["image_filepath"],
-                mod_data["transforms"],
-                im_from_cache,
-                original_size_transform,
-            ) = self._check_cache_modality(modality_name)
-
-            if im_from_cache:
-                if mod_data["preprocessing"].use_mask is False:
-                    mod_data["mask"] = None
-                if mod_data["preprocessing"].downsampling > 1:
-                    image_res = (
-                        mod_data["image_res"]
-                        * mod_data["preprocessing"].downsampling
-                    )
-                else:
-                    image_res = mod_data["image_res"]
-                mod_data["preprocessing"] = None
-            else:
-                image_res = mod_data["image_res"]
-
-            return (
-                mod_data["image_filepath"],
-                image_res,
-                mod_data["preprocessing"],
-                mod_data["transforms"],
-                mod_data["mask"],
-                original_size_transform,
-            )
-
-    def _cache_images(self, modality_name: str, reg_image: RegImage) -> None:
-
-        cache_im_fp = self.image_cache / "{}_prepro.tiff".format(modality_name)
-
-        cache_transform_fp = self.image_cache / "{}_init_tforms.json".format(
-            cache_im_fp.stem
-        )
-
-        cache_osize_tform_fp = (
-            self.image_cache
-            / "{}_orig_size_tform.json".format(cache_im_fp.stem)
-        )
-        if cache_im_fp.is_file() is False:
-            sitk.WriteImage(reg_image.reg_image, str(cache_im_fp), True)
-
-        if reg_image.mask is not None:
-            cache_mask_im_fp = self.image_cache / "{}_prepro_mask.tiff".format(
-                modality_name
-            )
-            if cache_mask_im_fp.is_file() is False:
-                sitk.WriteImage(reg_image.mask, str(cache_mask_im_fp), True)
-
-        if cache_transform_fp.is_file() is False:
-            pmap_dict_to_json(
-                reg_image.pre_reg_transforms, str(cache_transform_fp)
-            )
-
-        if (
-            cache_osize_tform_fp.is_file() is False
-            and reg_image.original_size_transform is not None
-        ):
-            pmap_dict_to_json(
-                reg_image.original_size_transform, str(cache_osize_tform_fp)
-            )
-
     def _find_nonreg_modalities(self) -> None:
         registered_modalities = [
             edge.get("modalities").get("source")
@@ -639,7 +537,11 @@ class WsiReg2D(object):
 
         return non_reg_modalities
 
-    def save_config(self, output_file_path:Optional[Union[str,Path]]=None,registered:bool=False):
+    def save_config(
+        self,
+        output_file_path: Optional[Union[str, Path]] = None,
+        registered: bool = False,
+    ):
         ts = time.strftime('%Y%m%d-%H%M%S')
         status = "registered" if registered is True else "setup"
 
@@ -673,7 +575,9 @@ class WsiReg2D(object):
             if isinstance(data["image_filepath"], ARRAYLIKE_CLASSES):
                 data["image_filepath"] = "ArrayLike"
             if isinstance(data["preprocessing"], ImagePreproParams):
-                data["preprocessing"] = deepcopy(data["preprocessing"]).dict(exclude_none=True, exclude_defaults=True)
+                data["preprocessing"] = deepcopy(data["preprocessing"]).dict(
+                    exclude_none=True, exclude_defaults=True
+                )
 
         config = {
             "project_name": self.project_name,
@@ -701,7 +605,6 @@ class WsiReg2D(object):
                 / f"{ts}-{self.project_name}-configuration-{status}.yaml"
             )
 
-
         with open(str(output_file_path), "w") as f:
             yaml.dump(config, f, sort_keys=False)
 
@@ -727,47 +630,74 @@ class WsiReg2D(object):
                 src_name = reg_edge["modalities"]["source"]
                 tgt_name = reg_edge["modalities"]["target"]
 
-                (
-                    src_reg_image_fp,
-                    src_res,
-                    src_prepro,
-                    src_transforms,
-                    src_mask,
-                    src_original_size_transform,
-                ) = self._prepare_modality(src_name, reg_edge, "source")
-
-                (
-                    tgt_reg_image_fp,
-                    tgt_res,
-                    tgt_prepro,
-                    tgt_transforms,
-                    tgt_mask,
-                    tgt_original_size_transform,
-                ) = self._prepare_modality(tgt_name, reg_edge, "target")
+                src_mod_data = self.modalities[src_name].copy()
+                tgt_mod_data = self.modalities[tgt_name].copy()
 
                 src_reg_image = reg_image_loader(
-                    src_reg_image_fp,
-                    src_res,
-                    preprocessing=src_prepro,
-                    pre_reg_transforms=src_transforms,
-                    mask=src_mask,
+                    src_mod_data["image_filepath"],
+                    src_mod_data["image_res"],
+                    preprocessing=src_mod_data["preprocessing"],
+                    mask=src_mod_data["mask"],
                 )
 
                 tgt_reg_image = reg_image_loader(
-                    tgt_reg_image_fp,
-                    tgt_res,
-                    preprocessing=tgt_prepro,
-                    pre_reg_transforms=tgt_transforms,
-                    mask=tgt_mask,
+                    tgt_mod_data["image_filepath"],
+                    tgt_mod_data["image_res"],
+                    preprocessing=tgt_mod_data["preprocessing"],
+                    mask=tgt_mod_data["mask"],
                 )
 
-                src_reg_image.read_reg_image()
-                tgt_reg_image.read_reg_image()
+                src_override_prepro = reg_edge.get("source_override")
+                tgt_override_prepro = reg_edge.get("target_override")
+
+                src_cached = src_reg_image.check_cache_preprocessing(
+                    self.image_cache, src_name
+                )
+                tgt_cached = src_reg_image.check_cache_preprocessing(
+                    self.image_cache, tgt_name
+                )
+
+                if not src_cached and not src_override_prepro:
+                    src_reg_image.read_reg_image()
+                    if self.cache_images:
+                        src_reg_image.cache_image_data(
+                            self.image_cache, src_name, check=False
+                        )
+                elif src_override_prepro:
+                    if src_override_prepro:
+                        src_reg_image._preprocessing = src_override_prepro
+                    src_reg_image.read_reg_image()
+                    if self.cache_images:
+                        src_reg_image.cache_image_data(
+                            self.image_cache,
+                            f"{src_name}-{tgt_name}-override",
+                            check=False,
+                        )
+                else:
+                    src_reg_image.load_from_cache(self.image_cache, src_name)
+
+                if not tgt_cached and not tgt_override_prepro:
+                    tgt_reg_image.read_reg_image()
+                    if self.cache_images:
+                        tgt_reg_image.cache_image_data(
+                            self.image_cache, tgt_name, check=False
+                        )
+                elif tgt_override_prepro:
+                    if tgt_override_prepro:
+                        tgt_reg_image._preprocessing = tgt_override_prepro
+                    tgt_reg_image.read_reg_image()
+                    if self.cache_images:
+                        src_reg_image.cache_image_data(
+                            self.image_cache,
+                            f"{tgt_name}-{src_name}-override",
+                            check=False,
+                        )
+                else:
+                    tgt_reg_image.load_from_cache(self.image_cache, tgt_name)
 
                 self._preprocessed_image_spacings.update(
                     {src_name: src_reg_image.reg_image.GetSpacing()}
                 )
-
                 self._preprocessed_image_spacings.update(
                     {tgt_name: tgt_reg_image.reg_image.GetSpacing()}
                 )
@@ -777,30 +707,6 @@ class WsiReg2D(object):
                 self._preprocessed_image_sizes.update(
                     {tgt_name: tgt_reg_image.reg_image.GetSize()}
                 )
-
-                if (
-                    tgt_original_size_transform is None
-                    and tgt_reg_image.original_size_transform is not None
-                ):
-                    tgt_original_size_transform = (
-                        tgt_reg_image.original_size_transform
-                    )
-
-                if self.cache_images is True:
-                    if reg_edge.get("override_prepro") is not None:
-                        if (
-                            reg_edge.get("override_prepro").get("source")
-                            is None
-                        ):
-                            self._cache_images(src_name, src_reg_image)
-                        if (
-                            reg_edge.get("override_prepro").get("target")
-                            is None
-                        ):
-                            self._cache_images(tgt_name, tgt_reg_image)
-                    else:
-                        self._cache_images(src_name, src_reg_image)
-                        self._cache_images(tgt_name, tgt_reg_image)
 
                 reg_params = reg_edge["params"]
 
@@ -826,10 +732,7 @@ class WsiReg2D(object):
 
                 reg_tforms = [sitk_pmap_to_dict(tf) for tf in reg_tforms]
 
-                if src_transforms is not None:
-                    initial_transforms = src_transforms[0]
-                else:
-                    initial_transforms = src_reg_image.pre_reg_transforms
+                initial_transforms = src_reg_image.pre_reg_transforms
 
                 if initial_transforms:
                     initial_transforms_rt = [
@@ -852,13 +755,12 @@ class WsiReg2D(object):
                 }
 
                 self.original_size_transforms.update(
-                    {tgt_name: tgt_original_size_transform}
+                    {tgt_name: tgt_reg_image.original_size_transform}
                 )
 
                 reg_edge["registered"] = True
 
         self.transformations = self.reg_graph_edges
-        # self.save_config(registered=True)
 
     @property
     def transformations(self):
@@ -946,9 +848,10 @@ class WsiReg2D(object):
             or im_data["preprocessing"].mask_bbox
         ):
 
-            _, im_initial_transforms, _, _ = self._check_cache_modality(
-                modality_key
+            im_initial_transforms = RegImage.load_orignal_size_transform(
+                self.image_cache, modality_key
             )
+
             if any(im_initial_transforms):
                 transformations = RegTransformSeq(
                     [RegTransform(t) for t in im_initial_transforms[0]],
@@ -958,8 +861,13 @@ class WsiReg2D(object):
                 )
 
         if to_original_size and self.original_size_transforms[modality_key]:
+
+            o_size_tform = self.original_size_transforms[modality_key]
+            if isinstance(o_size_tform, list):
+                o_size_tform = o_size_tform[0]
+
             orig_size_rt = RegTransformSeq(
-                RegTransform(self.original_size_transforms[modality_key]),
+                RegTransform(o_size_tform),
                 transform_seq_idx=[0],
             )
             if transformations:
@@ -1040,6 +948,9 @@ class WsiReg2D(object):
             original_size_transform = self.original_size_transforms[
                 final_modality
             ]
+            if isinstance(original_size_transform, list):
+                original_size_transform = original_size_transform[0]
+
             orig_size_rt = RegTransformSeq(
                 RegTransform(original_size_transform), transform_seq_idx=[0]
             )
@@ -1624,11 +1535,11 @@ class WsiReg2D(object):
 
 
 def main(
-    graph_configuration: Union[str,Path,WsiReg2D],
+    graph_configuration: Union[str, Path, WsiReg2D],
     write_images: bool = True,
     to_original_size: bool = False,
     transform_non_reg: bool = True,
-    remove_merged: bool = True
+    remove_merged: bool = True,
 ):
     def config_to_WsiReg2D(config_filepath):
         reg_config = parse_check_reg_config(config_filepath)
@@ -1663,8 +1574,8 @@ def main(
 
 
 if __name__ == "__main__":
-    import sys
     import argparse
+    import sys
 
     parser = argparse.ArgumentParser(
         description='Load Whole Slide Image 2D Registration Graph from configuration file'
@@ -1685,19 +1596,33 @@ if __name__ == "__main__":
     parser.add_argument('--write_im', dest='write_im', action='store_true')
     parser.add_argument('--no_write_im', dest='write_im', action='store_false')
 
-    parser.add_argument('--remove_merged', dest='remove_merged', action='store_true')
-    parser.add_argument('--write_merge_indiv', dest='remove_merged', action='store_false')
+    parser.add_argument(
+        '--remove_merged', dest='remove_merged', action='store_true'
+    )
+    parser.add_argument(
+        '--write_merge_indiv', dest='remove_merged', action='store_false'
+    )
 
-    parser.add_argument('--tform_non_reg', dest='transform_non_reg', action='store_true')
-    parser.add_argument('--no_tform_non_reg', dest='transform_non_reg', action='store_false')
+    parser.add_argument(
+        '--tform_non_reg', dest='transform_non_reg', action='store_true'
+    )
+    parser.add_argument(
+        '--no_tform_non_reg', dest='transform_non_reg', action='store_false'
+    )
 
-    parser.add_argument('--to_orig_size', dest='to_original_size', action='store_true')
-    parser.add_argument('--to_cropped', dest='to_original_size', action='store_false')
+    parser.add_argument(
+        '--to_orig_size', dest='to_original_size', action='store_true'
+    )
+    parser.add_argument(
+        '--to_cropped', dest='to_original_size', action='store_false'
+    )
 
-    parser.set_defaults(write_im=True,
-                        remove_merged=True,
-                        transform_non_reg=True,
-                        to_original_size=False)
+    parser.set_defaults(
+        write_im=True,
+        remove_merged=True,
+        transform_non_reg=True,
+        to_original_size=False,
+    )
 
     args = parser.parse_args()
     config_filepath = args.config_filepath
