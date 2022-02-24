@@ -19,6 +19,48 @@ def test_RegShapes_transform(complex_transform):
     assert np.array_equal(shape0["array"], shape0_tform["array"]) is False
 
 
+def test_RegShapes_shape_types_numpy():
+
+    points = np.random.randint(1, 100, (2, 20))
+    shape_data = []
+    for point in points.transpose():
+        shape_data.append(
+            {
+                "array": point,
+                "shape_type": 'point',
+                "shape_name": 'point',
+            }
+        )
+
+    ri = RegShapes(shape_data)
+    assert len(ri.shape_data_gj[0]["geometry"]["coordinates"]) == 2
+    assert ri.shape_data_gj[0]["geometry"]["type"] == "Point"
+
+    shape_data = [
+        {
+            "array": points,
+            "shape_type": 'multipoint',
+            "shape_name": 'multipoint',
+        }
+    ]
+
+    ri = RegShapes(shape_data)
+    assert len(ri.shape_data_gj[0]["geometry"]["coordinates"]) == 20
+    assert ri.shape_data_gj[0]["geometry"]["type"] == "MultiPoint"
+
+    shape_data = [
+        {
+            "array": points,
+            "shape_type": 'linestring',
+            "shape_name": 'linestring',
+        }
+    ]
+    ri = RegShapes(shape_data)
+
+    assert len(ri.shape_data_gj[0]["geometry"]["coordinates"]) == 20
+    assert ri.shape_data_gj[0]["geometry"]["type"] == "LineString"
+
+
 def test_RegShapes_drawmask():
     triangles = [
         np.array([[11, 13], [111, 113], [22, 246]]),
