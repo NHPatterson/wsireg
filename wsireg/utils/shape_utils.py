@@ -19,6 +19,14 @@ GJ_SHAPE_TYPE = {
     "multilinestring": geojson.MultiLineString,
     "linestring": geojson.LineString,
 }
+GJ_SHAPE_TYPE_NAME = {
+    "polygon": "Polygon",
+    "multipolygon": "MultiPolygon",
+    "point": "Point",
+    "multipoint": "MultiPoint",
+    "multilinestring": "MultiLineString",
+    "linestring": "LineString",
+}
 
 
 def gj_to_np(gj: dict):
@@ -130,11 +138,24 @@ def np_to_geojson(
     sh_type = shape_type.lower()
 
     gj_func = GJ_SHAPE_TYPE[sh_type]
+    if sh_type == "polygon":
+        np_array = np.vstack([np_array, np_array[0, :]])
+        geometry = gj_func([np_array.tolist()])
+    elif sh_type in ["multipoint", "linestring"]:
+        geometry = gj_func(np_array.transpose().tolist())
+    else:
+        geometry = gj_func(np_array.tolist())
 
     shape_gj = {
-        "geometry": gj_func(np_array.tolist()),
-        "properties": {"classification": {"name": shape_name}},
+        "type": "Feature",
+        "id": "annotation",
+        "geometry": geometry,
+        "properties": {
+            "classification": {"name": shape_name, "colorRGB": -1},
+            "isLocked": False,
+        },
     }
+
     shape_np = {
         "array": np_array,
         "shape_type": shape_type.lower(),
