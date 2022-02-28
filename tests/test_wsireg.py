@@ -1104,6 +1104,7 @@ def test_wsireg_run_reg_w_override(data_out_dir, disk_im_mch):
     assert not np.array_equal(or_mod2, pp_mod2)
     assert not np.array_equal(or_mod3, pp_mod3)
 
+
 @pytest.mark.usefixtures("disk_im_mch")
 def test_wsireg_run_reg_reload_from_cache(data_out_dir, disk_im_mch):
     img_fp1 = str(disk_im_mch)
@@ -1147,7 +1148,7 @@ def test_wsireg_run_reg_reload_from_cache(data_out_dir, disk_im_mch):
         0.65,
         channel_names=["test"],
         channel_colors=["red"],
-        preprocessing={"ch_indices":[1]}
+        preprocessing={"ch_indices": [1]},
     )
 
     wsi_reg.add_modality(
@@ -1156,7 +1157,7 @@ def test_wsireg_run_reg_reload_from_cache(data_out_dir, disk_im_mch):
         0.65,
         channel_names=["test"],
         channel_colors=["red"],
-        preprocessing={"ch_indices": [1]}
+        preprocessing={"ch_indices": [1]},
     )
 
     wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])

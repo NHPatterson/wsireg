@@ -29,6 +29,7 @@ from wsireg.utils.tform_utils import (
 
 class RegImage(ABC):
     """Base class for registration images"""
+
     _path: Union[str, Path]
 
     # image data
