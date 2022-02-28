@@ -28,6 +28,7 @@ from wsireg.utils.shape_utils import invert_nonrigid_transforms
 from wsireg.utils.tform_utils import identity_elx_transform
 from wsireg.writers.merge_ome_tiff_writer import MergeOmeTiffWriter
 from wsireg.writers.ome_tiff_writer import OmeTiffWriter
+from wsireg.writers.tiled_ome_tiff_writer import OmeTiffTiledWriter
 
 
 class WsiReg2D(object):
@@ -994,6 +995,9 @@ class WsiReg2D(object):
             file_writer == "ome.tiff-bytile"
             and ometiffwriter.reg_image.reader not in ["czi", "sitk"]
         ):
+            ometiffwriter = OmeTiffTiledWriter(
+                tfregimage, reg_transform_seq=transformations
+            )
             im_fp = ometiffwriter.write_image_by_tile(
                 output_path.stem,
                 output_dir=str(self.output_dir),
