@@ -1,0 +1,241 @@
+{
+ "initial-PAS-IMS-00": {
+  "Transform": [
+   "EulerTransform"
+  ],
+  "NumberOfParameters": [
+   "3"
+  ],
+  "TransformParameters": [
+   "-1.5707963267948966",
+   "584.0",
+   "-584.0"
+  ],
+  "InitialTransformParametersFileName": [
+   "NoInitialTransform"
+  ],
+  "HowToCombineTransforms": [
+   "Compose"
+  ],
+  "FixedImageDimension": [
+   "2"
+  ],
+  "MovingImageDimension": [
+   "2"
+  ],
+  "FixedInternalImagePixelType": [
+   "float"
+  ],
+  "MovingInternalImagePixelType": [
+   "float"
+  ],
+  "Size": [
+   "24320",
+   "26656"
+  ],
+  "Index": [
+   "0",
+   "0"
+  ],
+  "Spacing": [
+   "0.5",
+   "0.5"
+  ],
+  "Origin": [
+   "0.0000",
+   "0.0000"
+  ],
+  "Direction": [
+   "1.0000000000",
+   "0.0000000000",
+   "0.0000000000",
+   "1.0000000000"
+  ],
+  "UseDirectionCosines": [
+   "true"
+  ],
+  "CenterOfRotationPoint": [
+   "6079.75",
+   "6663.75"
+  ],
+  "ResampleInterpolator": [
+   "FinalNearestNeighborInterpolator"
+  ],
+  "Resampler": [
+   "DefaultResampler"
+  ],
+  "DefaultPixelValue": [
+   "0.000000"
+  ],
+  "ResultImageFormat": [
+   "mha"
+  ],
+  "ResultImagePixelType": [
+   "float"
+  ],
+  "CompressResultImage": [
+   "true"
+  ]
+ },
+ "000-to-preAF-IMS": [
+  {
+   "CenterOfRotationPoint": [
+    "6622.525000000001",
+    "7784.075"
+   ],
+   "CompressResultImage": [
+    "true"
+   ],
+   "DefaultPixelValue": [
+    "0"
+   ],
+   "Direction": [
+    "1",
+    "0",
+    "0",
+    "1"
+   ],
+   "FixedImageDimension": [
+    "2"
+   ],
+   "FixedInternalImagePixelType": [
+    "float"
+   ],
+   "HowToCombineTransforms": [
+    "Compose"
+   ],
+   "Index": [
+    "0",
+    "0"
+   ],
+   "InitialTransformParametersFileName": [
+    "NoInitialTransform"
+   ],
+   "MovingImageDimension": [
+    "2"
+   ],
+   "MovingInternalImagePixelType": [
+    "float"
+   ],
+   "NumberOfParameters": [
+    "3"
+   ],
+   "Origin": [
+    "0",
+    "0"
+   ],
+   "ResampleInterpolator": [
+    "FinalNearestNeighborInterpolator"
+   ],
+   "Resampler": [
+    "DefaultResampler"
+   ],
+   "ResultImageFormat": [
+    "mha"
+   ],
+   "ResultImagePixelType": [
+    "float"
+   ],
+   "Size": [
+    "20378",
+    "23952"
+   ],
+   "Spacing": [
+    "0.65",
+    "0.65"
+   ],
+   "Transform": [
+    "EulerTransform"
+   ],
+   "TransformParameters": [
+    "0.0034926198831690316",
+    "-160.1151060689675",
+    "-664.0867896964762"
+   ],
+   "UseDirectionCosines": [
+    "true"
+   ]
+  },
+  {
+   "CenterOfRotationPoint": [
+    "6462.409893931033",
+    "7119.988210303523"
+   ],
+   "CompressResultImage": [
+    "true"
+   ],
+   "DefaultPixelValue": [
+    "0"
+   ],
+   "Direction": [
+    "1",
+    "0",
+    "0",
+    "1"
+   ],
+   "FixedImageDimension": [
+    "2"
+   ],
+   "FixedInternalImagePixelType": [
+    "float"
+   ],
+   "HowToCombineTransforms": [
+    "Compose"
+   ],
+   "Index": [
+    "0",
+    "0"
+   ],
+   "InitialTransformParametersFileName": [
+    "0"
+   ],
+   "MovingImageDimension": [
+    "2"
+   ],
+   "MovingInternalImagePixelType": [
+    "float"
+   ],
+   "NumberOfParameters": [
+    "6"
+   ],
+   "Origin": [
+    "0",
+    "0"
+   ],
+   "ResampleInterpolator": [
+    "FinalNearestNeighborInterpolator"
+   ],
+   "Resampler": [
+    "DefaultResampler"
+   ],
+   "ResultImageFormat": [
+    "mha"
+   ],
+   "ResultImagePixelType": [
+    "float"
+   ],
+   "Size": [
+    "20378",
+    "10000"
+   ],
+   "Spacing": [
+    "0.65",
+    "0.65"
+   ],
+   "Transform": [
+    "AffineTransform"
+   ],
+   "TransformParameters": [
+    "1.0057492500010785",
+    "-0.0008786348503771977",
+    "0.0010317441145880376",
+    "1.006246371505665",
+    "0.42568457981766306",
+    "-0.5292939102915302"
+   ],
+   "UseDirectionCosines": [
+    "true"
+   ]
+  }
+ ]
+}
