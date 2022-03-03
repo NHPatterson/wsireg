@@ -10,7 +10,7 @@ import dask.array as da
 
 from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_images.merge_reg_image import MergeRegImage
-from wsireg.reg_transform_seq import RegTransformSeq
+from wsireg.reg_transforms.reg_transform_seq import RegTransformSeq
 from wsireg.writers.merge_ome_tiff_writer import MergeOmeTiffWriter
 from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 from wsireg.writers.tiled_ome_tiff_writer import OmeTiffTiledWriter

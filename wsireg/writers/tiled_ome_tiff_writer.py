@@ -13,7 +13,7 @@ from tifffile import TiffWriter
 from tiler import Tiler
 from tqdm import tqdm
 from wsireg.reg_images.reg_image import RegImage
-from wsireg.reg_transform_seq import RegTransformSeq
+from wsireg.reg_transforms.reg_transform_seq import RegTransformSeq
 from wsireg.utils.im_utils import (
     format_channel_names,
     get_pyramid_info,
@@ -67,22 +67,6 @@ class OmeTiffTiledWriter:
         Shape of zarr tiles going to disk temporarily
     moving_tile_padding: int
         Tile padding use at read in for interpolation
-    fixed_tile_positions: list of tuple of np.ndarray
-        List of tile positions on the fixed image in pixels
-        first np.ndarray is top-left x,y coordinate
-        second np.ndarray is bottom-right x,y coordinate
-    fixed_tile_positions_phys: list of np.ndarray
-        List of tile positions on the fixed image in physical coordinate space
-        first np.ndarray is top-left x,y coordinate
-        second np.ndarray is bottom-right x,y coordinate
-    moving_tile_positions: list of tuple of np.ndarray
-        Transformed coordinates of fixed tile positions to moving, pixels
-        first np.ndarray is top-left x,y coordinate
-        second np.ndarray is bottom-right x,y coordinate
-    moving_tile_positions_phys: list of np.ndarray
-        Transformed coordinates of fixed tile positions to moving, physical
-        first np.ndarray is top-left x,y coordinate
-        second np.ndarray is bottom-right x,y coordinate
     """
 
     def __init__(
@@ -113,26 +97,39 @@ class OmeTiffTiledWriter:
 
     @property
     def fixed_tile_positions(self) -> List[Tuple[int, int, int, int]]:
+        """List of tile positions on the fixed image in pixels
+        first np.ndarray is top-left x,y coordinate
+        second np.ndarray is bottom-right x,y coordinate"""
         return self._fixed_tile_positions
 
     @property
     def fixed_tile_positions_phys(
         self,
     ) -> List[Tuple[float, float, float, float]]:
+        """List of tile positions on the fixed image in physical coordinate space
+        first np.ndarray is top-left x,y coordinate
+        second np.ndarray is bottom-right x,y coordinate"""
         return self._fixed_tile_positions_phys
 
     @property
     def moving_tile_positions(self) -> List[Tuple[int, int, int, int]]:
+        """Transformed coordinates of fixed tile positions to moving, pixels
+        first np.ndarray is top-left x,y coordinate
+        second np.ndarray is bottom-right x,y coordinate"""
         return self._moving_tile_positions
 
     @property
     def moving_tile_positions_phys(
         self,
     ) -> List[Tuple[float, float, float, float]]:
+        """Transformed coordinates of fixed tile positions to moving, physical
+        first np.ndarray is top-left x,y coordinate
+        second np.ndarray is bottom-right x,y coordinate"""
         return self._moving_tile_positions_phys
 
     @property
-    def tiler(self):
+    def tiler(self) -> Tiler:
+        """Tiler instance to manage fixed output tiling from image shape."""
         return self._tiler
 
     def _create_tiler(self):
@@ -611,14 +608,14 @@ class OmeTiffTiledWriter:
 
     def write_image_by_tile(
         self,
-        image_name,
-        output_dir="",
-        write_pyramid=True,
-        compression="default",
-        max_workers: Optional[int] = None,
+        image_name: str,
+        output_dir: Union[Path, str] = "",
+        write_pyramid: bool = True,
+        compression: Optional[str] = "default",
         zarr_temp_dir: Optional[Union[str, Path]] = None,
-    ):
+    ) -> str:
         """
+        Write images to OME-TIFF from temp zarr store with data.
 
         Parameters
         ----------
@@ -631,10 +628,6 @@ class OmeTiffTiledWriter:
         compression: str
             Use compression. "default" will be lossless "deflate" for non-rgb images
             and "jpeg" for RGB images
-        max_workers: int
-            Number of workers to use in multiprocessing write to zarr
-            If None, will use max detected
-            If 1, will perform single threaded
         zarr_temp_dir: Path or str
             Directory to store the temporary zarr data
             (mostly used for debugging)
@@ -774,16 +767,37 @@ class OmeTiffTiledWriter:
 
 def compute_sub_res(
     zarray: da.Array,
-    ds_factor: int,
+    pyr_level: int,
     tile_size: int,
     is_rgb: bool,
     im_dtype: np.dtype,
 ) -> da.Array:
+    """
+    Compute factor-of-2 sub-resolutions from dask array for pyramidalization using dask.
+
+    Parameters
+    ----------
+    zarray: da.Array
+        Dask array to be downsampled
+    pyr_level: int
+        level of the pyramid. 0 = base, 1 = 2x downsampled, 2=4x downsampled...
+    tile_size: int
+        Size of tiles in dask array after downsampling
+    is_rgb: bool
+        whether dask array is RGB interleaved
+    im_dtype: np.dtype
+        dtype of the output da.Array
+
+    Returns
+    -------
+    resampled_zarray_subres: da.Array
+        Dask array (unprocessed) to be written
+    """
     if is_rgb:
-        resampling_axis = {0: 2**ds_factor, 1: 2**ds_factor, 2: 1}
+        resampling_axis = {0: 2**pyr_level, 1: 2**pyr_level, 2: 1}
         tiling = (tile_size, tile_size, 3)
     else:
-        resampling_axis = {0: 1, 1: 2**ds_factor, 2: 2**ds_factor}
+        resampling_axis = {0: 1, 1: 2**pyr_level, 2: 2**pyr_level}
         tiling = (1, tile_size, tile_size)
 
     resampled_zarray_subres = da.coarsen(
@@ -799,5 +813,6 @@ def compute_sub_res(
 
 
 def random_str() -> str:
+    """Get a random string to store the zarr array"""
     letters = string.ascii_lowercase
     return ''.join(random.choice(letters) for _ in range(10))

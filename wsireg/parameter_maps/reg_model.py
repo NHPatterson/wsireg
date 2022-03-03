@@ -46,7 +46,7 @@ def _read_elastix_parameter_file(
     return parameters
 
 
-class RegModelMeta(EnumMeta):
+class _RegModelMeta(EnumMeta):
     def __getitem__(self, name):
         try:
             return super().__getitem__(name)
@@ -61,7 +61,12 @@ class RegModelMeta(EnumMeta):
                 )
 
 
-class RegModel(dict, Enum, metaclass=RegModelMeta):
+class RegModel(dict, Enum, metaclass=_RegModelMeta):
+    """
+    Default registration parameters. Can also pass a filepath of elastix transforms and these
+    will be used.
+    """
+
     rigid: Dict[str, List[str]] = DEFAULT_REG_PARAM_MAPS["rigid"]
     affine: Dict[str, List[str]] = DEFAULT_REG_PARAM_MAPS["affine"]
     similarity: Dict[str, List[str]] = DEFAULT_REG_PARAM_MAPS["similarity"]

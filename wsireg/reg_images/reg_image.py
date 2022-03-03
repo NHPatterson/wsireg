@@ -68,63 +68,91 @@ class RegImage(ABC):
 
     @property
     def path(self) -> Union[str, Path]:
+        """Path to image file."""
         return self._path
 
     @property
     def shape(self) -> Tuple[int, int, int]:
+        """Shape of image file (C,Y,X) or (Y,X,C) if RGB"""
         return self._shape
 
     @property
     def n_ch(self) -> int:
+        """Number of channels in image."""
         return self._n_ch
 
     @property
     def im_dtype(self) -> np.dtype:
+        """Data type of image"""
         return self._im_dtype
 
     @property
     def is_rgb(self) -> bool:
+        """Whether image is RGB or not."""
         return self._is_rgb
 
     @property
     def is_interleaved(self) -> bool:
+        """Whether RGB image is interleaved or not."""
         return self._is_interleaved
 
     @property
     def channel_axis(self) -> int:
+        """Axis of the channel dimension."""
         return self._channel_axis
 
     @property
     def image_res(self) -> Union[float, int]:
+        """Spacing of image pixels (only isotropic right now)"""
         return self._image_res
 
     @property
     def channel_names(self) -> List[str]:
+        """Name of the channels of the image."""
         return self._channel_names
 
     @property
     def channel_colors(self) -> List[str]:
+        """Colors of the channels."""
         return self._channel_colors
 
     @property
     def dask_image(self) -> da.Array:
+        """Dask representation of the image."""
         return self._dask_image
 
     @property
     def mask(self) -> Optional[Union[sitk.Image, itk.Image]]:
+        """Mask of the image."""
         return self._mask
 
     @property
     def reg_image(self) -> Union[sitk.Image, itk.Image]:
+        """Preprocessed version of image for registration"""
         return self._reg_image
 
     @property
     def preprocessing(self) -> Optional[ImagePreproParams]:
+        """Preprocessing params to make `reg_image`"""
         return self._preprocessing
 
     def read_mask(
         self, mask: Union[str, Path, sitk.Image, np.ndarray]
     ) -> sitk.Image:
+        """
+        Read a mask from geoJSON or a binary image.
+        Parameters
+        ----------
+        mask: path to image/geoJSON or image
+            Data to be used to make the mask, can be a path to a geoJSON
+            or an image file, or a if an np.ndarray, used directly.
+
+        Returns
+        -------
+        mask: sitk.Image
+            Mask image with spacing/size of `reg_image`
+
+        """
         if isinstance(mask, np.ndarray):
             mask = sitk.GetImageFromArray(mask)
         elif isinstance(mask, (str, Path)):
@@ -145,7 +173,21 @@ class RegImage(ABC):
     def preprocess_reg_image_intensity(
         self, image: sitk.Image, preprocessing: ImagePreproParams
     ) -> sitk.Image:
-        """Preprocess intensity features to single channel image"""
+        """
+        Preprocess image intensity data to single channel image.
+
+        Parameters
+        ----------
+        image: sitk.Image
+            reg_image to be preprocessed
+        preprocessing: ImagePreproParams
+            Parameters of the preprocessing
+
+        Returns
+        -------
+        image: sitk.Image
+            Preprocessed single-channel image
+        """
 
         if preprocessing.image_type.value == "FL":
             preprocessing.invert_intensity = False
@@ -179,7 +221,25 @@ class RegImage(ABC):
         preprocessing: ImagePreproParams,
         imported_transforms=None,
     ) -> Tuple[sitk.Image, List[Dict]]:
-        """Perform spatial transformations"""
+        """
+        Spatial preprocessing of the reg_image.
+
+        Parameters
+        ----------
+        image: sitk.Image
+            reg_image to be preprocessed
+        preprocessing: ImagePreproParams
+            Spatial preprocessing parameters
+        imported_transforms:
+            Not implemented yet..
+
+        Returns
+        -------
+        image: sitk.Image
+            Spatially preprcessed image ready for registration
+        transforms: list of transforms
+            List of pre-initial transformations
+        """
 
         transforms = []
         original_size = image.GetSize()
@@ -295,6 +355,15 @@ class RegImage(ABC):
         return image, transforms
 
     def preprocess_image(self, reg_image: sitk.Image) -> None:
+        """
+        Run full intensity and spatial preprocessing. Creates the `reg_image` attribute
+
+        Parameters
+        ----------
+        reg_image: sitk.Image
+            Raw form of image to be preprocessed
+
+        """
 
         reg_image = self.preprocess_reg_image_intensity(
             reg_image, self.preprocessing
@@ -322,6 +391,15 @@ class RegImage(ABC):
         self._reg_image = reg_image
 
     def reg_image_sitk_to_itk(self, cast_to_float32: bool = True) -> None:
+        """
+        Convert SimpleITK to ITK for use in ITKElastix.
+
+        Parameters
+        ----------
+        cast_to_float32: bool
+            Whether to make image float32 for ITK, needs to be true for registration.
+
+        """
         origin = self._reg_image.GetOrigin()
         spacing = self._reg_image.GetSpacing()
         # direction = image.GetDirection()
@@ -363,6 +441,7 @@ class RegImage(ABC):
 
     @staticmethod
     def _get_all_cache_data_fps(output_dir: Union[str, Path], image_tag: str):
+        """Get cached directories"""
         output_dir = Path(output_dir)
 
         out_image_fp = output_dir / f"{image_tag}_prepro.tiff"
@@ -382,6 +461,20 @@ class RegImage(ABC):
     def check_cache_preprocessing(
         self, output_dir: Union[str, Path], image_tag: str
     ):
+        """
+
+        Parameters
+        ----------
+        output_dir: path
+            Where cached data is on disk
+        image_tag:
+            Tag of the image modality
+
+        Returns
+        -------
+        prepro_flag: bool
+            Whether a preprocessed version of the image exists in the cache.
+        """
         (
             out_image_fp,
             out_params_fp,
@@ -398,7 +491,19 @@ class RegImage(ABC):
 
     def cache_image_data(
         self, output_dir: Union[str, Path], image_tag: str, check: bool = True
-    ):
+    ) -> None:
+        """
+        Save preprocessed image data to a cache in WsiReg2D.
+        Parameters
+        ----------
+        output_dir: path
+            Where cached data is on disk
+        image_tag:
+            Tag of the image modality
+        check: bool
+            Whether to check for existence of data
+
+        """
 
         (
             out_image_fp,
@@ -444,6 +549,20 @@ class RegImage(ABC):
                 )
 
     def load_from_cache(self, output_dir: Union[str, Path], image_tag: str):
+        """
+        Read in preprocessed data from the cache folder.
+        Parameters
+        ----------
+        output_dir: path
+            Where cached data is on disk
+        image_tag:
+            Tag of the image modality
+
+        Returns
+        -------
+        from_cache_flag: bool
+            Whether data was read from cache
+        """
         (
             image_fp,
             params_fp,
@@ -475,6 +594,22 @@ class RegImage(ABC):
     def load_orignal_size_transform(
         output_dir: Union[str, Path], image_tag: str
     ):
+        """
+        Read original size transform from cache.
+
+        Parameters
+        ----------
+        output_dir: path
+            Where cached data is on disk
+        image_tag:
+            Tag of the image modality
+
+        Returns
+        -------
+        osize_tform: list
+            Original size transform or empty
+
+        """
         (
             _,
             _,

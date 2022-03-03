@@ -1,5 +1,5 @@
 from warnings import warn
-
+from typing import Optional
 import numpy as np
 import SimpleITK as sitk
 
@@ -7,9 +7,46 @@ from wsireg.utils.tform_conversion import convert_to_itk
 
 
 class RegTransform:
+    """Container for elastix transform that manages inversion and other metadata.
+    Converts elastix transformation dict to it's SimpleITK representation
+
+    Attributes
+    ----------
+    elastix_transform: dict
+        elastix transform stored in a python dict
+    itk_transform: sitk.Transform
+        elastix transform in SimpleITK container
+    output_spacing: list of float
+        Spacing of the targeted image during registration
+    output_size: list of int
+        Size of the targeted image during registration
+    output_direction: list of float
+        Direction of the targeted image during registration (not relevant for 2D applications)
+    output_origin: list of float
+        Origin of the targeted image during registration
+    resampler_interpolator: str
+        elastix interpolator setting for resampling the image
+    is_linear: bool
+        Whether the given transform is linear or non-linear (non-rigid)
+    inverse_transform: sitk.Transform or None
+        Inverse of the itk transform used for transforming from moving to fixed space
+        Only calculated for non-rigid transforms when called by `compute_inverse_nonlinear`
+        as the process is quite memory and computationally intensive
+
+    """
+
     def __init__(self, elastix_transform):
-        self.elastix_transform = elastix_transform
-        self.itk_transform = convert_to_itk(self.elastix_transform)
+        """
+
+        Parameters
+        ----------
+        elastix_transform: dict
+            elastix transform stored in a python dict
+        """
+        self.elastix_transform: dict = elastix_transform
+        self.itk_transform: sitk.Transform = convert_to_itk(
+            self.elastix_transform
+        )
 
         self.output_spacing = [
             float(p) for p in self.elastix_transform.get("Spacing")
@@ -45,7 +82,8 @@ class RegTransform:
         else:
             self.inverse_transform = None
 
-    def compute_inverse_nonlinear(self):
+    def compute_inverse_nonlinear(self) -> None:
+        """Compute the inverse of a BSpline transform using ITK"""
 
         tform_to_dfield = sitk.TransformToDisplacementFieldFilter()
         tform_to_dfield.SetOutputSpacing(self.output_spacing)
@@ -63,11 +101,30 @@ class RegTransform:
 
     def as_np_matrix(
         self,
-        use_np_ordering=False,
-        n_dim=3,
-        use_inverse=False,
-        to_px_idx=False,
-    ):
+        use_np_ordering: bool = False,
+        n_dim: int = 3,
+        use_inverse: bool = False,
+        to_px_idx: bool = False,
+    ) -> Optional[np.ndarray]:
+        """
+        Creates a affine transform matrix as np.ndarray whether the center of rotation
+        is 0,0. Optionally in physical or pixel coordinates.
+        Parameters
+        ----------
+        use_np_ordering: bool
+            Use numpy ordering of yx (napari-compatible)
+        n_dim: int
+            Number of dimensions in the affine matrix, using 3 creates a 3x3 array
+        use_inverse: bool
+            return the inverse affine transformation
+        to_px_idx: bool
+            return the transformation matrix specified in pixels or physical (microns)
+
+        Returns
+        -------
+        full_matrix: np.ndarray
+            Affine transformation matrix
+        """
         if self.is_linear:
             if use_np_ordering is True:
                 order = slice(None, None, -1)

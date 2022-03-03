@@ -1,11 +1,11 @@
 import json
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Tuple, Union, List, Dict, Any
 
 import cv2
 import numpy as np
 
-from wsireg.reg_transform_seq import RegTransformSeq
+from wsireg.reg_transforms.reg_transform_seq import RegTransformSeq
 from wsireg.utils.shape_utils import (
     get_int_dtype,
     insert_transformed_pts_gj,
@@ -37,6 +37,27 @@ class RegShapes:
         usually generated on-the-fly when points are transformed from wsireg transformation data
     kwargs
         keyword arguments passed to wsireg.utils.tform_utils.shape_reader (shape_name, shape_type)
+
+    Attributes
+    ----------
+    shape_data: list of shape data
+        list of np.ndarrays of shape data
+        str - file path to GeoJSON file containing shape data
+        np.ndarray - single shape
+    shape_data_gj: list of geoJSON shape data
+        shape data in geoJSON dicts
+    transformed_shape_data: list of shape data
+        numpy shape data that as been tranformed
+    itk_point_transforms: list
+        list of ITK point transforms, appropriately inverted where non-linear.
+        Usually generated on-the-fly when points are transformed from wsireg transformation data
+    source_res:float
+        isotropic image resolution of the source image in the registration stack,
+        i.e., resolution of the image to which shape data is associated
+    target_res:float
+        isotropic image resolution of the target image in the registration stack
+        usually generated on-the-fly when points are transformed from wsireg transformation data
+
     """
 
     def __init__(
@@ -92,21 +113,36 @@ class RegShapes:
             list of np.ndarrays of shape data
             str - file path to GeoJSON file containing shape data
             np.ndarray - single shape
+        kwargs
+            keyword arguments passed to wsireg.utils.tform_utils.shape_reader (shape_name, shape_type)
         """
         gj_shapes, np_shapes = shape_reader(shape_data, **kwargs)
 
         self.update_shapes(np_shapes)
         self.update_shapes_gj(gj_shapes)
 
-    def update_shapes(self, imported_shapes):
+    def update_shapes(
+        self, imported_shapes: List[Dict[str, Union[np.ndarray, str]]]
+    ):
         """
         Extend list of shape data with new shape data
+
+        Parameters
+        ----------
+        imported_shapes: list of shape data
+            Shapes to add in numpy format
+
         """
         self.shape_data.extend(imported_shapes)
 
-    def update_shapes_gj(self, imported_shapes):
+    def update_shapes_gj(self, imported_shapes: List[Dict[Any, Any]]):
         """
-        extend list of shape data in GeoJSON format and re-tabulate shape meta data
+        Extend list of shape data with new shape data in geoJSON.
+
+        Parameters
+        ----------
+        imported_shapes: list of shape data
+            Shapes to add in geoJSON format
         """
         self.shape_data_gj.extend(imported_shapes)
 
@@ -119,13 +155,13 @@ class RegShapes:
             for sh in self.shape_data_gj
         ]
 
-    def scale_shapes(self, scale_factor):
+    def scale_shapes(self, scale_factor: Union[int, float]):
         """
-        scale coordinates of list of shape data by scale_factor
+        Scale coordinates of list of shape data by scale_factor
 
         Parameters
         ----------
-        scale_factor: float
+        scale_factor: float, int
             isotropic scaling factor for the coordinates
         """
         self.shape_data = [
@@ -136,11 +172,11 @@ class RegShapes:
     def transform_shapes(
         self,
         transformations: Union[str, Path, dict, RegTransformSeq],
-        px_idx=True,
-        output_idx=True,
+        px_idx: bool = True,
+        output_idx: bool = True,
     ):
         """
-        transform shapes using transformations data from wsireg
+        Transform shapes using transformations data from wsireg
 
         Parameters
         ----------
@@ -171,7 +207,9 @@ class RegShapes:
             target_res=transformations_seq.output_spacing[0],
         )
 
-    def save_shape_data(self, output_fp, transformed=True):
+    def save_shape_data(
+        self, output_fp: Union[str, Path], transformed: bool = True
+    ) -> str:
         """
         Save shape file to GeoJSON on disk.
 
@@ -181,6 +219,11 @@ class RegShapes:
             path to the .json file where shape data will be saved
         transformed:bool
             save the transformed shape data or shape data as currently help in memory
+
+        Returns
+        -------
+        output_fp: str
+            Path to the saved file
         """
         if transformed is True:
             # updated GeoJSON with transformed points
@@ -198,13 +241,33 @@ class RegShapes:
             ),
             indent=1,
         )
+        return str(output_fp)
 
     def draw_mask(
         self,
         output_size: Tuple[int, int],
         transformed: bool = False,
         labels: bool = False,
-    ):
+    ) -> np.ndarray:
+        """
+        Draw a binary or label mask using shape data.
+
+        Parameters
+        ----------
+        output_size: tuple of int
+            size of mask in in tuple(x,y)
+        transformed: bool
+            Whether to write transformed shapes to mask or original shapes
+        labels: bool
+            Whether to write each mask instance as a label (1-n_shapes)
+            or to write all as binary (255)
+
+        Returns
+        -------
+        mask: np.ndarray
+            Drawn mask at set output size
+
+        """
         if labels:
             im_dtype = get_int_dtype(self.n_shapes)
         else:

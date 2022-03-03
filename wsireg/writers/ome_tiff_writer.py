@@ -7,7 +7,7 @@ import SimpleITK as sitk
 from tifffile import TiffWriter
 
 from wsireg.reg_images.reg_image import RegImage
-from wsireg.reg_transform_seq import RegTransformSeq
+from wsireg.reg_transforms.reg_transform_seq import RegTransformSeq
 from wsireg.utils.im_utils import (
     format_channel_names,
     get_pyramid_info,
@@ -16,6 +16,7 @@ from wsireg.utils.im_utils import (
 
 
 class OmeTiffWriter:
+
     x_size: Optional[int] = None
     y_size: Optional[int] = None
     y_spacing: Optional[Union[int, float]] = None
@@ -33,17 +34,55 @@ class OmeTiffWriter:
         reg_image: RegImage,
         reg_transform_seq: Optional[RegTransformSeq] = None,
     ):
+        """
+        Class for managing writing images to OME-TIFF.
+
+        Parameters
+        ----------
+        reg_image: RegImage
+            RegImage to be transformed
+        reg_transform_seq: RegTransformSeq or None
+            Registration transformation sequence from wsireg to transform image
+
+        Attibutes
+        ---------
+        x_size: int
+            Size of the output image after transformation in x
+        y_size: int
+            Size of the output image after transformation in y
+        y_spacing: float
+            Pixel spacing in microns after transformation in y
+        x_spacing: float
+            Pixel spacing in microns after transformation in x
+        tile_size: int
+            Size of tiles to be written
+        pyr_levels: list of tuples of int:
+            Size of downsampled images in pyramid
+        n_pyr_levels: int
+            Number of downsamples in pyramid
+        PhysicalSizeY: float
+            physical size of image in micron for OME-TIFF in Y
+        PhysicalSizeX: float
+            physical size of image in micron for OME-TIFF in X
+        subifds: int
+            Number of sub-resolutions for pyramidal OME-TIFF
+        compression: str
+            tifffile string to pass to compression argument, defaults to "deflate" for minisblack
+            and "jpeg" for RGB type images
+
+        """
         self.reg_image = reg_image
         self.reg_transform_seq = reg_transform_seq
 
     def _prepare_image_info(
         self,
-        image_name,
+        image_name: str,
         reg_transform_seq: Optional[RegTransformSeq] = None,
-        write_pyramid=True,
-        tile_size=512,
-        compression="default",
-    ):
+        write_pyramid: bool = True,
+        tile_size: int = 512,
+        compression: Optional[str] = "default",
+    ) -> None:
+        """Get image info and OME-XML"""
 
         if reg_transform_seq:
             self.x_size, self.y_size = reg_transform_seq.output_size
@@ -104,12 +143,41 @@ class OmeTiffWriter:
 
     def write_image_by_plane(
         self,
-        image_name,
-        output_dir="",
-        write_pyramid=True,
-        tile_size=512,
-        compression="default",
-    ):
+        image_name: str,
+        output_dir: Union[Path, str] = "",
+        write_pyramid: bool = True,
+        tile_size: int = 512,
+        compression: Optional[str] = "default",
+    ) -> str:
+        """
+        Write OME-TIFF image plane-by-plane to disk. WsiReg compatible RegImages all
+        have methods to read an image channel-by-channel, thus each channel is read, transformed, and written to
+        reduce memory during write.
+        RGB images may run large memory footprints as they are interleaved before write, for RGB images,
+        using the `OmeTiledTiffWriter` is recommended.
+
+        Parameters
+        ----------
+        image_name: str
+            Name to be written WITHOUT extension
+            for example if image_name = "cool_image" the file
+            would be "cool_image.ome.tiff"
+        output_dir: Path or str
+            Directory where the image will be saved
+        write_pyramid: bool
+            Whether to write the OME-TIFF with sub-resolutions or not
+        tile_size: int
+            What size to write OME-TIFF tiles to disk
+        compression: str
+            tifffile string to pass to compression argument, defaults to "deflate" for minisblack
+            and "jpeg" for RGB type images
+
+        Returns
+        -------
+        output_file_name: str
+            File path to the written OME-TIFF
+
+        """
 
         output_file_name = str(Path(output_dir) / f"{image_name}.ome.tiff")
         self._prepare_image_info(
