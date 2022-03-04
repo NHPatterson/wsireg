@@ -1107,7 +1107,7 @@ class WsiReg2D(object):
         )
 
         merge_ometiffwriter = MergeOmeTiffWriter(
-            merge_regimage, reg_seq_transforms=transformations
+            merge_regimage, reg_transform_seqs=transformations
         )
 
         im_fp = merge_ometiffwriter.merge_write_image_by_plane(

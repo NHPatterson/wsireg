@@ -141,6 +141,7 @@ class RegImage(ABC):
     ) -> sitk.Image:
         """
         Read a mask from geoJSON or a binary image.
+
         Parameters
         ----------
         mask: path to image/geoJSON or image
@@ -151,7 +152,6 @@ class RegImage(ABC):
         -------
         mask: sitk.Image
             Mask image with spacing/size of `reg_image`
-
         """
         if isinstance(mask, np.ndarray):
             mask = sitk.GetImageFromArray(mask)

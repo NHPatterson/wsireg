@@ -41,6 +41,11 @@ class NumpyRegImage(RegImage):
 
         self._n_ch = self._shape[2] if self._is_rgb else self._shape[0]
 
+        rechunk_size = (
+            (2048, 2048, self.n_ch) if self.is_rgb else (self.n_ch, 2048, 2048)
+        )
+        self._dask_image = self._dask_image.rechunk(rechunk_size)
+
         if mask is not None:
             self._mask = self.read_mask(mask)
 

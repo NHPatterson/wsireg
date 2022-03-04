@@ -92,6 +92,7 @@ class OmeTiffTiledWriter:
         self.reg_transform_seq: RegTransformSeq = reg_transform_seq
         self.tile_shape = (tile_size, tile_size)
         self.zarr_tile_shape = (zarr_tile_size, zarr_tile_size)
+        self._check_dask_array_chunk_sizes(self.reg_image.dask_image)
         self.moving_tile_padding = moving_tile_padding
         self._build_transformation_tiles()
 
@@ -140,6 +141,23 @@ class OmeTiffTiledWriter:
             overlap=0,
             mode="irregular",
         )
+
+    def _check_dask_array_chunk_sizes(self, dask_image: da.Array) -> None:
+        """Check if dask image has an acceptable chunk-size for tiled writing."""
+        yx_chunks = (
+            dask_image.chunksize[:2]
+            if self.reg_image.is_rgb
+            else dask_image.chunksize[1:]
+        )
+
+        if np.any(np.asarray(yx_chunks) > np.asarray(self.zarr_tile_shape)):
+            raise ValueError(
+                f"Dask image chunksize for image {str(self.reg_image.path)} "
+                "is too large for tiled writing and effectively memory use is not "
+                "compared to plane-by-plane writing."
+            )
+
+        return
 
     def _build_transformation_tiles(self):
         """Method to reinitialize tiler if there are changes."""

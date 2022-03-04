@@ -68,6 +68,11 @@ class SitkRegImage(RegImage):
             sitk.GetArrayFromImage(sitk.ReadImage(self._path))
         )
 
+        rechunk_size = (
+            (2048, 2048, self.n_ch) if self.is_rgb else (self.n_ch, 2048, 2048)
+        )
+        self._dask_image = self._dask_image.rechunk(rechunk_size)
+
     def read_single_channel(self, channel_idx: int):
         if channel_idx > (self.n_ch - 1):
             warnings.warn(
