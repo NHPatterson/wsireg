@@ -54,6 +54,9 @@ class SitkRegImage(RegImage):
         return im_dims, im_dtype
 
     def read_reg_image(self):
+        """
+        Read and preprocess the image for registration.
+        """
         reg_image = sitk.ReadImage(self._path)
 
         if self.preprocessing.as_uint8 is True and reg_image.GetPixelID() != 1:
@@ -74,6 +77,18 @@ class SitkRegImage(RegImage):
         self._dask_image = self._dask_image.rechunk(rechunk_size)
 
     def read_single_channel(self, channel_idx: int):
+        """
+        Read in a single channel for transformation by plane.
+        Parameters
+        ----------
+        channel_idx: int
+            Index of the channel to be read
+
+        Returns
+        -------
+        image: np.ndarray
+            Numpy array of the selected channel to be read
+        """
         if channel_idx > (self.n_ch - 1):
             warnings.warn(
                 "channel_idx exceeds number of channels, reading channel at channel_idx == 0"

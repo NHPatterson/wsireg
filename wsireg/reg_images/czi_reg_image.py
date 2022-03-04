@@ -99,6 +99,11 @@ class CziRegImage(RegImage):
         return np.expand_dims(np.squeeze(image), axis=0)
 
     def read_reg_image(self):
+        """
+        Read and preprocess the image for registration.
+        For the Zeiss CZI reader, this involves grayscaling RGB on read
+        or reading only a subset of the channel images.
+        """
         if self.is_rgb:
             reg_image = self.czi.sub_asarray_rgb(greyscale=True)
         else:
@@ -113,6 +118,18 @@ class CziRegImage(RegImage):
         self.preprocess_image(reg_image)
 
     def read_single_channel(self, channel_idx: int):
+        """
+        Read in a single channel for transformation by plane.
+        Parameters
+        ----------
+        channel_idx: int
+            Index of the channel to be read
+
+        Returns
+        -------
+        image: np.ndarray
+            Numpy array of the selected channel to be read
+        """
         if channel_idx > (self.n_ch - 1):
             warnings.warn(
                 "channel_idx exceeds number of channels, reading channel at channel_idx == 0"
