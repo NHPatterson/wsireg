@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Union, Optional, List
 import numpy as np
+import dask.array as da
+import zarr
 from wsireg.utils.im_utils import ARRAYLIKE_CLASSES, TIFFFILE_EXTS
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
 from . import CziRegImage  # AICSRegImage,
@@ -8,7 +10,7 @@ from . import NumpyRegImage, SitkRegImage, TiffFileRegImage
 
 
 def reg_image_loader(
-    image: Union[ARRAYLIKE_CLASSES, str, Path],
+    image: Union[np.ndarray, da.Array, zarr.Array, str, Path],
     image_res: Union[int, float],
     mask: Optional[Union[np.ndarray, str, Path]] = None,
     pre_reg_transforms: Optional[dict] = None,
