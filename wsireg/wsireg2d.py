@@ -1664,7 +1664,7 @@ if __name__ == "__main__":
         file_writer = "ome.tiff"
     else:
         file_writer = args.fw
-    print(args)
+
     main(
         config_filepath,
         write_images=args.write_im,

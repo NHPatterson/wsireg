@@ -533,6 +533,7 @@ class RegImage(ABC):
                     )
                 ),
                 open(out_params_fp, "w"),
+                cls=NpEncoder,
             )
             json.dump(self.pre_reg_transforms, open(out_init_tform_fp, "w"))
 
@@ -622,3 +623,14 @@ class RegImage(ABC):
             return [json.load(open(init_tform_fp, "r"))]
         else:
             return []
+
+
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NpEncoder, self).default(obj)
