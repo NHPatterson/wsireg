@@ -17,7 +17,7 @@ def reg_image_loader(
     preprocessing: Optional[ImagePreproParams] = None,
     channel_names: Optional[List[str]] = None,
     channel_colors: Optional[List[str]] = None,
-)-> Union[TiffFileRegImage, SitkRegImage, NumpyRegImage, CziRegImage]:
+) -> Union[TiffFileRegImage, SitkRegImage, NumpyRegImage, CziRegImage]:
     """
     Convenience function to read in images. Determines the correct reader.
 
