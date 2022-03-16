@@ -7,12 +7,12 @@ Welcome to wsireg's documentation!
 
    readme
    installation
+   image
    usage
-   modules
    contributing
    authors
    history
-   modules/index
+   modules
 
 Indices and tables
 ==================

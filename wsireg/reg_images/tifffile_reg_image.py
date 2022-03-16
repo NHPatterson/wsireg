@@ -114,6 +114,9 @@ class TiffFileRegImage(RegImage):
         return dask_image
 
     def read_reg_image(self):
+        """
+        Read and preprocess the image for registration.
+        """
         reg_image = self._dask_image
         reg_image = preprocess_dask_array(reg_image, self.preprocessing)
 
@@ -128,6 +131,18 @@ class TiffFileRegImage(RegImage):
         self.preprocess_image(reg_image)
 
     def read_single_channel(self, channel_idx: int):
+        """
+        Read in a single channel for transformation by plane.
+        Parameters
+        ----------
+        channel_idx: int
+            Index of the channel to be read
+
+        Returns
+        -------
+        image: np.ndarray
+            Numpy array of the selected channel to be read
+        """
         if channel_idx > (self.n_ch - 1):
             warnings.warn(
                 "channel_idx exceeds number of channels, reading channel at channel_idx == 0"

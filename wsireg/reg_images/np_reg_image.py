@@ -41,6 +41,11 @@ class NumpyRegImage(RegImage):
 
         self._n_ch = self._shape[2] if self._is_rgb else self._shape[0]
 
+        rechunk_size = (
+            (2048, 2048, self.n_ch) if self.is_rgb else (self.n_ch, 2048, 2048)
+        )
+        self._dask_image = self._dask_image.rechunk(rechunk_size)
+
         if mask is not None:
             self._mask = self.read_mask(mask)
 
@@ -56,6 +61,9 @@ class NumpyRegImage(RegImage):
         return im_dims, im_dtype
 
     def read_reg_image(self):
+        """
+        Read and preprocess the image for registration.
+        """
         reg_image = self._dask_image
         reg_image = preprocess_dask_array(reg_image, self.preprocessing)
 
@@ -70,6 +78,18 @@ class NumpyRegImage(RegImage):
         self.preprocess_image(reg_image)
 
     def read_single_channel(self, channel_idx: int) -> np.ndarray:
+        """
+        Read in a single channel for transformation by plane.
+        Parameters
+        ----------
+        channel_idx: int
+            Index of the channel to be read
+
+        Returns
+        -------
+        image: np.ndarray
+            Numpy array of the selected channel to be read
+        """
         if channel_idx > (self.n_ch - 1):
             warnings.warn(
                 "channel_idx exceeds number of channels, reading channel at channel_idx == 0"

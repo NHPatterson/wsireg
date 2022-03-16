@@ -8,7 +8,7 @@ from tifffile import TiffWriter
 
 from wsireg.reg_images.reg_image import RegImage
 from wsireg.reg_images.merge_reg_image import MergeRegImage
-from wsireg.reg_transform_seq import RegTransformSeq
+from wsireg.reg_transforms.reg_transform_seq import RegTransformSeq
 from wsireg.utils.im_utils import (
     SITK_TO_NP_DTYPE,
     format_channel_names,
@@ -33,13 +33,50 @@ class MergeOmeTiffWriter:
     def __init__(
         self,
         reg_images: MergeRegImage,
-        reg_seq_transforms: Optional[List[RegTransformSeq]] = None,
+        reg_transform_seqs: Optional[List[RegTransformSeq]] = None,
     ):
+        """
+        Class for writing multiple images wiuth and without transforms to a singel OME-TIFF.
+
+        Parameters
+        ----------
+        reg_image: MergeRegImage
+            MergeRegImage to be transformed
+        reg_transform_seqs: List of RegTransformSeq or None
+            Registration transformation sequences for each wsireg image to be merged
+
+        Attibutes
+        ---------
+        x_size: int
+            Size of the merged image after transformation in x
+        y_size: int
+            Size of the merged image after transformation in y
+        y_spacing: float
+            Pixel spacing in microns after transformation in y
+        x_spacing: float
+            Pixel spacing in microns after transformation in x
+        tile_size: int
+            Size of tiles to be written
+        pyr_levels: list of tuples of int:
+            Size of downsampled images in pyramid
+        n_pyr_levels: int
+            Number of downsamples in pyramid
+        PhysicalSizeY: float
+            physical size of image in micron for OME-TIFF in Y
+        PhysicalSizeX: float
+            physical size of image in micron for OME-TIFF in X
+        subifds: int
+            Number of sub-resolutions for pyramidal OME-TIFF
+        compression: str
+            tifffile string to pass to compression argument, defaults to "deflate" for minisblack
+            and "jpeg" for RGB type images
+
+        """
         self.reg_image = reg_images
-        self.reg_seq_transforms = reg_seq_transforms
+        self.reg_transform_seqs = reg_transform_seqs
 
     def _length_checks(self, sub_image_names):
-
+        """Make sure incoming data is kosher in dimensions"""
         if isinstance(sub_image_names, list) is False:
             if sub_image_names is None:
                 sub_image_names = [
@@ -50,10 +87,10 @@ class MergeOmeTiffWriter:
                     "MergeRegImage requires a list of image names for each image to merge"
                 )
 
-        if self.reg_seq_transforms is None:
+        if self.reg_transform_seqs is None:
             transformations = [None for i in range(len(self.reg_image.images))]
         else:
-            transformations = self.reg_seq_transforms
+            transformations = self.reg_transform_seqs
 
         if len(transformations) != len(self.reg_image.images):
             raise ValueError(
@@ -61,6 +98,8 @@ class MergeOmeTiffWriter:
             )
 
     def _create_channel_names(self, sub_image_names):
+        """Create channel names for merge data."""
+
         def prepare_channel_names(sub_image_name, channel_names):
             return [f"{sub_image_name} - {c}" for c in channel_names]
 
@@ -77,13 +116,14 @@ class MergeOmeTiffWriter:
         ]
 
     def _transform_check(self):
+        """Check that all transforms as currently loaded output to the same size/resolution"""
         out_size = []
         out_spacing = []
 
-        if not self.reg_seq_transforms:
+        if not self.reg_transform_seqs:
             rts = [None for _ in range(len(self.reg_image.images))]
         else:
-            rts = self.reg_seq_transforms
+            rts = self.reg_transform_seqs
         for im, t in zip(self.reg_image.images, rts):
             if t:
                 out_size.append(t.reg_transforms[-1].output_size)
@@ -115,11 +155,11 @@ class MergeOmeTiffWriter:
         image_name: str,
         im_dtype: np.dtype,
         reg_transform_seq: Optional[RegTransformSeq] = None,
-        channel_names: Optional[List[str]] = None,
         write_pyramid: bool = True,
         tile_size: int = 512,
         compression: str = "default",
     ):
+        """Prepare OME-XML and other data needed for saving"""
 
         if reg_transform_seq:
             self.x_size, self.y_size = reg_transform_seq.output_size
@@ -182,6 +222,9 @@ class MergeOmeTiffWriter:
             self.compression = compression
 
     def _get_merge_dtype(self):
+        """Determine data type for merger. Will default to the largest
+        dtype. If one image is np.uint8 and another np.uint16, the image at np.uint8
+        will be cast to np.uint16"""
         dtype_max_size = [
             np.iinfo(r.im_dtype).max for r in self.reg_image.images
         ]
@@ -197,13 +240,41 @@ class MergeOmeTiffWriter:
 
     def merge_write_image_by_plane(
         self,
-        image_name,
-        sub_image_names,
-        output_dir="",
-        write_pyramid=True,
-        tile_size=512,
-        compression="default",
-    ):
+        image_name: str,
+        sub_image_names: List[str],
+        output_dir: Union[Path, str] = "",
+        write_pyramid: bool = True,
+        tile_size: int = 512,
+        compression: Optional[str] = "default",
+    ) -> str:
+        """
+         Write merged OME-TIFF image plane-by-plane to disk.
+         RGB images will be de-interleaved with RGB channels written as separate planes.
+
+         Parameters
+         ----------
+         image_name: str
+             Name to be written WITHOUT extension
+             for example if image_name = "cool_image" the file
+             would be "cool_image.ome.tiff"
+        sub_image_names: list of str
+            Names added before each channel of a given image to distinguish it.
+         output_dir: Path or str
+             Directory where the image will be saved
+         write_pyramid: bool
+             Whether to write the OME-TIFF with sub-resolutions or not
+         tile_size: int
+             What size to write OME-TIFF tiles to disk
+         compression: str
+             tifffile string to pass to compression argument, defaults to "deflate" for minisblack
+             and "jpeg" for RGB type images
+
+         Returns
+         -------
+         output_file_name: str
+             File path to the written OME-TIFF
+
+        """
         merge_dtype_sitk, merge_dtype_np = self._get_merge_dtype()
 
         self._length_checks(sub_image_names)
@@ -216,7 +287,7 @@ class MergeOmeTiffWriter:
             self.reg_image.images[0],
             image_name,
             merge_dtype_np,
-            reg_transform_seq=self.reg_seq_transforms[0],
+            reg_transform_seq=self.reg_transform_seqs[0],
             write_pyramid=write_pyramid,
             tile_size=tile_size,
             compression=compression,
@@ -253,8 +324,8 @@ class MergeOmeTiffWriter:
                     if image.GetPixelIDValue() != merge_dtype_sitk:
                         image = sitk.Cast(image, merge_dtype_sitk)
 
-                    if self.reg_seq_transforms[m_idx]:
-                        image = self.reg_seq_transforms[
+                    if self.reg_transform_seqs[m_idx]:
+                        image = self.reg_transform_seqs[
                             m_idx
                         ].resampler.Execute(image)
 

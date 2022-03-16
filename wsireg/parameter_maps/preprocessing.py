@@ -25,6 +25,10 @@ class CoordinateFlip(str, Enum):
 
 
 class BoundingBox(NamedTuple):
+    """
+    Bounding box named tuple.
+    """
+
     X: int
     Y: int
     WIDTH: int
@@ -62,6 +66,10 @@ class ImagePreproParams(BaseModel):
         Perform max intensity projection number of channels > 1.
     contrast_enhance: bool
         Enhance contrast of image
+    ch_indices: list of int or int
+        Channel indicies to use for registartion, 0-index, so ch_indices = 0, pulls the first channel
+    as_uint8: bool
+        Whether to byte scale registration image data for memory saving
     invert_intensity: bool
         invert the intensity of an image
     rot_cc: int, float
@@ -72,6 +80,15 @@ class ImagePreproParams(BaseModel):
         Convert a binary mask to a bounding box and crop to this area
     mask_bbox: tuple or list of 4 ints
         supply a pre-computed list of bbox info of form x,y,width,height
+    downsampling: int
+        Downsampling by integer factor, i.e., downsampling = 3, downsamples image 3x
+    use_mask: bool
+        Whether to use mask in elastix registration. At times it is better to use the mask to find a cropping area
+        then use the mask during the registration process as errors are frequent
+    custom_processing: callable
+        Custom intensity preprocessing functions in a dict like {"my_custom_process: custom_func} that will be applied
+        to the image. Must take in an sitk.Image and return an sitk.Image
+
     """
 
     # intensity preprocessing

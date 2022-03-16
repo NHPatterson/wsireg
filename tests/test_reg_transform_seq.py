@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from wsireg.reg_transform_seq import RegTransformSeq
+from wsireg.reg_transforms.reg_transform_seq import RegTransformSeq
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.join(HERE, "fixtures")

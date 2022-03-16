@@ -10,7 +10,7 @@ import dask.array as da
 
 from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_images.merge_reg_image import MergeRegImage
-from wsireg.reg_transform_seq import RegTransformSeq
+from wsireg.reg_transforms.reg_transform_seq import RegTransformSeq
 from wsireg.writers.merge_ome_tiff_writer import MergeOmeTiffWriter
 from wsireg.writers.ome_tiff_writer import OmeTiffWriter
 from wsireg.writers.tiled_ome_tiff_writer import OmeTiffTiledWriter
@@ -195,8 +195,35 @@ def test_OmeTiffWriter_compare_tile_plane_mc_nl(
 
 def test_OmeTiffWriter_compare_tile_plane_mc_nl_large(tmp_path):
     im_array = da.from_array(
-        np.random.randint(0, 255, (2**13, 2**13), dtype=np.uint8),
-        chunks=(1024, 1024),
+        np.random.randint(0, 255, (2, 2**13, 2**13), dtype=np.uint8),
+        chunks=(1, 1024, 1024),
+    )
+    reg_image = reg_image_loader(im_array, 0.5)
+
+    rts = RegTransformSeq(TFORM_FP)
+    ometiffwriter = OmeTiffWriter(reg_image, reg_transform_seq=rts)
+    ometiletiffwriter = OmeTiffTiledWriter(reg_image, reg_transform_seq=rts)
+
+    by_tile_fp = ometiletiffwriter.write_image_by_tile(
+        gen_project_name_str(),
+        output_dir=str(tmp_path),
+    )
+
+    by_plane_fp = ometiffwriter.write_image_by_plane(
+        gen_project_name_str(),
+        output_dir=str(tmp_path),
+    )
+
+    im_tile = imread(by_tile_fp)
+    im_plane = imread(by_plane_fp)
+
+    assert np.array_equal(im_tile, im_plane)
+
+
+def test_OmeTiffWriter_compare_tile_plane_rgb_nl_large(tmp_path):
+    im_array = da.from_array(
+        np.random.randint(0, 255, (2**13, 2**13, 3), dtype=np.uint8),
+        chunks=(1024, 1024, 3),
     )
     reg_image = reg_image_loader(im_array, 0.5)
 
@@ -233,7 +260,7 @@ def test_MergeOmeTiffWriter_mc(simple_transform_affine_nl, tmp_path):
     )
     rts = RegTransformSeq(simple_transform_affine_nl)
     merge_ometiffwriter = MergeOmeTiffWriter(
-        mreg_image, reg_seq_transforms=[rts, rts, rts]
+        mreg_image, reg_transform_seqs=[rts, rts, rts]
     )
 
     by_plane_fp = merge_ometiffwriter.merge_write_image_by_plane(
@@ -298,7 +325,7 @@ def test_MergeOmeTiffWriter_mix_merge(simple_transform_affine_nl, tmp_path):
 
     rts = RegTransformSeq(simple_transform_affine_nl)
     merge_ometiffwriter = MergeOmeTiffWriter(
-        mreg_image, reg_seq_transforms=[rts, rts, rts]
+        mreg_image, reg_transform_seqs=[rts, rts, rts]
     )
 
     by_plane_fp = merge_ometiffwriter.merge_write_image_by_plane(

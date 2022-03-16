@@ -8,7 +8,7 @@ import geojson
 import numpy as np
 import SimpleITK as sitk
 
-from wsireg.reg_transform import RegTransform
+from wsireg.reg_transforms.reg_transform import RegTransform
 from wsireg.utils.tform_utils import wsireg_transforms_to_itk_composite
 
 GJ_SHAPE_TYPE = {

@@ -5,11 +5,13 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import SimpleITK as sitk
 
-from wsireg.reg_transform import RegTransform
+from wsireg.reg_transforms.reg_transform import RegTransform
 from wsireg.utils.tform_utils import ELX_TO_ITK_INTERPOLATORS
 
 
 class RegTransformSeq:
+    """Class to concatenate and compose sequences of transformations"""
+
     reg_transforms: List[RegTransform] = []
     resampler: Optional[sitk.ResampleImageFilter] = None
     composed_linear_mats: Optional[Dict[str, np.ndarray]] = None
@@ -22,6 +24,16 @@ class RegTransformSeq:
         ] = None,
         transform_seq_idx: Optional[List[int]] = None,
     ) -> None:
+        """
+
+        Parameters
+        ----------
+        reg_transforms: List or single RegTransform or None
+            RegTransforms to be composed
+        transform_seq_idx: list of int
+            Order in sequence of the transform. If a pre-reg transform, it will not be reversed like a sequence
+            of elastix transforms would to make the composite ITK transform
+        """
 
         self._transform_seq_idx = []
 
@@ -33,9 +45,24 @@ class RegTransformSeq:
             self._composite_transform = None
             self._n_transforms = 0
 
-    def add_transforms(self, transforms, transform_seq_idx=None):
+    def add_transforms(
+        self,
+        transforms: Union[str, Path, dict, List[RegTransform], RegTransform],
+        transform_seq_idx: Optional[List[int]] = None,
+    ) -> None:
+        """
+        Add transforms to sequence.
+
+        Parameters
+        ----------
+        transforms: path to wsireg transforms .json, elastix transform dict,RegTransform ot List of RegTransform
+        transform_seq_idx: list of int
+            Order in sequence of the transform. If a pre-reg transform, it will not be reversed like a sequence
+            of elastix transforms would to make the composite ITK transform
+
+        """
         if isinstance(transforms, (str, Path, dict)):
-            tform_list, tform_idx = read_wsireg_transform(transforms)
+            tform_list, tform_idx = _read_wsireg_transform(transforms)
             self.transform_seq_idx = tform_idx
             reg_transforms = [RegTransform(t) for t in tform_list]
             self.reg_transforms = self.reg_transforms + reg_transforms
@@ -50,6 +77,7 @@ class RegTransformSeq:
 
     @property
     def composite_transform(self) -> sitk.CompositeTransform:
+        """Composite ITK transform from transformation sequence"""
         return self._composite_transform
 
     @composite_transform.setter
@@ -58,6 +86,7 @@ class RegTransformSeq:
 
     @property
     def transform_seq_idx(self) -> List[int]:
+        """Transformation sequence for all combined transformations."""
         return self._transform_seq_idx
 
     @transform_seq_idx.setter
@@ -72,6 +101,7 @@ class RegTransformSeq:
 
     @property
     def n_transforms(self) -> int:
+        """Number of transformations in sequence."""
         return self._n_transforms
 
     @n_transforms.setter
@@ -80,6 +110,8 @@ class RegTransformSeq:
 
     @property
     def output_size(self) -> Tuple[int, int]:
+        """Output size of image resampled by transform, initially determined from the last
+        transformation in the chain"""
         return self._output_size
 
     @output_size.setter
@@ -88,6 +120,8 @@ class RegTransformSeq:
 
     @property
     def output_spacing(self) -> Union[Tuple[float, float], Tuple[int, int]]:
+        """Output spacing of image resampled by transform, initially determined from the last
+        transformation in the chain"""
         return self._output_spacing
 
     @output_size.setter
@@ -99,6 +133,17 @@ class RegTransformSeq:
     def set_output_spacing(
         self, spacing: Union[Tuple[float, float], Tuple[int, int]]
     ) -> None:
+        """
+        Method that allows setting the output spacing of the resampler
+        to resampled to any pixel spacing desired. This will also change the output_size
+        to match.
+
+        Parameters
+        ----------
+        spacing: tuple of float
+            Spacing to set the new image. Will also change the output size to match.
+
+        """
 
         output_size_scaling = np.asarray(self._output_spacing) / np.asarray(
             spacing
@@ -167,6 +212,25 @@ class RegTransformSeq:
     def transform_points(
         self, pt_data: np.ndarray, px_idx=True, source_res=1, output_idx=True
     ) -> np.ndarray:
+        """
+        Transform point sets using the transformation chain
+        Parameters
+        ----------
+        pt_data: np.ndarray
+            Point data in xy order
+        px_idx: bool
+            Whether point data is in pixel or physical coordinate sapce
+        source_res: float
+            spacing of the pixels associated with pt_data if they are not in physical coordinate space
+        output_idx: bool
+            return transformed points to pixel indices in the output_spacing's reference space
+
+
+        Returns
+        -------
+        tformed_pts: np.ndarray
+            Transformed points
+        """
         tformed_pts = []
         for pt in pt_data:
             if px_idx is True:
@@ -185,16 +249,25 @@ class RegTransformSeq:
         return np.stack(tformed_pts)
 
     def append(self, other) -> None:
+        """
+        Concatenate transformation sequences.
+
+        Parameters
+        ----------
+        other: RegTransformSeq
+            Append a RegTransformSeq to another
+
+        """
         self.add_transforms(other.reg_transforms, other.transform_seq_idx)
 
-    def write_transforms(self, output_path: Union[str, Path]):
+    def _write_transforms(self, output_path: Union[str, Path]):
         return
 
 
-def read_wsireg_transform(
+def _read_wsireg_transform(
     parameter_data: Union[str, Path, Dict[Any, Any]]
 ) -> Tuple[List[Dict[str, List[str]]], List[int]]:
-
+    """Convert wsireg transform dict or from file to List of RegTransforms"""
     if isinstance(parameter_data, (str, Path)):
         parameter_data_in = json.load(open(parameter_data, "r"))
     else:

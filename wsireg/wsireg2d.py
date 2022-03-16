@@ -15,8 +15,8 @@ from wsireg.reg_images.reg_image import RegImage
 
 from wsireg.reg_images.loader import reg_image_loader
 from wsireg.reg_shapes import RegShapes
-from wsireg.reg_transform import RegTransform
-from wsireg.reg_transform_seq import RegTransformSeq
+from wsireg.reg_transforms import RegTransform
+from wsireg.reg_transforms import RegTransformSeq
 from wsireg.utils.config_utils import parse_check_reg_config
 from wsireg.utils.im_utils import ARRAYLIKE_CLASSES
 from wsireg.utils.reg_utils import (
@@ -32,9 +32,6 @@ from wsireg.writers.tiled_ome_tiff_writer import OmeTiffTiledWriter
 
 
 class WsiReg2D(object):
-    project_name: Optional[str] = None
-    output_dir: Optional[Union[str, Path]] = None
-    image_cache: Optional[Path] = None
     """
     Class to define a 2D registration graph and execute the registrations and transformations of the graph
 
@@ -52,9 +49,14 @@ class WsiReg2D(object):
 
     Attributes
     ----------
+    project_name: str
+        Global project name, will be appended to all output files and folders
+    output_dir: Path
+        Directory where registration data will be stored
+    image_cache: Path
+        Directory where images are cached after preprocessing
     modalities: dict
         dictionary of modality information (file path, spatial res., preprocessing), defines a graph node
-
     modalities: list
         list of all modality names
 
@@ -92,6 +94,9 @@ class WsiReg2D(object):
         cache_images: bool = True,
         config: Optional[Union[str, Path]] = None,
     ):
+        self.project_name: Optional[str] = None
+        self.output_dir: Optional[Union[str, Path]] = None
+        self.image_cache: Optional[Path] = None
 
         self.setup_project_output(project_name, output_dir)
 
@@ -130,6 +135,18 @@ class WsiReg2D(object):
         project_name: Optional[str] = None,
         output_dir: Optional[Union[str, Path]] = None,
     ) -> None:
+        """
+        Set up the project directory and image cache.
+
+        Parameters
+        ----------
+        project_name: str
+            Project name will prefix all output files and directories
+        output_dir: str
+            Directory where registration data will be stored
+
+
+        """
         if project_name is None:
             self.project_name = 'RegProj'
         else:
@@ -143,7 +160,9 @@ class WsiReg2D(object):
         self.image_cache = self.output_dir / ".imcache_{}".format(project_name)
 
     @property
-    def modalities(self):
+    def modalities(self) -> Dict[str, Any]:
+        """Image modality information stored as a dictionary where keys are images and values
+        are all image modality related information."""
         return self._modalities
 
     @modalities.setter
@@ -153,6 +172,8 @@ class WsiReg2D(object):
 
     @property
     def shape_sets(self):
+        """Shape data stored as a dictionary where keys are shape sets and values
+        are all shape related information."""
         return self._shape_sets
 
     @shape_sets.setter
@@ -160,7 +181,8 @@ class WsiReg2D(object):
         self._shape_sets.update(shape_set)
 
     @property
-    def shape_set_names(self):
+    def shape_set_names(self) -> List[str]:
+        """Name of all shape sets"""
         return self._shape_set_names
 
     @shape_set_names.setter
@@ -168,7 +190,8 @@ class WsiReg2D(object):
         self._shape_set_names.append(shape_set_name)
 
     @property
-    def modality_names(self):
+    def modality_names(self) -> List[str]:
+        """List of all the modality names."""
         return self._modality_names
 
     @modality_names.setter
@@ -207,8 +230,9 @@ class WsiReg2D(object):
         channel_colors: List[str]
             channels colors for OME-TIFF (not implemented)
         mask: Union[str, Path, np.ndarray]
-            path to binary mask (>0 is in) image for registration and/or cropping
-        preprocessing :
+            path to binary mask (>0 is in) image for registration and/or cropping or a geoJSON with shapes
+            that will be processed to a binary mask
+        preprocessing: ImagePreproParams
             preprocessing parameters for the modality for registration. Registration images should be a xy single plane
             so many modalities (multi-channel, RGB) must "create" a single channel.
             Defaults: multi-channel images -> max intensity project image
@@ -216,6 +240,8 @@ class WsiReg2D(object):
         output_res : Union[Tuple[int,int], Tuple[float,float]]
             change output spacing/resolution when resampling images, default will be the spacing
             of the final target image
+        prepro_dict: dict
+            deprecated version kept temporarily
         """
         if modality_name in self._modality_names:
             raise ValueError(
@@ -370,7 +396,9 @@ class WsiReg2D(object):
         )
 
     @property
-    def reg_paths(self):
+    def reg_paths(self) -> Dict[str, List[str]]:
+        """Dictionary of paths between modalities by modality name.
+        Keys are modality name and the values are a list of modalities it passes through."""
         return self._reg_paths
 
     @reg_paths.setter
@@ -421,7 +449,7 @@ class WsiReg2D(object):
         tgt_modality_name: str,
         thru_modality: Optional[str] = None,
         reg_params: Union[str, RegModel, List[str], List[RegModel]] = [
-            RegModel.rigid
+            "rigid"
         ],
         override_prepro: dict = {"source": None, "target": None},
     ):
@@ -436,9 +464,10 @@ class WsiReg2D(object):
             modality that has been added to graph that is being aligned to
         thru_modality: str
             modality that has been added to graph by which another should be run through
-        reg_params:
-            SimpleElastix registration parameters
-        override_prepro:
+        reg_params: list of RegModel/str or str
+            Elastix registration parameters, from RegModel or as a string corresponding to one of the parameter
+            maps enumerated in wsireg.parameter_maps.reg_params.RegModel
+        override_prepro: dict
             set specific preprocessing for a given registration edge for the source or target image that will override
             the set modality preprocessing FOR THIS REGISTRATION ONLY.
         """
@@ -1078,7 +1107,7 @@ class WsiReg2D(object):
         )
 
         merge_ometiffwriter = MergeOmeTiffWriter(
-            merge_regimage, reg_seq_transforms=transformations
+            merge_regimage, reg_transform_seqs=transformations
         )
 
         im_fp = merge_ometiffwriter.merge_write_image_by_plane(
