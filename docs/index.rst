@@ -7,6 +7,7 @@ Welcome to wsireg's documentation!
 
    readme
    installation
+   image
    usage
    contributing
    authors
