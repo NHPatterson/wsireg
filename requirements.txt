@@ -16,3 +16,4 @@ aicsimageio[czi]
 pydantic
 ome-types
 tiler
+tqdm

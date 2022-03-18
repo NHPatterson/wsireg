@@ -1,0 +1,5 @@
+pip
+bump2version
+wheel
+Sphinx
+sphinx_rtd_theme
