@@ -107,6 +107,9 @@ def read_geojson(json_file: str):
                     data = f.read()
                     gj_data = json.loads(data.decode("utf-8"))
 
+    if isinstance(gj_data, dict):
+        gj_data = [gj_data]
+
     shapes_np = [gj_to_np(s) for s in gj_data]
     gj_data = [add_unamed(gj) for gj in gj_data]
     return gj_data, shapes_np

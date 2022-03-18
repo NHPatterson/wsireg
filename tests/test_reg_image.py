@@ -1,8 +1,12 @@
+import os
 import itk
 import pytest
 import SimpleITK as sitk
 
 from wsireg.reg_images.loader import reg_image_loader
+
+HERE = os.path.dirname(__file__)
+GEOJSON_FP = os.path.join(HERE, "fixtures/polygons.geojson")
 
 
 @pytest.mark.usefixtures("disk_im_mch")
@@ -406,3 +410,13 @@ def test_reg_image_loader_zarr_mch(zarr_im_mch_np):
     assert reg_image.n_ch == 3
     assert reg_image.reg_image.GetSpacing() == (0.65, 0.65)
     assert reg_image.reg_image.GetNumberOfComponentsPerPixel() == 1
+
+
+@pytest.mark.usefixtures("im_rgb_np_uneven")
+def test_reg_image_loader_zarr_mch(im_rgb_np_uneven):
+    reg_image = reg_image_loader(im_rgb_np_uneven, 0.65, mask=GEOJSON_FP)
+    reg_image.read_reg_image()
+    assert reg_image.reg_image.GetSpacing() == (0.65, 0.65)
+    assert reg_image.reg_image.GetNumberOfComponentsPerPixel() == 1
+    assert reg_image.mask.GetSize() == reg_image.reg_image.GetSize()
+    assert reg_image.mask.GetSpacing() == reg_image.reg_image.GetSpacing()

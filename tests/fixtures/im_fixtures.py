@@ -37,6 +37,11 @@ def im_rgb_np():
 
 
 @pytest.fixture
+def im_rgb_np_uneven():
+    return np.random.randint(0, 255, (3096, 2048, 3), dtype=np.uint8)
+
+
+@pytest.fixture
 def dask_im_gry_np():
     return da.from_array(
         np.random.randint(0, 255, (2048, 2048), dtype=np.uint16)
