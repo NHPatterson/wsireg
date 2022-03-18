@@ -1573,6 +1573,7 @@ def main(
     to_original_size: bool = False,
     transform_non_reg: bool = True,
     remove_merged: bool = True,
+    file_writer: str = "ome.tiff",
 ):
     def config_to_WsiReg2D(config_filepath):
         reg_config = parse_check_reg_config(config_filepath)
@@ -1591,19 +1592,27 @@ def main(
         reg_graph = graph_configuration
 
     reg_graph.register_images()
-
     reg_graph.save_transformations()
-
+    output_data = []
     if write_images:
-        reg_graph.transform_images(
+        output_images = reg_graph.transform_images(
             file_writer=file_writer,
             to_original_size=to_original_size,
             transform_non_reg=transform_non_reg,
             remove_merged=remove_merged,
         )
+    else:
+        output_images = []
 
     if reg_graph.shape_sets:
-        reg_graph.transform_shapes()
+        output_shapes = reg_graph.transform_shapes()
+    else:
+        output_shapes = []
+
+    output_data.extend(output_images)
+    output_data.extend(output_shapes)
+
+    return output_data
 
 
 if __name__ == "__main__":
@@ -1671,5 +1680,6 @@ if __name__ == "__main__":
         to_original_size=args.to_original_size,
         transform_non_reg=args.transform_non_reg,
         remove_merged=args.remove_merged,
+        file_writer=file_writer,
     )
     sys.exit()
