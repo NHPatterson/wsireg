@@ -14,6 +14,7 @@ from tests.fixtures.im_fixtures import (
     im_gry_np,
     im_mch_np,
     im_rgb_np,
+    im_rgb_np_uneven,
     mask_np,
     mask_geojson,
     zarr_im_gry_np,

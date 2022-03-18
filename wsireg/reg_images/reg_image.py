@@ -159,7 +159,7 @@ class RegImage(ABC):
             if Path(mask).suffix.lower() == ".geojson":
                 out_shape = self.shape[:2] if self.is_rgb else self.shape[1:]
                 mask_shapes = RegShapes(mask)
-                mask = mask_shapes.draw_mask(out_shape, labels=False)
+                mask = mask_shapes.draw_mask(out_shape[::-1], labels=False)
                 mask = sitk.GetImageFromArray(mask)
             else:
                 mask = sitk.ReadImage(mask)
