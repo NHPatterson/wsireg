@@ -22,3 +22,4 @@ pydantic
 ome-types
 tiler
 tqdm
+m2r2>=0.2.7
