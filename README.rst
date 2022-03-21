@@ -2,7 +2,6 @@
 wsireg
 ======
 
-
 .. image:: https://readthedocs.org/projects/wsireg/badge/?version=latest
         :target: https://wsireg.readthedocs.io/en/latest/?badge=latest
         :alt: Documentation Status

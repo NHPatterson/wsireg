@@ -37,11 +37,12 @@ extensions = [
     "sphinx_rtd_theme",
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
+    'm2r2'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
-
+autosectionlabel_prefix_document = True
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 #

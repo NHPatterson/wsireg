@@ -1,4 +1,4 @@
-![Alt text](./docs/assets/wsireg-logo-crop.svg?raw=true "wsireg")
+![Alt text](docs/_static/wsireg-logo-crop.svg?raw=true "wsireg")
 
 ### Multi-modal whole slide image registration
 [![Python Version](https://img.shields.io/pypi/pyversions/wsireg.svg)](https://python.org)
@@ -8,7 +8,7 @@
 [![Documentation Status](https://readthedocs.org/projects/wsireg/badge/?version=latest)](http://wsireg.readthedocs.io/?badge=latest)
 
 **wsireg** performs multi-modal or mono-modal whole slide image registration in a graph structure for complex registration tasks using `elastix`.
-
+For detailed introduction and installation and usage instructions see the [docs](https://wsireg.readthedocs.io/).
 
 
 ## Features
@@ -32,7 +32,7 @@ pip install wsireg
 
 ## Usage
 
-_coming soon_ : For detailed usage and example data, see [wsireg-examples](https://github.com/nhpatterson/wsireg-examples)
+For detailed usage, see usage sections in documents, see [documentation](https://wsireg.readthedocs.io/). 
 
 Example registering two images.
 
