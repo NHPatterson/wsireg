@@ -68,11 +68,18 @@ def gj_to_np(gj: dict):
     else:
         shape_name = gj.get("properties").get("classification").get("name")
 
-    return {
-        "array": pts.astype(np.double),
-        "shape_type": gj.get("geometry").get("type"),
-        "shape_name": shape_name,
-    }
+    if len(pts.shape) == 1:
+        return {
+            "array": np.asarray(pts[0]).astype(np.double),
+            "shape_type": gj.get("geometry").get("type"),
+            "shape_name": shape_name,
+        }
+    else:
+        return {
+            "array": pts.astype(np.double),
+            "shape_type": gj.get("geometry").get("type"),
+            "shape_name": shape_name,
+        }
 
 
 def add_unamed(gj):

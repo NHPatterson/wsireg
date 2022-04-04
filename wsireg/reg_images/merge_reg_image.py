@@ -47,7 +47,7 @@ class MergeRegImage:
                 imdata.channel_names is None
                 or len(imdata.channel_names) != imdata.n_ch
             ):
-                imdata.channel_names = [
+                imdata._channel_names = [
                     f"C{idx}" for idx in range(0, imdata.n_ch)
                 ]
 
