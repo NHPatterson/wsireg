@@ -115,6 +115,9 @@ class WsiReg2D(object):
         self._preprocessed_image_spacings: Dict[
             str, Union[Tuple[int, int], Tuple[float, float]]
         ] = dict()
+        self._transformed_shapes_spacings: Dict[
+            str, Tuple[float, float]
+        ] = dict()
 
         self.n_modalities: Optional[int] = None
         self.n_registrations: Optional[int] = None
@@ -1262,57 +1265,83 @@ class WsiReg2D(object):
         # do inversion before any processing to ensure it is not computed twice
         for set_name, set_data in self.shape_sets.items():
             attachment_modality = set_data["attachment_modality"]
-            invert_nonrigid_transforms(
-                self.transformations[attachment_modality][
-                    "full-transform-seq"
-                ].reg_transforms_itk_order
-            )
+            if attachment_modality in self.transformations.keys():
+                invert_nonrigid_transforms(
+                    self.transformations[attachment_modality][
+                        "full-transform-seq"
+                    ].reg_transforms_itk_order
+                )
+            else:
+                continue
 
         for set_name, set_data in self.shape_sets.items():
             attachment_modality = set_data["attachment_modality"]
-            im_data = self.modalities[attachment_modality]
-
-            final_modality = self.reg_paths[attachment_modality][-1]
-
-            print(
-                "transforming shape set {} associated with {} to {}".format(
-                    set_name, attachment_modality, final_modality
-                )
-            )
-
             rs = RegShapes(
                 set_data["shape_files"], source_res=set_data["image_res"]
             )
 
-            transformations = copy(
-                self.transformations[attachment_modality]["full-transform-seq"]
-            )
+            if attachment_modality in self.transformations.keys():
+                im_data = self.modalities[attachment_modality]
+                final_modality = self.reg_paths[attachment_modality][-1]
 
-            if im_data["output_res"]:
-                transformations.set_output_spacing(im_data["output_res"])
+                print(
+                    "transforming shape set {} associated with {} to {}".format(
+                        set_name, attachment_modality, final_modality
+                    )
+                )
 
+                transformations = copy(
+                    self.transformations[attachment_modality][
+                        "full-transform-seq"
+                    ]
+                )
+
+                if im_data.get("output_res"):
+                    transformations.set_output_spacing(im_data["output_res"])
+
+                else:
+                    output_spacing_target = self.modalities[final_modality][
+                        "image_res"
+                    ]
+                    transformations.set_output_spacing(
+                        (output_spacing_target, output_spacing_target)
+                    )
+
+                self._transformed_shapes_spacings.update(
+                    {set_name: (output_spacing_target, output_spacing_target)}
+                )
+
+                rs.transform_shapes(transformations)
+                output_path = (
+                    self.output_dir
+                    / "{}-{}-{}_to_{}-transformed_shapes.geojson".format(
+                        self.project_name,
+                        set_name,
+                        attachment_modality,
+                        final_modality,
+                    )
+                )
+
+                rs.save_shape_data(output_path, transformed=True)
+                transformed_shapes_fps.append(output_path)
             else:
-                output_spacing_target = self.modalities[final_modality][
+                output_path = (
+                    self.output_dir
+                    / "{}-{}-{}-registered.geojson".format(
+                        self.project_name,
+                        set_name,
+                        attachment_modality,
+                    )
+                )
+
+                output_spacing_target = self.modalities[attachment_modality][
                     "image_res"
                 ]
-                transformations.set_output_spacing(
-                    (output_spacing_target, output_spacing_target)
+                self._transformed_shapes_spacings.update(
+                    {set_name: (output_spacing_target, output_spacing_target)}
                 )
-
-            rs.transform_shapes(transformations)
-
-            output_path = (
-                self.output_dir
-                / "{}-{}-{}_to_{}-transformed_shapes.geojson".format(
-                    self.project_name,
-                    set_name,
-                    attachment_modality,
-                    final_modality,
-                )
-            )
-
-            rs.save_shape_data(output_path, transformed=True)
-            transformed_shapes_fps.append(output_path)
+                rs.save_shape_data(output_path, transformed=False)
+                transformed_shapes_fps.append(output_path)
 
         return transformed_shapes_fps
 
@@ -1563,7 +1592,8 @@ class WsiReg2D(object):
         else:
             warn(
                 f"{modality} not found in modalities: {', '.join(self.modality_names)}"
-                f" or shape sets {self.shape_set_names}"
+                f" or shape sets {self.shape_set_names}. "
+                "It may have already been removed"
             )
 
 
