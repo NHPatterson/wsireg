@@ -17,3 +17,4 @@ pydantic
 ome-types
 tiler
 tqdm
+matplotlib
