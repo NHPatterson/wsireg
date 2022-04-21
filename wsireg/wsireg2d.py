@@ -19,6 +19,11 @@ from wsireg.reg_transforms import RegTransform
 from wsireg.reg_transforms import RegTransformSeq
 from wsireg.utils.config_utils import parse_check_reg_config
 from wsireg.utils.im_utils import ARRAYLIKE_CLASSES
+from wsireg.utils.output_utils import (
+    read_elastix_iteration_dir,
+    read_elastix_transform_dir,
+    write_iteration_plots,
+)
 from wsireg.utils.reg_utils import (
     _prepare_reg_models,
     register_2d_images_itkelx,
@@ -84,6 +89,11 @@ class WsiReg2D(object):
     attachment_shapes: dict
         shape data attached to a modality to be transformed along the graph
 
+    registration_iter_data: Dict[str,Dict[int, Dict[int, Dict[str, np.ndarray]]]]
+        elastix data for each iteration in the registration sorted by transformation model and resolution
+
+    registration_tform_data: Dict[str, Dict[int, Dict[int, Dict[str, str]]]]
+        elastix transform data for each resolution sorted by transformation model and resolution
 
     """
 
@@ -129,6 +139,9 @@ class WsiReg2D(object):
 
         self.merge_modalities = dict()
         self.original_size_transforms = dict()
+
+        self.registration_iter_data: Dict[str,Dict[int, Dict[int, Dict[str, np.ndarray]]]] = dict()
+        self.registration_tform_data: Dict[str, Dict[int, Dict[int, Dict[str, str]]]] = dict()
 
         if config:
             self.add_data_from_config(config)
@@ -792,6 +805,20 @@ class WsiReg2D(object):
                 )
 
                 reg_edge["registered"] = True
+                data_key = f'{reg_edge["modalities"]["source"]}_to_{reg_edge["modalities"]["target"]}'
+
+                all_transform_data = read_elastix_transform_dir(output_path)
+                all_iteration_data = read_elastix_iteration_dir(output_path)
+                write_iteration_plots(
+                    all_iteration_data, data_key, output_path
+                )
+
+                self.registration_iter_data.update(
+                    {data_key: all_iteration_data}
+                )
+                self.registration_tform_data.update(
+                    {data_key: all_transform_data}
+                )
 
         self.transformations = self.reg_graph_edges
 
