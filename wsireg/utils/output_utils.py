@@ -237,3 +237,4 @@ def write_iteration_plots(
             )
             out_fig = create_iteration_plot(res_data, plot_title)
             out_fig.savefig(str(output_filepath))
+            plt.close(out_fig)
