@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def _natural_sort(list_to_sort:list) -> list:
+def _natural_sort(list_to_sort: list) -> list:
     """
     Sort list account for lack of leading zeroes.
     """
@@ -120,7 +120,9 @@ def read_elastix_intermediate_transform_data(
     return elastix_transform_data
 
 
-def read_elastix_transform_dir(registration_dir: Union[Path, str]) -> Dict[int, Dict[int, Dict[str, str]]]:
+def read_elastix_transform_dir(
+    registration_dir: Union[Path, str]
+) -> Dict[int, Dict[int, Dict[str, str]]]:
     """
     Read an elastix output directory's transformation data.
 
