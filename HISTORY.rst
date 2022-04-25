@@ -2,6 +2,11 @@
 History
 =======
 
+0.3.3 (2022-04-25)
+---------------------
+Major refactor of RegImage class, various small improvements throughout to support napari-wsireg.
+
+
 0.3.2.2 (2022-02-04)
 ---------------------
 This minor update adds the ability to draw binary or label masks using RegShapes.
