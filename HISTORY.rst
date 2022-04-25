@@ -2,6 +2,12 @@
 History
 =======
 
+
+0.3.3 (2022-04-45)
+---------------------
+This update refactors important classes like basic RegImage class, as well as various small improvements
+and a large update on documentation.
+
 0.3.2.2 (2022-02-04)
 ---------------------
 This minor update adds the ability to draw binary or label masks using RegShapes.
