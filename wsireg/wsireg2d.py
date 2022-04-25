@@ -140,8 +140,12 @@ class WsiReg2D(object):
         self.merge_modalities = dict()
         self.original_size_transforms = dict()
 
-        self.registration_iter_data: Dict[str,Dict[int, Dict[int, Dict[str, np.ndarray]]]] = dict()
-        self.registration_tform_data: Dict[str, Dict[int, Dict[int, Dict[str, str]]]] = dict()
+        self.registration_iter_data: Dict[
+            str, Dict[int, Dict[int, Dict[str, np.ndarray]]]
+        ] = dict()
+        self.registration_tform_data: Dict[
+            str, Dict[int, Dict[int, Dict[str, str]]]
+        ] = dict()
 
         if config:
             self.add_data_from_config(config)
