@@ -2,7 +2,7 @@
 History
 =======
 
-0.3.3 (2022-04-25)
+0.3.4 (2022-04-25)
 ---------------------
 Major refactor of RegImage class, various small improvements throughout to support napari-wsireg.
 
