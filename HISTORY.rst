@@ -2,7 +2,12 @@
 History
 =======
 
-0.3.4 (2022-04-25)
+0.3.5 (2022-04-28)
+---------------------
+Add support for python 3.10 with updated itk-elastix.
+
+
+0.3.4 (2022-04-27)
 ---------------------
 Major refactor of RegImage class, various small improvements throughout to support napari-wsireg.
 
