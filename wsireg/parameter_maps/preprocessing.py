@@ -123,5 +123,14 @@ class ImagePreproParams(BaseModel):
         else:
             return v
 
+    # make sure serialization to dict is json like
+    # for saving YAML file
+    def dict(self, **kwargs):
+        output = super().dict(**kwargs)
+        for k, v in output.items():
+            if isinstance(v, Enum):
+                output[k] = v.value
+        return output
+
     class Config:
         use_enum_names = True
