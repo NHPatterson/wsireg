@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from ome_types import from_xml
-from tifffile import TiffFile
+from tifffile import TiffFile, imread
 
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
 from wsireg.reg_images.loader import reg_image_loader
@@ -1040,10 +1040,10 @@ def test_wsireg_remove_modality(data_out_dir):
     assert wsi_reg.shape_sets.get("pas-shape") is None
 
 
-@pytest.mark.usefixtures("disk_im_mch")
-def test_wsireg_run_reg_w_override(data_out_dir, disk_im_mch):
+@pytest.mark.usefixtures("im_mch_np")
+def test_wsireg_run_reg_w_override(data_out_dir, im_mch_np):
     wsi_reg = WsiReg2D(gen_project_name_str(), str(data_out_dir))
-    img_fp1 = str(disk_im_mch)
+    img_fp1 = im_mch_np
 
     wsi_reg.add_modality(
         "mod1",
@@ -1088,26 +1088,18 @@ def test_wsireg_run_reg_w_override(data_out_dir, disk_im_mch):
     )
     wsi_reg.register_images()
 
-    or_mod2 = reg_image_loader(
-        wsi_reg.image_cache / "mod2-mod3-override_prepro.tiff", 1
-    ).dask_image.compute()
-    or_mod3 = reg_image_loader(
-        wsi_reg.image_cache / "mod3-mod2-override_prepro.tiff", 1
-    ).dask_image.compute()
-    pp_mod2 = reg_image_loader(
-        wsi_reg.image_cache / "mod2_prepro.tiff", 1
-    ).dask_image.compute()
-    pp_mod3 = reg_image_loader(
-        wsi_reg.image_cache / "mod3_prepro.tiff", 1
-    ).dask_image.compute()
+    or_mod2 = imread(wsi_reg.image_cache / "mod2-mod3-override_prepro.tiff")
+    or_mod3 = imread(wsi_reg.image_cache / "mod3-mod2-override_prepro.tiff")
+    pp_mod2 = imread(wsi_reg.image_cache / "mod2_prepro.tiff")
+    pp_mod3 = imread(wsi_reg.image_cache / "mod3_prepro.tiff")
 
     assert not np.array_equal(or_mod2, pp_mod2)
     assert not np.array_equal(or_mod3, pp_mod3)
 
 
-@pytest.mark.usefixtures("disk_im_mch")
-def test_wsireg_run_reg_reload_from_cache(data_out_dir, disk_im_mch):
-    img_fp1 = str(disk_im_mch)
+@pytest.mark.usefixtures("im_mch_np")
+def test_wsireg_run_reg_reload_from_cache(data_out_dir, im_mch_np):
+    img_fp1 = im_mch_np
     output_dir = str(data_out_dir)
     pname = gen_project_name_str()
     wsi_reg = WsiReg2D(pname, output_dir)
@@ -1132,12 +1124,8 @@ def test_wsireg_run_reg_reload_from_cache(data_out_dir, disk_im_mch):
 
     wsi_reg.register_images()
 
-    pp_mod1_r1 = reg_image_loader(
-        wsi_reg.image_cache / "mod1_prepro.tiff", 1
-    ).dask_image.compute()
-    pp_mod2_r1 = reg_image_loader(
-        wsi_reg.image_cache / "mod2_prepro.tiff", 1
-    ).dask_image.compute()
+    pp_mod1_r1 = imread(wsi_reg.image_cache / "mod1_prepro.tiff")
+    pp_mod2_r1 = imread(wsi_reg.image_cache / "mod2_prepro.tiff")
 
     # run registration again, loading data from cache
     wsi_reg = WsiReg2D(pname, output_dir)
@@ -1163,12 +1151,8 @@ def test_wsireg_run_reg_reload_from_cache(data_out_dir, disk_im_mch):
     wsi_reg.add_reg_path("mod1", "mod2", reg_params=["rigid_test"])
     wsi_reg.register_images()
 
-    pp_mod1_r2 = reg_image_loader(
-        wsi_reg.image_cache / "mod1_prepro.tiff", 1
-    ).dask_image.compute()
-    pp_mod2_r2 = reg_image_loader(
-        wsi_reg.image_cache / "mod2_prepro.tiff", 1
-    ).dask_image.compute()
+    pp_mod1_r2 = imread(wsi_reg.image_cache / "mod1_prepro.tiff")
+    pp_mod2_r2 = imread(wsi_reg.image_cache / "mod2_prepro.tiff")
 
     assert not np.array_equal(pp_mod1_r1, pp_mod1_r2)
     assert not np.array_equal(pp_mod2_r1, pp_mod2_r2)
