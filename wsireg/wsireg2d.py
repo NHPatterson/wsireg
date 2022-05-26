@@ -1,9 +1,11 @@
 import json
+import tempfile
 import time
 from copy import copy, deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 from warnings import warn
+import shutil
 
 import numpy as np
 import yaml
@@ -591,7 +593,7 @@ class WsiReg2D(object):
         self,
         output_file_path: Optional[Union[str, Path]] = None,
         registered: bool = False,
-    ):
+    ) -> str:
         ts = time.strftime('%Y%m%d-%H%M%S')
         status = "registered" if registered is True else "setup"
 
@@ -657,6 +659,8 @@ class WsiReg2D(object):
 
         with open(str(output_file_path), "w") as f:
             yaml.dump(config, f, sort_keys=False)
+
+        return str(output_file_path)
 
     def register_images(self, parallel=False):
         """
@@ -1628,13 +1632,14 @@ class WsiReg2D(object):
             )
 
 
-def main(
+def wsireg_run(
     graph_configuration: Union[str, Path, WsiReg2D],
     write_images: bool = True,
     to_original_size: bool = False,
     transform_non_reg: bool = True,
     remove_merged: bool = True,
     file_writer: str = "ome.tiff",
+    testing: bool = False,
 ):
     def config_to_WsiReg2D(config_filepath):
         reg_config = parse_check_reg_config(config_filepath)
@@ -1647,10 +1652,14 @@ def main(
         return reg_graph
 
     if isinstance(graph_configuration, (str, Path)):
-        reg_graph = config_to_WsiReg2D(config_filepath)
-        reg_graph.add_data_from_config(config_filepath)
+        reg_graph = config_to_WsiReg2D(graph_configuration)
+        reg_graph.add_data_from_config(graph_configuration)
     elif isinstance(graph_configuration, WsiReg2D):
         reg_graph = graph_configuration
+
+    if testing:
+        temp_dir = str(tempfile.mkdtemp())
+        reg_graph.setup_project_output(reg_graph.project_name, temp_dir)
 
     reg_graph.register_images()
     reg_graph.save_transformations()
@@ -1673,12 +1682,14 @@ def main(
     output_data.extend(output_images)
     output_data.extend(output_shapes)
 
+    if testing:
+        shutil.rmtree(temp_dir)
+
     return output_data
 
 
-if __name__ == "__main__":
+def main():
     import argparse
-    import sys
 
     parser = argparse.ArgumentParser(
         description='Load Whole Slide Image 2D Registration Graph from configuration file'
@@ -1719,12 +1730,14 @@ if __name__ == "__main__":
     parser.add_argument(
         '--to_cropped', dest='to_original_size', action='store_false'
     )
+    parser.add_argument('--testing', dest='testing', action='store_true')
 
     parser.set_defaults(
         write_im=True,
         remove_merged=True,
         transform_non_reg=True,
         to_original_size=False,
+        testing=False,
     )
 
     args = parser.parse_args()
@@ -1735,12 +1748,18 @@ if __name__ == "__main__":
     else:
         file_writer = args.fw
 
-    main(
+    wsireg_run(
         config_filepath,
         write_images=args.write_im,
         to_original_size=args.to_original_size,
         transform_non_reg=args.transform_non_reg,
         remove_merged=args.remove_merged,
         file_writer=file_writer,
+        testing=args.testing,
     )
-    sys.exit()
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main())

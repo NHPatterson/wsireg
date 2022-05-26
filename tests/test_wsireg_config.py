@@ -22,6 +22,9 @@ config3_fp = str(Path(FIXTURES_DIR) / "test-config3.yaml")
 config4_fp = str(Path(FIXTURES_DIR) / "test-config4.yaml")
 config5_fp = str(Path(FIXTURES_DIR) / "test-config5.yaml")
 
+config_prepro_fp = str(Path(FIXTURES_DIR) / "test-config1-prepro-test.yaml")
+
+
 SKIP_PRIVATE = False
 REASON = "private data"
 
@@ -167,3 +170,15 @@ def test_wsireg_config_full_merge_rgb_mc(config_fp, data_out_dir):
 
     assert ri.im_dtype == np.uint16
     assert ri.im_dims == (9, 3993, 3397)
+
+
+def test_save_config_round_trip(data_out_dir):
+    wsi_reg = config_to_WsiReg2D(config_prepro_fp, data_out_dir)
+    wsi_reg.add_data_from_config(config_prepro_fp)
+    config_out = wsi_reg.save_config()
+    wsi_reg_rt = config_to_WsiReg2D(config_out, data_out_dir)
+    wsi_reg_rt.add_data_from_config(config_out)
+
+    assert wsi_reg.modalities == wsi_reg_rt.modalities
+    assert wsi_reg.reg_paths == wsi_reg_rt.reg_paths
+    assert wsi_reg.transform_paths == wsi_reg_rt.transform_paths
