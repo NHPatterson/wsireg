@@ -42,8 +42,6 @@ jobs:
         env:
           PLATFORM: ${{ matrix.platform }}
 
-      - name: Coverage
-        uses: codecov/codecov-action@v2
 
 
   deploy:
