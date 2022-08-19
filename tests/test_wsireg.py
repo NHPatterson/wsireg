@@ -548,7 +548,7 @@ def test_wsireg_run_reg_wattachment_ds2(data_out_dir, disk_im_gry):
 @pytest.mark.usefixtures("im_gry_np")
 def test_wsireg_run_reg_shapes(data_out_dir, im_gry_np):
     wsi_reg = WsiReg2D(gen_project_name_str(), str(data_out_dir))
-    img_fp1 = str(im_gry_np)
+    img_fp1 = im_gry_np
 
     wsi_reg.add_modality(
         "mod1",
