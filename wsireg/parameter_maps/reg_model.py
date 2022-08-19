@@ -98,7 +98,6 @@ class RegModel(dict, Enum, metaclass=_RegModelMeta):
         "similarity_anc"
     ]
     nl_anc: Dict[str, List[str]] = DEFAULT_REG_PARAM_MAPS["nl_anc"]
-    rigid_mini: Dict[str, List[str]] = DEFAULT_REG_PARAM_MAPS["rigid_mini"]
 
     def __str__(self):
         return self.name
