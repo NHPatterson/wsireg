@@ -10,6 +10,7 @@ pyYAML
 toolz
 dask
 fsspec
+itk==v5.3rc04
 itk-elastix
 SimpleITK
 aicsimageio
