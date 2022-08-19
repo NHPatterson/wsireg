@@ -649,6 +649,7 @@ class WsiReg2D(object):
             "attachment_images": self.attachment_images
             if len(self.attachment_images) > 0
             else None,
+            "merge_modalities": self.merge_modalities,
         }
 
         if not output_file_path:
