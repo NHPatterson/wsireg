@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 from ome_types import from_xml
 from tifffile import TiffFile, imread
+import dask
 
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
 from wsireg.reg_images.loader import reg_image_loader
@@ -39,7 +40,7 @@ def test_WsiReg2D_instantiation(data_out_dir):
     assert wsi_reg.project_name == pstr
     assert wsi_reg.output_dir == Path(str(data_out_dir))
 
-
+dask.config.set(scheduler="single-threaded")
 def test_wsireg2d_add_modality_w_fp(data_out_dir, data_im_fp):
     wsi_reg = WsiReg2D(gen_project_name_str(), str(data_out_dir))
     img_fp1 = str(data_im_fp)
@@ -544,10 +545,10 @@ def test_wsireg_run_reg_wattachment_ds2(data_out_dir, disk_im_gry):
     )
 
 
-@pytest.mark.usefixtures("disk_im_gry")
-def test_wsireg_run_reg_shapes(data_out_dir, disk_im_gry):
+@pytest.mark.usefixtures("im_gry_np")
+def test_wsireg_run_reg_shapes(data_out_dir, im_gry_np):
     wsi_reg = WsiReg2D(gen_project_name_str(), str(data_out_dir))
-    img_fp1 = str(disk_im_gry)
+    img_fp1 = str(im_gry_np)
 
     wsi_reg.add_modality(
         "mod1",
