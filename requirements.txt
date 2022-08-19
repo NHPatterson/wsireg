@@ -12,7 +12,7 @@ dask
 fsspec
 itk-elastix
 SimpleITK
-aicsimageio[czi]
+aicsimageio
 pydantic
 ome-types
 tiler
