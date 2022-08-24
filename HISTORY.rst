@@ -2,6 +2,9 @@
 History
 =======
 
+0.3.7 (2022-04-28)
+---------------------
+Add support for translation transformation. Fix writing of merge modalities in cmd line configuration.
 
 0.3.6 (2022-04-28)
 ---------------------
