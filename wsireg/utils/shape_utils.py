@@ -227,7 +227,7 @@ def shape_reader(shape_data, **kwargs):
                     )
             else:
                 raise FileNotFoundError(
-                    "{} file not found".format(str(sh_fp.as_posix()))
+                    "{} file not found".format(str(Path(sh).as_posix()))
                 )
 
         if isinstance(out_shape_gj, list):
