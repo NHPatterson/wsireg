@@ -37,7 +37,7 @@ extensions = [
     "sphinx_rtd_theme",
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
-    'm2r2'
+    'm2r2',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -54,7 +54,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'wsireg'
-copyright = "2020-2021, Nathan Heath Patterson"
+copyright = "2020-2023, Nathan Heath Patterson"
 author = "Nathan Heath Patterson"
 
 # The version info for the project you're documenting, acts as replacement

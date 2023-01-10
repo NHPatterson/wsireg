@@ -33,6 +33,7 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
     ],
     description="python package for registering multimodal whole slide microscopy images",
     install_requires=requirements,
@@ -51,6 +52,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/nhpatterson/wsireg',
-    version='0.3.7',
+    version='0.3.8',
     zip_safe=False,
 )

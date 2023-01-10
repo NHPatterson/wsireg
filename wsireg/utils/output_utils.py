@@ -152,7 +152,7 @@ def read_elastix_transform_dir(
     all_tform_data = dict()
 
     for tform_fp in tform_info_fps:
-        if len(tform_fp.stem.split(".")) > 3:
+        if len(tform_fp.name.split(".")) > 3:
             model_idx = int(tform_fp.name.split(".")[1])
             if model_idx not in all_tform_data.keys():
                 all_tform_data.update({model_idx: dict()})

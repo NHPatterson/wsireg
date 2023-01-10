@@ -2,6 +2,10 @@
 History
 =======
 
+0.3.8 (2023-01-10)
+---------------------
+Fix bug that occurs when file paths contain a period.
+
 0.3.7 (2022-04-28)
 ---------------------
 Add support for translation transformation. Fix writing of merge modalities in cmd line configuration.
