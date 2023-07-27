@@ -36,7 +36,8 @@ class BoundingBox(NamedTuple):
 
 
 def _transform_to_bbox(mask_bbox: Union[Tuple[int, int, int, int], List[int]]):
-    return BoundingBox(*mask_bbox)
+    if mask_bbox is not None:
+        return BoundingBox(*mask_bbox)
 
 
 def _index_to_list(ch_indices: Union[int, List[int]]):

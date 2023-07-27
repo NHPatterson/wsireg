@@ -54,7 +54,6 @@ class NumpyRegImage(RegImage):
         self._channel_names = channel_names
         self._channel_colors = channel_colors
         self.original_size_transform = None
-        self._preprocessing = preprocessing
 
     def _get_image_info(self):
         im_dims = self._dask_image.shape
