@@ -67,7 +67,6 @@ def bspline_elx_to_itk2d(tform):
 
 
 def convert_to_itk(tform):
-
     if tform["Transform"][0] == "AffineTransform":
         itk_tform = affine_elx_to_itk2d(tform)
     elif tform["Transform"][0] == "SimilarityTransform":

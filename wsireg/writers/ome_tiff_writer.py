@@ -16,7 +16,6 @@ from wsireg.utils.im_utils import (
 
 
 class OmeTiffWriter:
-
     x_size: Optional[int] = None
     y_size: Optional[int] = None
     y_spacing: Optional[Union[int, float]] = None
@@ -252,7 +251,9 @@ class OmeTiffWriter:
                                 image = image[::2, ::2]
                             else:
                                 if blur_size > 0:
-                                    image = cv2.blur(image, (blur_size, blur_size))
+                                    image = cv2.blur(
+                                        image, (blur_size, blur_size)
+                                    )
                                 # image = cv2.blur(image, (3, 3))
                                 image = cv2.resize(
                                     image,

@@ -45,7 +45,6 @@ ELX_TO_ITK_INTERPOLATORS = {
 
 
 def prepare_tform_dict(tform_dict, shape_tform=False):
-
     tform_dict_out = {}
     for k, v in tform_dict.items():
         if k == "initial":
@@ -137,7 +136,6 @@ def transform_2d_image_itkelx(
 
 
 def transform_image_to_sitk(image, tfx):
-
     # manage transformation/casting if data is multichannel or RGB
     # data is always returned in the same PixelIDType as it is entered
 
@@ -172,7 +170,6 @@ def transform_image_to_sitk(image, tfx):
 
 
 def transform_image_itkelx_to_sitk(image, tfx):
-
     # manage transformation/casting if data is multichannel or RGB
     # data is always returned in the same PixelIDType as it is entered
 
@@ -483,7 +480,6 @@ def gen_aff_tform_flip(image, spacing, flip="h"):
 
 
 def make_composite_itk(itk_tforms):
-
     itk_composite = sitk.CompositeTransform(2)
     for t in itk_tforms:
         itk_composite.AddTransform(t.itk_transform)
@@ -504,7 +500,6 @@ def get_final_tform(parameter_data):
 
 
 def collate_wsireg_transforms(parameter_data):
-
     if (
         isinstance(parameter_data, str)
         and Path(parameter_data).suffix == ".json"
@@ -539,7 +534,6 @@ def collate_wsireg_transforms(parameter_data):
 
 
 def wsireg_transforms_to_itk_composite(parameter_data):
-
     reg_transforms = collate_wsireg_transforms(parameter_data)
     composite_tform = make_composite_itk(reg_transforms)
 

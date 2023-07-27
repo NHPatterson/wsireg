@@ -320,7 +320,6 @@ class RegImage(ABC):
                 preprocessing.mask_bbox = mask_bbox
 
         if preprocessing.mask_bbox:
-
             print("cropping to mask")
             translation_transform = gen_rigid_translation(
                 image,

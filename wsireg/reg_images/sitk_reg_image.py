@@ -46,7 +46,6 @@ class SitkRegImage(RegImage):
         self.original_size_transform = None
 
     def _get_image_info(self):
-
         im_dims, im_dtype = get_sitk_image_info(self._path)
 
         im_dims = (int(im_dims[0]), int(im_dims[1]), int(im_dims[2]))

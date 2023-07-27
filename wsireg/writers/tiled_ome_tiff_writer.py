@@ -77,7 +77,6 @@ class OmeTiffTiledWriter:
         zarr_tile_size: int = 2048,
         moving_tile_padding: int = 128,
     ):
-
         self._fixed_tile_positions: List[Tuple[int, int, int, int]] = []
         self._fixed_tile_positions_phys: List[
             Tuple[float, float, float, float]
@@ -728,7 +727,6 @@ class OmeTiffTiledWriter:
                             )
                 else:
                     for channel_idx in range(self.reg_image.n_ch):
-
                         description = omexml if channel_idx == 0 else None
                         print(
                             f"writing channel {channel_idx} - shape: {dask_image.shape[1:]}"

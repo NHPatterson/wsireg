@@ -350,7 +350,6 @@ class CziRegImageReader(CziFile):
         channel_idx=None,
         as_uint8=False,
     ):
-
         """Return image data from file(s) as numpy array.
 
         Parameters
@@ -464,7 +463,6 @@ class CziRegImageReader(CziFile):
         as_uint8=False,
         greyscale=False,
     ):
-
         """Return image data from file(s) as numpy array.
 
         Parameters
@@ -993,7 +991,6 @@ def image_to_zarr_store(zgrp, image, channel_idx, n_pyr_levels, pyr_levels):
 def prepare_ome_xml_str(
     y_size, x_size, n_ch, im_dtype, is_rgb, **ome_metadata
 ):
-
     omexml = OmeXml()
     if is_rgb:
         stored_shape = (1, 1, 1, y_size, x_size, n_ch)
@@ -1029,7 +1026,6 @@ def get_final_yx_from_tform(tform_reg_im, final_transform):
 
 
 def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size=512):
-
     y_size, x_size = get_final_yx_from_tform(tform_reg_im)
 
     n_ch = (
@@ -1077,7 +1073,11 @@ def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size=512):
                 )
                 print(f"saving to {output_file_name}.ome.zarr")
 
-                (zgrp, n_pyr_levels, pyr_levels,) = prepare_ome_zarr_group(
+                (
+                    zgrp,
+                    n_pyr_levels,
+                    pyr_levels,
+                ) = prepare_ome_zarr_group(
                     f"{output_file_name}.ome.zarr",
                     y_size,
                     x_size,
@@ -1096,7 +1096,6 @@ def transform_to_ome_zarr(tform_reg_im, output_dir, tile_size=512):
 
 
 def transform_plane(image, final_transform, composite_transform):
-
     image = sitk_transform_image(
         image,
         final_transform,
@@ -1115,7 +1114,6 @@ def transform_to_ome_tiff(
     tile_size=512,
     write_pyramid=True,
 ):
-
     y_size, x_size, y_spacing, x_spacing = get_final_yx_from_tform(
         tform_reg_im, final_transform
     )
@@ -1276,7 +1274,6 @@ def transform_to_ome_tiff_merge(
     tile_size=512,
     write_pyramid=True,
 ):
-
     y_size, x_size, y_spacing, x_spacing = get_final_yx_from_tform(
         tform_reg_im.images[0], final_transform[0]
     )

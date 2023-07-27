@@ -28,7 +28,6 @@ def parse_check_reg_config(yaml_filepath):
             ]
 
     if reg_config.get("reg_paths"):
-
         for key, val in reg_config["reg_paths"].items():
             [
                 check_for_key(key, val, ck)
@@ -42,7 +41,6 @@ def parse_check_reg_config(yaml_filepath):
                 val.update({"reg_params": [val.get("reg_params")]})
 
     if reg_config.get("attachment_images"):
-
         for key, val in reg_config["attachment_images"].items():
             [
                 check_for_key(key, val, ck)
@@ -54,7 +52,6 @@ def parse_check_reg_config(yaml_filepath):
             ]
 
     if reg_config.get("attachment_shapes"):
-
         for key, val in reg_config["attachment_shapes"].items():
             [
                 check_for_key(key, val, ck)

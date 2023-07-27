@@ -172,7 +172,6 @@ class RegTransformSeq:
     def _build_composite_transform(
         self, reg_transforms, reg_transform_seq_idx
     ) -> None:
-
         composite_index = []
         for unique_idx in np.unique(reg_transform_seq_idx):
             in_seq_tform_idx = np.where(reg_transform_seq_idx == unique_idx)[0]

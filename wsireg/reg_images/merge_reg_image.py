@@ -15,7 +15,6 @@ class MergeRegImage:
         channel_names: Optional[List[List[str]]] = None,
         channel_colors: Optional[List[List[str]]] = None,
     ):
-
         if isinstance(image_fp, list) is False:
             raise ValueError(
                 "MergeRegImage requires a list of images to merge"

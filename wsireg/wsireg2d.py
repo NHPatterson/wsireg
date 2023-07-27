@@ -420,7 +420,8 @@ class WsiReg2D(object):
     @property
     def reg_paths(self) -> Dict[str, List[str]]:
         """Dictionary of paths between modalities by modality name.
-        Keys are modality name and the values are a list of modalities it passes through."""
+        Keys are modality name and the values are a list of modalities it passes through.
+        """
         return self._reg_paths
 
     @reg_paths.setter
@@ -530,7 +531,6 @@ class WsiReg2D(object):
 
     @transform_paths.setter
     def transform_paths(self, reg_paths):
-
         transform_path_dict = {}
 
         for k, v in reg_paths.items():
@@ -892,7 +892,6 @@ class WsiReg2D(object):
         attachment_modality=None,
         to_original_size=True,
     ):
-
         print(
             "preparing transforms for non-registered modality : {} ".format(
                 modality_key
@@ -916,7 +915,6 @@ class WsiReg2D(object):
             or im_data["preprocessing"].crop_to_mask_bbox
             or im_data["preprocessing"].mask_bbox
         ):
-
             im_initial_transforms = RegImage.load_orignal_size_transform(
                 self.image_cache, modality_key
             )
@@ -930,7 +928,6 @@ class WsiReg2D(object):
                 )
 
         if to_original_size and self.original_size_transforms[modality_key]:
-
             o_size_tform = self.original_size_transforms[modality_key]
             if isinstance(o_size_tform, list):
                 o_size_tform = o_size_tform[0]
@@ -1047,7 +1044,6 @@ class WsiReg2D(object):
     def _transform_write_image(
         self, im_data, transformations, output_path, file_writer="ome.tiff"
     ):
-
         tfregimage = reg_image_loader(
             im_data["image_filepath"],
             im_data["image_res"],
@@ -1120,7 +1116,6 @@ class WsiReg2D(object):
                     )
 
                 else:
-
                     (
                         _,
                         sub_im_transforms,
@@ -1410,7 +1405,6 @@ class WsiReg2D(object):
             [reg_edge.get("registered") for reg_edge in self.reg_graph_edges]
         ):
             for key in self.reg_paths.keys():
-
                 final_modality = self.reg_paths[key][-1]
 
                 output_path = (
@@ -1431,7 +1425,6 @@ class WsiReg2D(object):
                 attachment_modality,
             ) in self.attachment_images.items():
                 if attachment_modality not in self._find_nonreg_modalities():
-
                     final_modality = self.reg_paths[attachment_modality][-1]
 
                     output_path = (
@@ -1456,12 +1449,10 @@ class WsiReg2D(object):
             )
 
     def add_data_from_config(self, config_filepath):
-
         reg_config = parse_check_reg_config(config_filepath)
 
         if reg_config.get("modalities"):
             for key, val in reg_config["modalities"].items():
-
                 image_filepath = (
                     val.get("image_filepath")
                     if val.get("image_filepath") is not None
@@ -1488,7 +1479,6 @@ class WsiReg2D(object):
             print("warning: config file did not contain any image modalities")
 
         if reg_config.get("reg_paths"):
-
             for key, val in reg_config["reg_paths"].items():
                 self.add_reg_path(
                     val.get("src_modality_name"),
@@ -1502,7 +1492,6 @@ class WsiReg2D(object):
                 "warning: config file did not contain any registration paths"
             )
         if reg_config.get("attachment_images"):
-
             for key, val in reg_config["attachment_images"].items():
                 self.add_attachment_images(
                     val.get("attachment_modality"),
@@ -1514,7 +1503,6 @@ class WsiReg2D(object):
                 )
 
         if reg_config.get("attachment_shapes"):
-
             for key, val in reg_config["attachment_shapes"].items():
                 self.add_attachment_shapes(
                     val.get("attachment_modality"), key, val.get("shape_files")
@@ -1617,7 +1605,6 @@ class WsiReg2D(object):
             warn(f"merge modality {merge_modality} not found")
 
     def remove_modality(self, modality: str) -> None:
-
         if modality in self.modality_names:
             self._remove_modality_data(modality)
             self._remove_reg_paths(modality)
