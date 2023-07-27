@@ -9,9 +9,10 @@ def _natural_sort(list_to_sort: list) -> list:
     """
     Sort list account for lack of leading zeroes.
     """
-    convert = (
-        lambda text: int(text) if text.isdigit() else text.lower()
-    )  # noqa: E731
+
+    def convert(text):
+        return int(text) if text.isdigit() else text.lower()  # noqa: E731
+
     alphanum_key = lambda key: [  # noqa: E731
         convert(c) for c in re.split('([0-9]+)', key)
     ]
