@@ -42,7 +42,7 @@ class NumpyRegImage(RegImage):
         self._n_ch = self._shape[2] if self._is_rgb else self._shape[0]
 
         rechunk_size = (
-            (2048, 2048, self.n_ch) if self.is_rgb else (self.n_ch, 2048, 2048)
+            (2048, 2048, self.n_ch) if self.is_rgb else (1, 2048, 2048)
         )
         self._dask_image = self._dask_image.rechunk(rechunk_size)
 
@@ -54,6 +54,7 @@ class NumpyRegImage(RegImage):
         self._channel_names = channel_names
         self._channel_colors = channel_colors
         self.original_size_transform = None
+        self._preprocessing = preprocessing
 
     def _get_image_info(self):
         im_dims = self._dask_image.shape

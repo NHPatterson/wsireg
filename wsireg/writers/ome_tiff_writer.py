@@ -148,6 +148,9 @@ class OmeTiffWriter:
         write_pyramid: bool = True,
         tile_size: int = 512,
         compression: Optional[str] = "default",
+        interpolation: int = cv2.INTER_LINEAR,
+        blur_size: int = 0,
+        subsample: bool = False,
     ) -> str:
         """
         Write OME-TIFF image plane-by-plane to disk. WsiReg compatible RegImages all
@@ -245,11 +248,17 @@ class OmeTiffWriter:
                                 self.pyr_levels[pyr_idx][0],
                                 self.pyr_levels[pyr_idx][1],
                             )
-                            image = cv2.resize(
-                                image,
-                                resize_shape,
-                                cv2.INTER_LINEAR,
-                            )
+                            if subsample:
+                                image = image[::2, ::2]
+                            else:
+                                if blur_size > 0:
+                                    image = cv2.blur(image, (blur_size, blur_size))
+                                # image = cv2.blur(image, (3, 3))
+                                image = cv2.resize(
+                                    image,
+                                    resize_shape,
+                                    interpolation,
+                                )
                             print(
                                 f"pyramid index {pyr_idx} : channel {channel_idx} shape: {image.shape}"
                             )
