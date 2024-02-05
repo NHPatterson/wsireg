@@ -10,7 +10,7 @@ may change in the future.
 
 All supported formats
 """""""""""""""""""""
-wsireg supports 2D images that read in using the python tifffile or czi file library through dask and zarr. We have started
+wsireg supports 2D images that read in using the python tifffile or czi file library through dask and zarr. We started
 to implement support using aicsimageio but found that default chunking was not always appropriate for tested whole slide images.
 For now, the supported formats are:
 
