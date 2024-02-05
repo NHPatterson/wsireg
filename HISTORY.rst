@@ -2,6 +2,10 @@
 History
 =======
 
+0.3.9 (2023-01-10)
+---------------------
+Deprecates unused aicsimageio dependency.
+
 0.3.8 (2023-01-10)
 ---------------------
 Fix bug that occurs when file paths contain a period.
