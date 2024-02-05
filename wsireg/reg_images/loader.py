@@ -5,7 +5,7 @@ import dask.array as da
 import zarr
 from wsireg.utils.im_utils import ARRAYLIKE_CLASSES, TIFFFILE_EXTS
 from wsireg.parameter_maps.preprocessing import ImagePreproParams
-from . import CziRegImage  # AICSRegImage,
+from . import CziRegImage
 from . import NumpyRegImage, SitkRegImage, TiffFileRegImage
 
 
