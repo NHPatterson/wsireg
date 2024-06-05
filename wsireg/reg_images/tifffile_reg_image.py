@@ -43,7 +43,7 @@ class TiffFileRegImage(RegImage):
 
         self._dask_image = self._get_dask_image()
 
-        if mask:
+        if mask is not None:
             self._mask = self.read_mask(mask)
 
         self.pre_reg_transforms = pre_reg_transforms
