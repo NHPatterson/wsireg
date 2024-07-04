@@ -13,7 +13,7 @@ fsspec
 itk-elastix
 SimpleITK
 pydantic>=2.6.4
-ome-types>=ome-types-0.5.1
+ome-types>=0.5.1
 tiler
 tqdm
 matplotlib
