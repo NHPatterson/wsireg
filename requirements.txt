@@ -1,7 +1,7 @@
 numpy
 tifffile>=2022.2.9
 zarr>=2.11.0
-opencv-python
+opencv-python-headless
 czifile
 imagecodecs
 lxml
@@ -12,8 +12,8 @@ dask
 fsspec
 itk-elastix
 SimpleITK
-pydantic
-ome-types
+pydantic>=2.6.4
+ome-types>=ome-types-0.5.1
 tiler
 tqdm
 matplotlib
