@@ -2,7 +2,11 @@
 History
 =======
 
-0.3.9 (2023-01-10)
+0.3.10 (2024-07-04)
+---------------------
+Use headless opencv
+
+0.3.9 (2024-03-10)
 ---------------------
 Deprecates unused aicsimageio dependency.
 
