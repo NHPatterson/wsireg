@@ -36,7 +36,7 @@ class SitkRegImage(RegImage):
 
         self._n_ch = self._shape[2] if self.is_rgb else self._shape[0]
 
-        if mask:
+        if mask is not None:
             self._mask = self.read_mask(mask)
 
         self.pre_reg_transforms = pre_reg_transforms
